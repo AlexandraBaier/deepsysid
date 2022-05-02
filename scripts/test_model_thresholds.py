@@ -7,11 +7,10 @@ from typing import Union
 import h5py
 import numpy as np
 
-import sysid.execution as execution
-import sysid.models.base as base
-from sysid.models.hybrid_extensive import HybridSerialCombinedLSTMModel
-from sysid.models.hybrid_first_principles import HybridSerialFirstPrinciplesLSTMModel
-from sysid.models.hybrid_semiphysical import HybridSerialSemiphysicalLSTMModel
+import multistep_sysid.execution as execution
+from multistep_sysid.models.hybrid_extensive import HybridSerialCombinedLSTMModel
+from multistep_sysid.models.hybrid_first_principles import HybridSerialFirstPrinciplesLSTMModel
+from multistep_sysid.models.hybrid_semiphysical import HybridSerialSemiphysicalLSTMModel
 
 logger = logging.getLogger()
 

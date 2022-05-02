@@ -5,7 +5,7 @@ import os
 import h5py
 import numpy as np
 
-import sysid.utils as utils
+import multistep_sysid.utils as utils
 
 
 def compute_trajectory(state, state_names, sample_time):

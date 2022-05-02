@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-import sysid.execution as execution
+import multistep_sysid.execution as execution
 
 logger = logging.getLogger()
 

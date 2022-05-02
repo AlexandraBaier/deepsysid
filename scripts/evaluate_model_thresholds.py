@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-import sysid.utils as utils
+import multistep_sysid.utils as utils
 
 
 def main():
