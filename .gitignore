@@ -1,0 +1,10 @@
+*.pyc
+venv
+.idea
+.ipynb_checkpoints
+sysid.egg-info
+*.env
+build
+tmp
+environment_variables
+*.pgf

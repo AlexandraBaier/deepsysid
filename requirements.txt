@@ -1,0 +1,10 @@
+numpy
+scipy
+torch
+matplotlib
+seaborn
+pandas
+h5py
+scikit-learn
+jupyter
+python-dotenv
