@@ -17,13 +17,13 @@ def main():
     parser.add_argument('model', help='model')
     parser.add_argument('--enable-cuda', action='store_true', help='Enable CUDA')
     parser.add_argument('--device-idx', action='store', help='Index of GPU')
-    parser.add_argument('--mode', action='store', help='either "validation" or "test"')
+    parser.add_argument('--mode', action='store', help='either "train" or "validation" or "test"')
     args = parser.parse_args()
 
     model_name = args.model
     mode = args.mode
-    if mode not in {'validation', 'test'}:
-        raise ValueError('Argument to --mode must be either "validation" or "test"')
+    if mode not in {'train', 'validation', 'test'}:
+        raise ValueError('Argument to --mode must be either "train", "validation" or "test"')
 
     if args.enable_cuda:
         logger.info('Training model on CUDA if implemented.')
@@ -75,9 +75,22 @@ def main():
     pred_states = []
     true_states = []
     file_names = []
+    whiteboxes = []
+    blackboxes = []
     for initial_control, initial_state, true_control, true_state, file_name \
             in split_simulations(window_size, horizon_size, simulations):
-        pred_target = model.simulate(initial_control, initial_state, true_control)
+        try:
+            # Hybrid models may return physical and LSTM output separately
+            # If a model supports this output, we would like to record this.
+            # If a model does not support it, a TypeError is thrown as we have provided an unknown argument.
+            # Then we run the simulate-call without setting return_whitebox_blackbox
+            pred_target, whitebox, blackbox = model.simulate(
+                initial_control, initial_state, true_control, return_whitebox_blackbox=True
+            )
+            whiteboxes.append(whitebox)
+            blackboxes.append(blackbox)
+        except TypeError:
+            pred_target = model.simulate(initial_control, initial_state, true_control)
 
         control.append(true_control)
         pred_states.append(pred_target)
@@ -101,10 +114,22 @@ def main():
         control_grp = f.create_group('control')
         pred_grp = f.create_group('predicted')
         true_grp = f.create_group('true')
-        for i, (control, pred_state, true_state) in enumerate(zip(control, pred_states, true_states)):
-            control_grp.create_dataset(str(i), data=control)
-            pred_grp.create_dataset(str(i), data=pred_state)
-            true_grp.create_dataset(str(i), data=true_state)
+        if (len(whiteboxes) > 0) and (len(blackboxes) > 0):
+            whitebox_grp = f.create_group('whitebox')
+            blackbox_grp = f.create_group('blackbox')
+
+            for i, (control, pred_state, true_state, whitebox, blackbox) \
+                    in enumerate(zip(control, pred_states, true_states, whiteboxes, blackboxes)):
+                control_grp.create_dataset(str(i), data=control)
+                pred_grp.create_dataset(str(i), data=pred_state)
+                true_grp.create_dataset(str(i), data=true_state)
+                whitebox_grp.create_dataset(str(i), data=whitebox)
+                blackbox_grp.create_dataset(str(i), data=blackbox)
+        else:
+            for i, (control, pred_state, true_state) in enumerate(zip(control, pred_states, true_states)):
+                control_grp.create_dataset(str(i), data=control)
+                pred_grp.create_dataset(str(i), data=pred_state)
+                true_grp.create_dataset(str(i), data=true_state)
 
 
 def split_simulations(window_size, horizon_size, simulations):
