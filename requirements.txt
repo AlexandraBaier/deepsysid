@@ -8,3 +8,4 @@ h5py
 scikit-learn
 jupyter
 python-dotenv
+pydantic
