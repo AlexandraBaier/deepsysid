@@ -36,7 +36,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
     CONFIG = LSTMInitModelConfig
 
     def __init__(self, config: LSTMInitModelConfig):
-        super().__init__()
+        super().__init__(config)
 
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
