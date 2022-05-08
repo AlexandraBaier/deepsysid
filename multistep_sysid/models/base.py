@@ -15,7 +15,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
     CONFIG: Optional[Type[BaseModel]] = None
 
     @abc.abstractmethod
-    def __init__(self, config: BaseModel):
+    def __init__(self, config: Optional[BaseModel]):
         pass
 
     @abc.abstractmethod
@@ -46,7 +46,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
 class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
     def __init__(self, window_size: int, regressor):
         assert window_size >= 1
-        super().__init__()
+        super().__init__(None)
 
         self.window_size = window_size
         self.regressor = regressor
