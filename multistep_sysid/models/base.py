@@ -1,7 +1,9 @@
 import abc
 import logging
+from typing import Tuple, List
 
 import numpy as np
+import sklearn.base
 from sklearn.metrics import r2_score
 
 from .. import utils
@@ -11,11 +13,11 @@ logger = logging.getLogger()
 
 class DynamicIdentificationModel(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def __init__(self, **kwargs):
+    def __init__(self):
         pass
 
     @abc.abstractmethod
-    def train(self, control_seqs, state_seqs, validator=None):
+    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
         pass
 
     @abc.abstractmethod
@@ -23,24 +25,24 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def save(self, file_path):
+    def save(self, file_path: Tuple[str, ...]):
         pass
 
     @abc.abstractmethod
-    def load(self, file_path):
+    def load(self, file_path: Tuple[str, ...]):
         pass
 
     @abc.abstractmethod
-    def get_file_extension(self):
+    def get_file_extension(self) -> Tuple[str, ...]:
         pass
 
     @abc.abstractmethod
-    def get_parameter_count(self):
+    def get_parameter_count(self) -> int:
         pass
 
 
 class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
-    def __init__(self, window_size, regressor):
+    def __init__(self, window_size: int, regressor):
         assert window_size >= 1
         super().__init__()
 
@@ -52,7 +54,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         self.state_mean = None
         self.state_stddev = None
 
-    def train(self, control_seqs, state_seqs, validator=None):
+    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]
 
@@ -78,7 +80,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         r2_fit = r2_score(self.regressor.predict(train_x), train_y, multioutput='uniform_average')
         logger.info(f'R2 Score: {r2_fit}')
 
-    def simulate(self, initial_control, initial_state, control):
+    def simulate(self, initial_control: np.ndarray, initial_state: np.ndarray, control: np.ndarray) -> np.ndarray:
         """
         Multi-step prediction of system states given control inputs and initial window.
 
@@ -115,7 +117,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
 
         return pred_states
 
-    def _map_regressor_input(self, x):
+    def _map_regressor_input(self, x: np.ndarray) -> np.ndarray:
         """
         Apply any transformations, e.g. nonlinearities, to input of regressor.
         Arguments:
