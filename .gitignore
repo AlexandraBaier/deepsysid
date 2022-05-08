@@ -8,3 +8,4 @@ build
 tmp
 environment_variables
 *.pgf
+multistep_sysid.egg-info
