@@ -1,12 +1,14 @@
 import json
 import logging
 import time
+from typing import List, Literal
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
+from pydantic import BaseModel
 
 from . import base
 from ..networks import loss, rnn
@@ -15,31 +17,46 @@ from .. import utils
 logger = logging.getLogger()
 
 
+class LSTMInitModelConfig(BaseModel):
+    device_name: str = 'cpu'
+    control_names: List[str]
+    state_names: List[str]
+    recurrent_dim: int
+    num_recurrent_layers: int
+    dropout: float
+    sequence_length: int
+    learning_rate: float
+    batch_size: int
+    epochs_initializer: int
+    epochs_predictor: int
+    loss: Literal['mse', 'msge']
+
+
 class LSTMInitModel(base.DynamicIdentificationModel):
-    def __init__(self, device_name='cpu', **kwargs):
-        super().__init__(**kwargs)
+    CONFIG = LSTMInitModelConfig
 
-        self.device_name = device_name
-        self.device = torch.device(device_name)
+    def __init__(self, config: LSTMInitModelConfig):
+        super().__init__()
 
-        self.control_dim = len(kwargs['control_names'])
-        self.state_dim = len(kwargs['state_names'])
+        self.device_name = config.device_name
+        self.device = torch.device(self.device_name)
 
-        self.recurrent_dim = kwargs['recurrent_dim']
-        self.num_recurrent_layers = kwargs['num_recurrent_layers']
-        self.feedforward_dim = kwargs['feedforward_dim']
-        self.dropout = kwargs['dropout']
+        self.control_dim = len(config.control_names)
+        self.state_dim = len(config.state_names)
 
-        self.sequence_length = kwargs['sequence_length']
-        self.learning_rate = kwargs['learning_rate']
-        self.batch_size = kwargs['batch_size']
-        self.epochs_initializer = kwargs['epochs_initializer']
-        self.epochs_predictor = kwargs['epochs_predictor']
-        self.train_fraction_per_epoch = kwargs.get('train_fraction_per_epoch', None)
+        self.recurrent_dim = config.recurrent_dim
+        self.num_recurrent_layers = config.num_recurrent_layers
+        self.dropout = config.dropout
 
-        if kwargs.get('loss') == 'mse':
+        self.sequence_length = config.sequence_length
+        self.learning_rate = config.learning_rate
+        self.batch_size = config.batch_size
+        self.epochs_initializer = config.epochs_initializer
+        self.epochs_predictor = config.epochs_predictor
+
+        if config.loss == 'mse':
             self.loss = nn.MSELoss().to(self.device)
-        elif kwargs.get('loss') == 'msge':
+        elif config.loss == 'msge':
             self.loss = loss.MSGELoss().to(self.device)
         else:
             raise ValueError(f'loss can only be "mse" or "msge"')
@@ -48,7 +65,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             input_dim=self.control_dim,
             recurrent_dim=self.recurrent_dim,
             num_recurrent_layers=self.num_recurrent_layers,
-            output_dim=self.feedforward_dim + [self.state_dim],
+            output_dim=[self.state_dim],
             dropout=self.dropout
         ).to(self.device)
 
@@ -56,7 +73,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             input_dim=self.control_dim+self.state_dim,
             recurrent_dim=self.recurrent_dim,
             num_recurrent_layers=self.num_recurrent_layers,
-            output_dim=self.feedforward_dim + [self.state_dim],
+            output_dim=[self.state_dim],
             dropout=self.dropout
         ).to(self.device)
 
@@ -68,7 +85,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.state_mean = None
         self.state_stddev = None
 
-    def train(self, control_seqs, state_seqs, validator=None):
+    def train(self, control_seqs, state_seqs):
         self.predictor.train()
         self.initializer.train()
 
@@ -79,20 +96,12 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         state_seqs = [utils.normalize(state, self.state_mean, self.state_stddev) for state in state_seqs]
 
         initializer_dataset = _InitializerDataset(control_seqs, state_seqs, self.sequence_length)
-        # only use a fraction of the dataset in each epoch to train faster on large datasets
-        if self.train_fraction_per_epoch:
-            batches_per_epoch = self.train_fraction_per_epoch * int(len(initializer_dataset) / self.batch_size)
-        else:
-            batches_per_epoch = None
 
         time_start_init = time.time()
         for i in range(self.epochs_initializer):
             data_loader = data.DataLoader(initializer_dataset, self.batch_size, shuffle=True, drop_last=True)
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
-                if batches_per_epoch and batch_idx >= batches_per_epoch:
-                    break
-
                 self.initializer.zero_grad()
                 y = self.initializer.forward(batch['x'].float().to(self.device))
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
@@ -103,19 +112,12 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             logger.info(f'Epoch {i + 1}/{self.epochs_initializer} - Epoch Loss (Initializer): {total_loss}')
         time_end_init = time.time()
         predictor_dataset = _PredictorDataset(control_seqs, state_seqs, self.sequence_length)
-        # only use a fraction of the dataset in each epoch to train faster on large datasets
-        if self.train_fraction_per_epoch:
-            batches_per_epoch = self.train_fraction_per_epoch * int(len(predictor_dataset) / self.batch_size)
-        else:
-            batches_per_epoch = None
+
         time_start_pred = time.time()
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(predictor_dataset, self.batch_size, shuffle=True, drop_last=True)
             total_loss = 0
             for batch_idx, batch in enumerate(data_loader):
-                if batches_per_epoch and batch_idx >= batches_per_epoch:
-                    break
-
                 self.predictor.zero_grad()
                 # Initialize predictor with state of initializer network
                 _, hx = self.initializer.forward(batch['x0'].float().to(self.device), return_state=True)
@@ -127,16 +129,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 self.optimizer_pred.step()
 
             logger.info(f'Epoch {i + 1}/{self.epochs_predictor} - Epoch Loss (Predictor): {total_loss}')
-            if validator:
-                validation_error = validator(model=self, epoch=i)
-                self.predictor.train(True)
-                self.initializer.train(True)
 
-                if validation_error:
-                    validation_error_str = ','.join(
-                        f'{err:.3E}' for err in validation_error
-                    )
-                    logger.info(f'Epoch {i + 1}/{self.epochs_predictor} - Validation Error: [{validation_error_str}]')
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
         time_total_pred = time_end_pred - time_start_pred
