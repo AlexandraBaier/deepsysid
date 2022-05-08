@@ -54,10 +54,14 @@ def main():
     params['horizon_size'] = horizon_size
     params['control_names'] = control_names
     params['state_names'] = state_names
-    params['verbose'] = True
     params['device_name'] = device_name
 
-    model = model_class(**params)  # type: base.DynamicIdentificationModel
+    if model_class.CONFIG is not None:
+        config = model_class.CONFIG.parse_obj(params)
+    else:
+        config = None
+
+    model = model_class(config=config)
     execution.load_model(model, model_directory, model_name)
 
     # Prepare test data

@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import os
-from typing import Union
 
 import h5py
 import numpy as np
@@ -62,8 +61,12 @@ def main():
             not issubclass(model_class, HybridSerialFirstPrinciplesLSTMModel)):
         raise ValueError(f'{str(model_class)} is not implemented for thresholded simulation.')
 
-    model = model_class(
-        **params)  # type: Union[HybridSerialCombinedLSTMModel, HybridSerialSemiphysicalLSTMModel, HybridSerialFirstPrinciplesLSTMModel]
+    if model_class.CONFIG is not None:
+        config = model_class.CONFIG.parse_obj(params)
+    else:
+        config = None
+
+    model = model_class(config=config)
     execution.load_model(model, model_directory, model_name)
 
     # Prepare directory for results

@@ -42,17 +42,6 @@ def main():
     controls, states = execution.load_simulation_data(
         directory=dataset_directory, control_names=control_names, state_names=state_names)
 
-    # Load validation dataset and instantiate epoch validator
-    if config.get('validation_fraction', None):
-        validation_directory = os.path.join(os.environ['DATASET_DIRECTORY'], 'processed', 'validation')
-        val_controls, val_states = execution.load_simulation_data(
-            directory=validation_directory, control_names=control_names, state_names=state_names)
-        validator = execution.MAEEpochValidator(
-            controls=val_controls, states=val_states, window_size=window_size, horizon_size=horizon_size
-        )
-    else:
-        validator = None
-
     # Initialize model
     model_config = config['models'][model_name]
     model_directory = os.path.expanduser(os.path.normpath(model_config['location']))
@@ -79,11 +68,15 @@ def main():
     parameters['time_delta'] = time_delta
     parameters['window_size'] = window_size
     parameters['horizon_size'] = horizon_size
-    parameters['verbose'] = True
     parameters['device_name'] = device_name
 
-    model = model_class(**parameters)
-    model.train(control_seqs=controls, state_seqs=states, validator=validator)
+    if model_class.CONFIG is not None:
+        config = model_class.CONFIG.parse_obj(parameters)
+    else:
+        config = None
+
+    model = model_class(config=config)
+    model.train(control_seqs=controls, state_seqs=states)
 
     execution.save_model(model, model_directory, model_name)
 
