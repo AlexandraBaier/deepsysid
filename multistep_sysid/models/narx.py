@@ -1,8 +1,10 @@
 import json
 import logging
+from typing import List, Tuple
 
 import numpy as np
 import torch
+from pydantic import BaseModel
 from torch import optim
 from torch.nn import functional
 from torch.utils import data
@@ -15,24 +17,40 @@ from multistep_sysid import utils
 logger = logging.getLogger()
 
 
+class NARXDenseNetworkConfig(BaseModel):
+    device_name: str = 'cpu'
+    control_names: List[str]
+    state_names: List[str]
+    window_size: int
+    learning_rate: float
+    batch_size: int
+    epochs: int
+    layers: List[int]
+    dropout: float
+
+
 class NARXDenseNetwork(base.DynamicIdentificationModel):
-    def __init__(self, device_name='cpu', **kwargs):
-        self.device_name = device_name
-        self.device = torch.device(device_name)
+    CONFIG = NARXDenseNetworkConfig
 
-        self.control_dim = len(kwargs['control_names'])
-        self.state_dim = len(kwargs['state_names'])
-        self.window_size = kwargs['window_size']
+    def __init__(self, config: NARXDenseNetworkConfig):
+        super().__init__(config)
 
-        self.learning_rate = kwargs['learning_rate']
-        self.batch_size = kwargs['batch_size']
-        self.epochs = kwargs['epochs']
+        self.device_name = config.device_name
+        self.device = torch.device(self.device_name)
+
+        self.control_dim = len(config.control_names)
+        self.state_dim = len(config.state_names)
+        self.window_size = config.window_size
+
+        self.learning_rate = config.learning_rate
+        self.batch_size = config.batch_size
+        self.epochs = config.epochs
 
         self.model = DenseReLUNetwork(
             input_dim=self.window_size*(self.control_dim + self.state_dim),
             output_dim=self.state_dim,
-            layers=kwargs['layers'],
-            dropout=kwargs['dropout']
+            layers=config.layers,
+            dropout=config.dropout
         ).float().to(self.device)
 
         self.optimizer = optim.Adam(params=self.model.parameters(), lr=self.learning_rate)
@@ -40,7 +58,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         self.state_mean, self.state_std = None, None
         self.control_mean, self.control_std = None, None
 
-    def train(self, control_seqs, state_seqs, validator=None):
+    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
         self.model.train()
 
         self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
@@ -64,7 +82,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
 
             logger.info(f'Epoch {i + 1}/{self.epochs} - Epoch Loss: {total_loss}')
 
-    def simulate(self, initial_control, initial_state, control):
+    def simulate(self, initial_control: np.ndarray, initial_state: np.ndarray, control: np.ndarray) -> np.ndarray:
         self.model.eval()
 
         initial_control = utils.normalize(initial_control, self.control_mean, self.control_std)
@@ -89,7 +107,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
 
         return utils.denormalize(np.vstack(states), self.state_mean, self.state_std)
 
-    def save(self, file_path):
+    def save(self, file_path: Tuple[str, str]):
         torch.save(self.model.state_dict(), file_path[0])
         with open(file_path[1], mode='w') as f:
             json.dump({
@@ -99,7 +117,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
                 'control_std': self.control_std.tolist()
             }, f)
 
-    def load(self, file_path):
+    def load(self, file_path: Tuple[str, str]):
         self.model.load_state_dict(torch.load(file_path[0], map_location=self.device_name))
         with open(file_path[1], mode='r') as f:
             norm = json.load(f)
@@ -108,10 +126,10 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         self.control_mean = np.array(norm['control_mean'])
         self.control_std = np.array(norm['control_std'])
 
-    def get_file_extension(self):
+    def get_file_extension(self) -> Tuple[str, str]:
         return 'pth', 'json'
 
-    def get_parameter_count(self):
+    def get_parameter_count(self) -> int:
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 
 
