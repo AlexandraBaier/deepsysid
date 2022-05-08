@@ -1,9 +1,9 @@
 import abc
 import logging
-from typing import Tuple, List
+from typing import Tuple, List, Optional, Type
 
 import numpy as np
-import sklearn.base
+from pydantic import BaseModel
 from sklearn.metrics import r2_score
 
 from .. import utils
@@ -12,8 +12,10 @@ logger = logging.getLogger()
 
 
 class DynamicIdentificationModel(metaclass=abc.ABCMeta):
+    CONFIG: Optional[Type[BaseModel]] = None
+
     @abc.abstractmethod
-    def __init__(self):
+    def __init__(self, config: BaseModel):
         pass
 
     @abc.abstractmethod
