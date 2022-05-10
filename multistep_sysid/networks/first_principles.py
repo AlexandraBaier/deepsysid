@@ -1,38 +1,83 @@
-from typing import Dict
+from typing import Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from pydantic import BaseModel
+
+
+class AddedMass4DOFConfig(BaseModel):
+    xud: float
+    yvd: float
+    ypd: float
+    yrd: float
+    kvd: float
+    kpd: float
+    krd: float
+    nvd: float
+    npd: float
+    nrd: float
+
+
+class MinimalManeuveringConfig(AddedMass4DOFConfig):
+    m: float
+    Ixx: float
+    Izz: float
+    xg: float
+    zg: float
+    rho_water: float
+    disp: float
+    gm: float
+    g: float
+
+
+class PropulsionManeuveringConfig(MinimalManeuveringConfig):
+    wake_factor: float
+    diameter: float
+    Kt: Tuple[float, float, float]
+    lx: float
+    ly: float
+    lz: float
+
+
+class BasicPelicanMotionConfig(BaseModel):
+    m: float
+    g: float
+    kt: float
+    Ix: float
+    Iy: float
+    Iz: float
+    kr: float
 
 
 class MinimalManeuveringEquations(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self, time_delta: float, config: MinimalManeuveringConfig):
         super().__init__()
 
-        self.dt = kwargs['dt']
+        self.dt = time_delta
 
-        mass = kwargs['m']
+        mass = config.m
         inertia = np.array([
-            [kwargs['Ixx'], 0.0, 0.0],
+            [config.Ixx, 0.0, 0.0],
             [0.0, 0.0, 0.0],
-            [0.0, 0.0, kwargs['Izz']]
+            [0.0, 0.0, config.Izz]
         ])
         cog = np.array([
-            kwargs['xg'], 0.0, kwargs['zg']
+            config.xg, 0.0, config.zg
         ])
         m_rb = build_rigid_body_matrix(
             dof=4, mass=mass, inertia_matrix=inertia, center_of_gravity=cog
         )
-        m_a = build_4dof_added_mass_matrix(**kwargs)
+        m_a = build_4dof_added_mass_matrix(config)
         # transpose for correct multiplication with batch
         self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())
         self.inv_mass.requires_grad = False
 
         self.coriolis_rb = RigidBodyCoriolis4DOF(mass=mass, cog=cog)
         self.buoyancy = Buoyancy(
-            rho_water=kwargs['rho_water'], displacement=kwargs['disp'], metacentric_height=kwargs['gm'],
-            grav_acc=kwargs['g']
+            rho_water=config.rho_water, displacement=config.disp, metacentric_height=config.gm,
+            grav_acc=config.g
         )
 
     def forward(self, control, state):
@@ -54,37 +99,41 @@ class MinimalManeuveringEquations(nn.Module):
 
 
 class PropulsionManeuveringEquations(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self, time_delta: float, config: PropulsionManeuveringConfig):
         super().__init__()
 
-        self.dt = kwargs['dt']
+        self.dt = time_delta
 
-        mass = kwargs['m']
+        mass = config.m
         inertia = np.array([
-            [kwargs['Ixx'], 0.0, 0.0],
+            [config.Ixx, 0.0, 0.0],
             [0.0, 0.0, 0.0],
-            [0.0, 0.0, kwargs['Izz']]
+            [0.0, 0.0, config.Izz]
         ])
         cog = np.array([
-            kwargs['xg'], 0.0, kwargs['zg']
+            config.xg, 0.0, config.zg
         ])
         m_rb = build_rigid_body_matrix(
             dof=4, mass=mass, inertia_matrix=inertia, center_of_gravity=cog
         )
-        m_a = build_4dof_added_mass_matrix(**kwargs)
+        m_a = build_4dof_added_mass_matrix(config)
         # transpose for correct multiplication with batch
         self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())
         self.inv_mass.requires_grad = False
 
         self.coriolis_rb = RigidBodyCoriolis4DOF(mass=mass, cog=cog)
         self.buoyancy = Buoyancy(
-            rho_water=kwargs['rho_water'], displacement=kwargs['disp'], metacentric_height=kwargs['gm'],
-            grav_acc=kwargs['g']
+            rho_water=config.rho_water,
+            displacement=config.disp,
+            metacentric_height=config.gm,
+            grav_acc=config.g
         )
         self.propulsion = SymmetricRudderPropellerPair(
-            wake_factor=kwargs['wake_factor'], diameter=kwargs['diameter'], rho_water=kwargs['rho_water'],
-            thrust_coefficient=np.array(kwargs['Kt']),
-            propeller_location=np.array([kwargs['lx'], kwargs['ly'], kwargs['lz']])
+            wake_factor=config.wake_factor,
+            diameter=config.diameter,
+            rho_water=config.rho_water,
+            thrust_coefficient=np.array(config.Kt),
+            propeller_location=np.array([config.lx, config.ly, config.lz])
         )
 
     def forward(self, control, state):
@@ -149,17 +198,17 @@ def build_rigid_body_matrix(dof, mass, inertia_matrix, center_of_gravity):
     return mrb
 
 
-def build_4dof_added_mass_matrix(**kwargs):
-    xud = kwargs['Xud']
-    yvd = kwargs['Yvd']
-    ypd = kwargs['Ypd']
-    yrd = kwargs['Yrd']
-    kvd = kwargs['Kvd']
-    kpd = kwargs['Kpd']
-    krd = kwargs['Krd']
-    nvd = kwargs['Nvd']
-    npd = kwargs['Npd']
-    nrd = kwargs['Nrd']
+def build_4dof_added_mass_matrix(config: AddedMass4DOFConfig):
+    xud = config.xud
+    yvd = config.yvd
+    ypd = config.ypd
+    yrd = config.yrd
+    kvd = config.kvd
+    kpd = config.kpd
+    krd = config.krd
+    nvd = config.nvd
+    npd = config.npd
+    nrd = config.nrd
 
     ma = torch.tensor([
         [xud, 0.0, 0.0, 0.0],
@@ -284,21 +333,21 @@ class SymmetricRudderPropellerPair(nn.Module):
 
 class BasicPelicanMotionEquations(nn.Module):
     """
-    Models motion of quadrotor without rotors.
+    Motion model of quadrotor without propulsion.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, time_delta: float, config: BasicPelicanMotionConfig):
         super().__init__()
 
-        self.mass = kwargs['m']
-        self.gravity = kwargs['g']
-        self.kt = kwargs['kt']
+        self.mass = config.m
+        self.gravity = config.g
+        self.kt = config.kt
 
-        self.ix = kwargs['Ix']
-        self.iy = kwargs['Iy']
-        self.iz = kwargs['Iz']
-        self.kr = kwargs['kr']
+        self.ix = config.Ix
+        self.iy = config.Iy
+        self.iz = config.Iz
+        self.kr = config.kr
 
-        self.dt = kwargs['dt']
+        self.dt = time_delta
 
     def forward(self, control, state):
         phi = state[:, 0]
