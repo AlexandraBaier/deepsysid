@@ -1,26 +1,23 @@
 import json
 import logging
 import time
-from typing import List, Literal
+from typing import Literal
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
-from pydantic import BaseModel
 
 from . import base
+from .base import DynamicIdentificationModelConfig
 from ..networks import loss, rnn
 from .. import utils
 
 logger = logging.getLogger()
 
 
-class LSTMInitModelConfig(BaseModel):
-    device_name: str = 'cpu'
-    control_names: List[str]
-    state_names: List[str]
+class LSTMInitModelConfig(DynamicIdentificationModelConfig):
     recurrent_dim: int
     num_recurrent_layers: int
     dropout: float

@@ -1,11 +1,10 @@
 import abc
 import json
 import logging
-from typing import List, Literal
+from typing import Literal
 
 import numpy as np
 import torch
-from pydantic import BaseModel
 from torch import nn
 from torch import optim
 from torch.nn.functional import mse_loss
@@ -14,6 +13,7 @@ from torch.utils import data
 from .physical import PhysicalComponent, NoOpPhysicalComponent, MinimalManeuveringComponent, \
     PropulsionManeuveringComponent, MinimalManeuveringConfig, PropulsionManeuveringConfig
 from .semiphysical import SemiphysicalComponent, NoOpSemiphysicalComponent, LinearComponent, BlankeComponent
+from ..base import DynamicIdentificationModelConfig
 from ... import utils
 from .. import base
 from ...networks import loss, rnn
@@ -21,11 +21,7 @@ from ...networks import loss, rnn
 logger = logging.getLogger()
 
 
-class HybridResidualLSTMModelConfig(BaseModel):
-    device_name: str = 'cpu'
-    control_names: List[str]
-    state_names: str
-    time_delta: float
+class HybridResidualLSTMModelConfig(DynamicIdentificationModelConfig):
     recurrent_dim: int
     num_recurrent_layers: int
     dropout: float

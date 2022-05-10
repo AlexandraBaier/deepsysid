@@ -4,12 +4,12 @@ from typing import List, Tuple
 
 import numpy as np
 import torch
-from pydantic import BaseModel
 from torch import optim
 from torch.nn import functional
 from torch.utils import data
 
 from . import base
+from .base import DynamicIdentificationModelConfig
 from ..networks.fnn import DenseReLUNetwork
 from .. import utils
 
@@ -17,10 +17,7 @@ from .. import utils
 logger = logging.getLogger()
 
 
-class NARXDenseNetworkConfig(BaseModel):
-    device_name: str = 'cpu'
-    control_names: List[str]
-    state_names: List[str]
+class NARXDenseNetworkConfig(DynamicIdentificationModelConfig):
     window_size: int
     learning_rate: float
     batch_size: int

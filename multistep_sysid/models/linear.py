@@ -2,22 +2,14 @@ from typing import List, Tuple
 
 import h5py
 import numpy as np
-from pydantic import BaseModel
 from sklearn.linear_model import LinearRegression
 
-from .base import DynamicIdentificationModel, FixedWindowModel
+from .base import DynamicIdentificationModel, FixedWindowModel, DynamicIdentificationModelConfig
 from .. import utils
 
 
-class LinearModelConfig(BaseModel):
-    control_names: List[str]
-    state_names: List[str]
-
-
 class LinearModel(DynamicIdentificationModel):
-    CONFIG = LinearModelConfig
-
-    def __init__(self, config: LinearModelConfig):
+    def __init__(self, config: DynamicIdentificationModelConfig):
         super().__init__(config)
 
         self.regressor = LinearRegression(fit_intercept=True, normalize=False)
@@ -116,7 +108,7 @@ class LinearModel(DynamicIdentificationModel):
         return x
 
 
-class LinearLagConfig(BaseModel):
+class LinearLagConfig(DynamicIdentificationModelConfig):
     window_size: int
 
 

@@ -11,11 +11,18 @@ from .. import utils
 logger = logging.getLogger()
 
 
+class DynamicIdentificationModelConfig(BaseModel):
+    device_name: str = 'cpu'
+    control_names: List[str]
+    state_names: List[str]
+    time_delta: float
+
+
 class DynamicIdentificationModel(metaclass=abc.ABCMeta):
-    CONFIG: Optional[Type[BaseModel]] = None
+    CONFIG: Optional[Type[DynamicIdentificationModelConfig]] = DynamicIdentificationModelConfig
 
     @abc.abstractmethod
-    def __init__(self, config: Optional[BaseModel]):
+    def __init__(self, config: Optional[DynamicIdentificationModelConfig]):
         pass
 
     @abc.abstractmethod
