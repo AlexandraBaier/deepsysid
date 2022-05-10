@@ -1,10 +1,11 @@
+import abc
 from typing import Tuple
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from pydantic import BaseModel
+from torch import nn
+from torch.nn import functional as F
 
 
 class AddedMass4DOFConfig(BaseModel):
@@ -49,6 +50,55 @@ class BasicPelicanMotionConfig(BaseModel):
     Iy: float
     Iz: float
     kr: float
+
+
+class PhysicalComponent(nn.Module, abc.ABC):
+    def __init__(self, time_delta: float, device: torch.device):
+        super().__init__()
+
+        self.time_delta = time_delta
+        self.device = device
+
+    @abc.abstractmethod
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        """
+        :param control: shape (N, _)
+        :param state: shape (N, S)
+        :return: (N, S)
+        """
+        pass
+
+
+class NoOpPhysicalComponent(PhysicalComponent):
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        return torch.zeros_like(state)
+
+
+class MinimalManeuveringComponent(PhysicalComponent):
+    def __init__(self, time_delta: float, device: torch.device, config: MinimalManeuveringConfig):
+        super().__init__(time_delta=time_delta, device=device)
+        self.model = MinimalManeuveringEquations(time_delta=time_delta, config=config).to(self.device)
+
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        return self.forward(control, state)
+
+
+class PropulsionManeuveringComponent(PhysicalComponent):
+    def __init__(self, time_delta: float, device: torch.device, config: PropulsionManeuveringConfig):
+        super().__init__(time_delta=time_delta, device=device)
+        self.model = PropulsionManeuveringEquations(time_delta=time_delta, config=config).to(self.device)
+
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        return self.model.forward(control, state)
+
+
+class BasicPelicanMotionComponent(PhysicalComponent):
+    def __init__(self, time_delta: float, device: torch.device, config: BasicPelicanMotionConfig):
+        super().__init__(time_delta=time_delta, device=device)
+        self.model = BasicPelicanMotionEquations(time_delta=time_delta, config=config).to(self.device)
+
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        return self.model.forward(control, state)
 
 
 class MinimalManeuveringEquations(nn.Module):
