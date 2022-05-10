@@ -9,9 +9,9 @@ from torch import optim
 from torch.nn import functional
 from torch.utils import data
 
-from multistep_sysid.models import base
-from multistep_sysid.networks.fnn import DenseReLUNetwork
-from multistep_sysid import utils
+from . import base
+from ..networks.fnn import DenseReLUNetwork
+from .. import utils
 
 
 logger = logging.getLogger()
