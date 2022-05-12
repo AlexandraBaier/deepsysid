@@ -4,6 +4,11 @@ A system identification toolkit for multistep prediction using deep learning and
 
 ## How to use?
 
+Install via pip:
+```
+pip install git+https://github.com/AlexandraBaier/deepsysid.git
+```
+
 ### Environment Variables
 
 Set the following environment variables:
@@ -17,7 +22,7 @@ CONFIGURATION=<JSON configuration file>
 
 ### Configuration
 
-The JSON configuration file is used to set hyperparameters for any model in the `multistep_sysid` package.
+The JSON configuration file is used to set hyperparameters for any model in the `deepsysid` package.
 The JSON file has the following format:
 ```json
 {
@@ -83,10 +88,18 @@ An example template can be found under `examples/patrol_ship.template.json`.
 Arguments:
 - model: name of model as defined in configuration
 - `--enable-cuda`: Optional flag. Script will pass device-name `cuda` to model. Models that support GPU usage will run accordingly.
-- `--device-idx={n}`: Optional flag (only in combination with `--enable-cuda`). Script will pass device name `cuda:n` to model, where `n` is an integer greater or equal to 0.
+- `--device-idx={n}`: Optional (only in combination with `--enable-cuda`). Script will pass device name `cuda:n` to model, where `n` is an integer greater or equal to 0.
 - `--disable-stdout`: Optional flag. Script will not print logging to stdout, however will still log to .txt file in model directory.
 
 ### Testing
+
+`scripts/train_model.py [--enable-cuda] [--device-idx={n}] --mode={train|validation|test} model`
+
+Arguments:
+- model: name of model as defined in configuration
+- `--enable-cuda`: Optional flag. Script will pass device-name `cuda` to model. Models that support GPU usage will run accordingly.
+- `--device-idx={n}`: Optional (only in combination with `--enable-cuda`). Script will pass device name `cuda:n` to model, where `n` is an integer greater or equal to 0.
+- `--disable-stdout`: Required. Choose either `train`, `validation` or `test` to select what dataset to run the evaluation on. 
 
 
 ## References
