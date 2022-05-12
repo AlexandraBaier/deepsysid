@@ -20,7 +20,6 @@
       "p",
       "r",
       "phi"
-    ]
     ],
     "thresholds": [
       10.0,
@@ -38,425 +37,425 @@
       0.3,
       0.2,
       0.1
-    ],
-    "models": [
-      {
-        "model_base_name": "QuadraticLag",
-        "model_class": "multistep_sysid.models.linear.QuadraticControlLag",
-        "static_parameters": {},
-        "flexible_parameters": {
-          "lag": [
-            15,
-            30,
-            60
-          ]
-        }
-      },
-      {
-        "model_base_name": "LSTM+Init",
-        "model_class": "multistep_sysid.models.recurrent.LSTMInitModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Lin",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Hyd",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankeModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Min",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridMinimalManeuveringModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000,
-          "g": 9.81,
-          "rho_water": 1025.0,
-          "m": 365.79e3,
-          "disp": 355.88,
-          "gm": 1.0,
-          "xg": -3.38,
-          "zg": -1.06,
-          "Ixx": 3.4263e6,
-          "Izz": 3.3818e7,
-          "Xud": -17400.0,
-          "Yvd": -1.9022e6,
-          "Ypd": -0.296e6,
-          "Yrd": -1.4e6,
-          "Kvd": 296000.0,
-          "Kpd": -674000.0,
-          "Krd": 0.0,
-          "Nvd": 538000.0,
-          "Npd": 0.0,
-          "Nrd": -4.3928e7
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Pro",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridPropulsionManeuveringModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000,
-          "g": 9.81,
-          "rho_water": 1025.0,
-          "m": 365.79e3,
-          "disp": 355.88,
-          "gm": 1.0,
-          "xg": -3.38,
-          "zg": -1.06,
-          "Ixx": 3.4263e6,
-          "Izz": 3.3818e7,
-          "Xud": -17400.0,
-          "Yvd": -1.9022e6,
-          "Ypd": -0.296e6,
-          "Yrd": -1.4e6,
-          "Kvd": 296000.0,
-          "Kpd": -674000.0,
-          "Krd": 0.0,
-          "Nvd": 538000.0,
-          "Npd": 0.0,
-          "Nrd": -4.3928e7,
-          "wake_factor": 0.25,
-          "diameter": 0.75,
-          "Kt": [
-            -0.1060,
-            -0.3246,
-            0.4594
-          ],
-          "lx": -25,
-          "ly": 4,
-          "lz": 4
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Min+Lin",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearMinimalManeuveringModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000,
-          "g": 9.81,
-          "rho_water": 1025.0,
-          "m": 365.79e3,
-          "disp": 355.88,
-          "gm": 1.0,
-          "xg": -3.38,
-          "zg": -1.06,
-          "Ixx": 3.4263e6,
-          "Izz": 3.3818e7,
-          "Xud": -17400.0,
-          "Yvd": -1.9022e6,
-          "Ypd": -0.296e6,
-          "Yrd": -1.4e6,
-          "Kvd": 296000.0,
-          "Kpd": -674000.0,
-          "Krd": 0.0,
-          "Nvd": 538000.0,
-          "Npd": 0.0,
-          "Nrd": -4.3928e7
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Pro+Lin",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearPropulsionManeuveringModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000,
-          "g": 9.81,
-          "rho_water": 1025.0,
-          "m": 365.79e3,
-          "disp": 355.88,
-          "gm": 1.0,
-          "xg": -3.38,
-          "zg": -1.06,
-          "Ixx": 3.4263e6,
-          "Izz": 3.3818e7,
-          "Xud": -17400.0,
-          "Yvd": -1.9022e6,
-          "Ypd": -0.296e6,
-          "Yrd": -1.4e6,
-          "Kvd": 296000.0,
-          "Kpd": -674000.0,
-          "Krd": 0.0,
-          "Nvd": 538000.0,
-          "Npd": 0.0,
-          "Nrd": -4.3928e7,
-          "wake_factor": 0.25,
-          "diameter": 0.75,
-          "Kt": [
-            -0.1060,
-            -0.3246,
-            0.4594
-          ],
-          "lx": -25,
-          "ly": 4,
-          "lz": 4
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Min+Hyd",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankeMinimalManeuveringModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000,
-          "g": 9.81,
-          "rho_water": 1025.0,
-          "m": 365.79e3,
-          "disp": 355.88,
-          "gm": 1.0,
-          "xg": -3.38,
-          "zg": -1.06,
-          "Ixx": 3.4263e6,
-          "Izz": 3.3818e7,
-          "Xud": -17400.0,
-          "Yvd": -1.9022e6,
-          "Ypd": -0.296e6,
-          "Yrd": -1.4e6,
-          "Kvd": 296000.0,
-          "Kpd": -674000.0,
-          "Krd": 0.0,
-          "Nvd": 538000.0,
-          "Npd": 0.0,
-          "Nrd": -4.3928e7
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      },
-      {
-        "model_base_name": "Hybrid-Pro+Hyd",
-        "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankePropulsionModel",
-        "static_parameters": {
-          "dropout": 0.25,
-          "sequence_length": 50,
-          "batch_size": 256,
-          "learning_rate": 0.0025,
-          "epochs_initializer": 400,
-          "epochs_predictor": 1000,
-          "g": 9.81,
-          "rho_water": 1025.0,
-          "m": 365.79e3,
-          "disp": 355.88,
-          "gm": 1.0,
-          "xg": -3.38,
-          "zg": -1.06,
-          "Ixx": 3.4263e6,
-          "Izz": 3.3818e7,
-          "Xud": -17400.0,
-          "Yvd": -1.9022e6,
-          "Ypd": -0.296e6,
-          "Yrd": -1.4e6,
-          "Kvd": 296000.0,
-          "Kpd": -674000.0,
-          "Krd": 0.0,
-          "Nvd": 538000.0,
-          "Npd": 0.0,
-          "Nrd": -4.3928e7,
-          "wake_factor": 0.25,
-          "diameter": 0.75,
-          "Kt": [
-            -0.1060,
-            -0.3246,
-            0.4594
-          ],
-          "lx": -25,
-          "ly": 4,
-          "lz": 4
-        },
-        "flexible_parameters": {
-          "recurrent_dim": [
-            64,
-            128,
-            192,
-            256
-          ],
-          "num_recurrent_layers": [
-            2,
-            3,
-            4
-          ],
-          "loss": [
-            "mse",
-            "msge"
-          ]
-        }
-      }
     ]
-  }
+  },
+  "models": [
+    {
+      "model_base_name": "QuadraticLag",
+      "model_class": "multistep_sysid.models.linear.QuadraticControlLag",
+      "static_parameters": {},
+      "flexible_parameters": {
+        "lag": [
+          15,
+          30,
+          60
+        ]
+      }
+    },
+    {
+      "model_base_name": "LSTM+Init",
+      "model_class": "multistep_sysid.models.recurrent.LSTMInitModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Lin",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Hyd",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankeModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Min",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridMinimalManeuveringModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000,
+        "g": 9.81,
+        "rho_water": 1025.0,
+        "m": 365.79e3,
+        "disp": 355.88,
+        "gm": 1.0,
+        "xg": -3.38,
+        "zg": -1.06,
+        "Ixx": 3.4263e6,
+        "Izz": 3.3818e7,
+        "Xud": -17400.0,
+        "Yvd": -1.9022e6,
+        "Ypd": -0.296e6,
+        "Yrd": -1.4e6,
+        "Kvd": 296000.0,
+        "Kpd": -674000.0,
+        "Krd": 0.0,
+        "Nvd": 538000.0,
+        "Npd": 0.0,
+        "Nrd": -4.3928e7
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Pro",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridPropulsionManeuveringModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000,
+        "g": 9.81,
+        "rho_water": 1025.0,
+        "m": 365.79e3,
+        "disp": 355.88,
+        "gm": 1.0,
+        "xg": -3.38,
+        "zg": -1.06,
+        "Ixx": 3.4263e6,
+        "Izz": 3.3818e7,
+        "Xud": -17400.0,
+        "Yvd": -1.9022e6,
+        "Ypd": -0.296e6,
+        "Yrd": -1.4e6,
+        "Kvd": 296000.0,
+        "Kpd": -674000.0,
+        "Krd": 0.0,
+        "Nvd": 538000.0,
+        "Npd": 0.0,
+        "Nrd": -4.3928e7,
+        "wake_factor": 0.25,
+        "diameter": 0.75,
+        "Kt": [
+          -0.1060,
+          -0.3246,
+          0.4594
+        ],
+        "lx": -25,
+        "ly": 4,
+        "lz": 4
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Min+Lin",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearMinimalManeuveringModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000,
+        "g": 9.81,
+        "rho_water": 1025.0,
+        "m": 365.79e3,
+        "disp": 355.88,
+        "gm": 1.0,
+        "xg": -3.38,
+        "zg": -1.06,
+        "Ixx": 3.4263e6,
+        "Izz": 3.3818e7,
+        "Xud": -17400.0,
+        "Yvd": -1.9022e6,
+        "Ypd": -0.296e6,
+        "Yrd": -1.4e6,
+        "Kvd": 296000.0,
+        "Kpd": -674000.0,
+        "Krd": 0.0,
+        "Nvd": 538000.0,
+        "Npd": 0.0,
+        "Nrd": -4.3928e7
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Pro+Lin",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearPropulsionManeuveringModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000,
+        "g": 9.81,
+        "rho_water": 1025.0,
+        "m": 365.79e3,
+        "disp": 355.88,
+        "gm": 1.0,
+        "xg": -3.38,
+        "zg": -1.06,
+        "Ixx": 3.4263e6,
+        "Izz": 3.3818e7,
+        "Xud": -17400.0,
+        "Yvd": -1.9022e6,
+        "Ypd": -0.296e6,
+        "Yrd": -1.4e6,
+        "Kvd": 296000.0,
+        "Kpd": -674000.0,
+        "Krd": 0.0,
+        "Nvd": 538000.0,
+        "Npd": 0.0,
+        "Nrd": -4.3928e7,
+        "wake_factor": 0.25,
+        "diameter": 0.75,
+        "Kt": [
+          -0.1060,
+          -0.3246,
+          0.4594
+        ],
+        "lx": -25,
+        "ly": 4,
+        "lz": 4
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Min+Hyd",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankeMinimalManeuveringModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000,
+        "g": 9.81,
+        "rho_water": 1025.0,
+        "m": 365.79e3,
+        "disp": 355.88,
+        "gm": 1.0,
+        "xg": -3.38,
+        "zg": -1.06,
+        "Ixx": 3.4263e6,
+        "Izz": 3.3818e7,
+        "Xud": -17400.0,
+        "Yvd": -1.9022e6,
+        "Ypd": -0.296e6,
+        "Yrd": -1.4e6,
+        "Kvd": 296000.0,
+        "Kpd": -674000.0,
+        "Krd": 0.0,
+        "Nvd": 538000.0,
+        "Npd": 0.0,
+        "Nrd": -4.3928e7
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "Hybrid-Pro+Hyd",
+      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankePropulsionModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 1000,
+        "g": 9.81,
+        "rho_water": 1025.0,
+        "m": 365.79e3,
+        "disp": 355.88,
+        "gm": 1.0,
+        "xg": -3.38,
+        "zg": -1.06,
+        "Ixx": 3.4263e6,
+        "Izz": 3.3818e7,
+        "Xud": -17400.0,
+        "Yvd": -1.9022e6,
+        "Ypd": -0.296e6,
+        "Yrd": -1.4e6,
+        "Kvd": 296000.0,
+        "Kpd": -674000.0,
+        "Krd": 0.0,
+        "Nvd": 538000.0,
+        "Npd": 0.0,
+        "Nrd": -4.3928e7,
+        "wake_factor": 0.25,
+        "diameter": 0.75,
+        "Kt": [
+          -0.1060,
+          -0.3246,
+          0.4594
+        ],
+        "lx": -25,
+        "ly": 4,
+        "lz": 4
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    }
+  ]
 }
