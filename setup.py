@@ -9,10 +9,10 @@ with open('requirements.txt') as f:
 
 
 setuptools.setup(
-    name='multistep_sysid',
+    name='deepsysid',
     version='0.0.1',
     author='Alexandra Baier',
-    author_email='alex.baier@ipvs.uni-stuttgart.de',
+    author_email='alexandra.baier@ipvs.uni-stuttgart.de',
     description='System identification toolkit for multistep prediction using deep learning and hybrid methods',
     long_description=long_description,
     long_description_content_type='text/markdown',

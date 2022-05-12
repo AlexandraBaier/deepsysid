@@ -6,8 +6,8 @@ import os
 import h5py
 import numpy as np
 
-import multistep_sysid.execution as execution
-import multistep_sysid.models.base as base
+import deepsysid.execution as execution
+import deepsysid.models.base as base
 
 logger = logging.getLogger()
 

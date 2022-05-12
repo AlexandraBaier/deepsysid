@@ -5,7 +5,7 @@ import os
 import h5py
 import numpy as np
 
-import multistep_sysid.utils as utils
+import deepsysid.utils as utils
 
 
 def main():

@@ -6,10 +6,10 @@ import os
 import h5py
 import numpy as np
 
-import multistep_sysid.execution as execution
-from multistep_sysid.models.hybrid_extensive import HybridSerialCombinedLSTMModel
-from multistep_sysid.models.hybrid_first_principles import HybridSerialFirstPrinciplesLSTMModel
-from multistep_sysid.models.hybrid_semiphysical import HybridSerialSemiphysicalLSTMModel
+import deepsysid.execution as execution
+from deepsysid.models.hybrid_extensive import HybridSerialCombinedLSTMModel
+from deepsysid.models.hybrid_first_principles import HybridSerialFirstPrinciplesLSTMModel
+from deepsysid.models.hybrid_semiphysical import HybridSerialSemiphysicalLSTMModel
 
 logger = logging.getLogger()
 
