@@ -80,7 +80,7 @@ class MinimalManeuveringComponent(PhysicalComponent):
         self.model = MinimalManeuveringEquations(time_delta=time_delta, config=config).to(self.device)
 
     def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        return self.forward(control, state)
+        return self.model.forward(control, state)
 
 
 class PropulsionManeuveringComponent(PhysicalComponent):
@@ -287,7 +287,7 @@ class RigidBodyCoriolis4DOF(nn.Module):
             [m, 0.0, 0.0, 0.0],
             [-m*zg, 0.0, 0.0, 0.0],
             [m*xg, 0.0, 0.0, 0.0]
-        ]).t())
+        ]).float().t())
         self.crb.requires_grad = False
 
     def forward(self, velocity):
@@ -305,7 +305,7 @@ class Buoyancy(nn.Module):
             [0.0, 0.0, 0.0, 0.0],
             [0.0, 0.0, rho_water*grav_acc*displacement*metacentric_height, 0.0],
             [0.0, 0.0, 0.0, 0.0]
-        ]))
+        ]).float())
         self.G.requires_grad = False
 
     def forward(self, position):
