@@ -5,8 +5,6 @@ import os
 import h5py
 import numpy as np
 
-import deepsysid.utils as utils
-
 
 def compute_trajectory(state, state_names, sample_time):
     name2idx = dict((name, idx) for idx, name in enumerate(state_names))
@@ -42,17 +40,17 @@ def main():
     with open(os.environ['CONFIGURATION'], mode='r') as f:
         config = json.load(f)
 
-    window_size = config['window']
-    horizon_size = config['horizon']
+    window_size = config['window_size']
+    horizon_size = config['horizon_size']
     state_names = config['state_names']
 
     test_directory = os.environ['RESULT_DIRECTORY']
     test_file_path = os.path.join(
         test_directory, model_name, f'test-w_{window_size}-h_{horizon_size}.hdf5')
     scores_file_path = os.path.join(
-        test_directory, model_name, f'trajectory-w_{window_size}-h_{horizon_size}.hdf5')
+        test_directory, model_name, f'test-trajectory-w_{window_size}-h_{horizon_size}.hdf5')
     readable_scores_file_path = os.path.join(
-        test_directory, model_name, f'trajectory-w_{window_size}-h_{horizon_size}.json')
+        test_directory, model_name, f'test-trajectory-w_{window_size}-h_{horizon_size}.json')
 
     pred = []
     true = []

@@ -43,8 +43,8 @@ class ExperimentConfiguration(BaseModel):
     train_fraction: float
     validation_fraction: float
     time_delta: float
-    window: int
-    horizon: int
+    window_size: int
+    horizon_size: int
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
@@ -97,8 +97,8 @@ class ExperimentConfiguration(BaseModel):
             train_fraction=template.settings.train_fraction,
             validation_fraction=template.settings.validation_fraction,
             time_delta=template.settings.time_delta,
-            window=template.settings.window_size,
-            horizon=template.settings.horizon_size,
+            window_size=template.settings.window_size,
+            horizon_size=template.settings.horizon_size,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
             thresholds=template.settings.thresholds,

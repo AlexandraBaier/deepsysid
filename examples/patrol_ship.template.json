@@ -60,8 +60,8 @@
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
-        "epochs_initializer": 400,
-        "epochs_predictor": 1000
+        "epochs_initializer": 5,
+        "epochs_predictor": 5
       },
       "flexible_parameters": {
         "recurrent_dim": [
@@ -89,9 +89,9 @@
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
-        "epochs_initializer": 400,
-        "epochs_parallel": 200,
-        "epochs_feedback": 800
+        "epochs_initializer": 5,
+        "epochs_parallel": 5,
+        "epochs_feedback": 5
       },
       "flexible_parameters": {
         "recurrent_dim": [

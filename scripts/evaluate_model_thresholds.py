@@ -10,7 +10,7 @@ import deepsysid.utils as utils
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Test model')
+    parser = argparse.ArgumentParser(description='Evaluate models on thresholds on the test set')
     parser.add_argument('model', help='model')
     args = parser.parse_args()
 
@@ -19,8 +19,8 @@ def main():
     with open(os.environ['CONFIGURATION'], mode='r') as f:
         config = json.load(f)
 
-    window_size = config['window']
-    horizon_size = config['horizon']
+    window_size = config['window_size']
+    horizon_size = config['horizon_size']
     state_names = config['state_names']
     thresholds = config['thresholds']
 

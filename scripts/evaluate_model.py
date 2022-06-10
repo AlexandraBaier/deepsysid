@@ -11,35 +11,30 @@ import deepsysid.utils as utils
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate model')
-    parser.add_argument('--mode', action='store', help='either "validation" or "test"')
+    parser.add_argument('--mode', action='store', help='either "train", "validation" or "test"')
     parser.add_argument('model', help='model')
     args = parser.parse_args()
 
     model_name = args.model
     mode = args.mode
-    if mode not in {'validation', 'test'}:
+    if mode not in {'train', 'validation', 'test'}:
         raise ValueError('Argument to --mode must be either "validation" or "test"')
 
     with open(os.environ['CONFIGURATION'], mode='r') as f:
         config = json.load(f)
 
-    window_size = config['window']
-    horizon_size = config['horizon']
+    window_size = config['window_size']
+    horizon_size = config['horizon_size']
     state_names = config['state_names']
 
     test_directory = os.environ['RESULT_DIRECTORY']
     test_file_path = os.path.join(
         test_directory, model_name, f'{mode}-w_{window_size}-h_{horizon_size}.hdf5')
-    if mode == 'test':
-        scores_file_path = os.path.join(
-            test_directory, model_name, f'scores-w_{window_size}-h_{horizon_size}.hdf5')
-        readable_scores_file_path = os.path.join(
-            test_directory, model_name, f'scores-w_{window_size}-h_{horizon_size}.json')
-    else:
-        scores_file_path = os.path.join(
-            test_directory, model_name, f'validation_scores-w_{window_size}-h_{horizon_size}.hdf5')
-        readable_scores_file_path = os.path.join(
-            test_directory, model_name, f'validation_scores-w_{window_size}-h_{horizon_size}.json')
+
+    scores_file_path = os.path.join(
+        test_directory, model_name, f'{mode}-scores-w_{window_size}-h_{horizon_size}.hdf5')
+    readable_scores_file_path = os.path.join(
+        test_directory, model_name, f'{mode}-scores-w_{window_size}-h_{horizon_size}.json')
 
     pred = []
     true = []
