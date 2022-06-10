@@ -58,10 +58,7 @@ def main():
         ('rmse', lambda t, p: np.sqrt(mean_squared_error(t, p, multioutput='raw_values'))),
         ('rmse-std', lambda t, p: np.std(np.sqrt(mean_squared_error(t, p, multioutput='raw_values')),  axis=0)),
         ('mae', lambda t, p: mean_absolute_error(t, p, multioutput='raw_values')),
-        ('d1', utils.index_of_agreement),
-        ('mae_grad', utils.mean_absolute_gradient_error),
-        ('mse_grad', utils.mean_squared_gradient_error),
-        ('fourier_error', utils.fourier_amplitude_error)
+        ('d1', utils.index_of_agreement)
     )
 
     scores = dict()

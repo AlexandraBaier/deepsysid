@@ -1,6 +1,4 @@
 import numpy as np
-from scipy.fftpack import fft, fftfreq
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 
 def mean_stddev(array_seq):
@@ -106,33 +104,6 @@ def index_of_agreement(true, pred, j=1):
     partial_diff_pred = np.abs(pred - np.mean(true, axis=0))
     partial_diff_sum = np.sum(np.power(partial_diff_true + partial_diff_pred, j), axis=0)
     return 1 - (error_sum / partial_diff_sum)
-
-
-def mean_absolute_gradient_error(true, pred):
-    pgrad = pred[1:] - pred[:-1]
-    tgrad = true[1:] - true[:-1]
-    error = mean_absolute_error(tgrad, pgrad, multioutput='raw_values')
-    return error
-
-
-def mean_squared_gradient_error(true, pred):
-    pgrad = pred[1:] - pred[:-1]
-    tgrad = true[1:] - true[:-1]
-    error = mean_squared_error(tgrad, pgrad, multioutput='raw_values')
-    return error
-
-
-def fourier_amplitude_error(true, pred):
-    n = true.shape[0]
-    error = np.zeros((true.shape[1]))
-
-    for i in range(true.shape[1]):
-        true_amp = np.abs(fft(true[:, i])[:n//2])
-        pred_amp = np.abs(fft(pred[:, i])[:n//2])
-        amp_error = mean_absolute_error(true_amp, pred_amp)
-        error[i] = amp_error
-
-    return error
 
 
 def score_on_sequence(true_seq, pred_seq, score_fnc):
