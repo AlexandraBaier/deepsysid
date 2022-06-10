@@ -70,7 +70,7 @@ def main():
         blackboxes = []
         file_names = []
         for initial_control, initial_state, true_control, true_state, file_name \
-                in split_simulations(config.window, config.horizon, simulations):
+                in split_simulations(config.window_size, config.horizon_size, simulations):
             pred_target, whitebox, blackbox = model.simulate(initial_control, initial_state, true_control,
                                                              return_whitebox_blackbox=True, threshold=threshold)
 
@@ -83,7 +83,7 @@ def main():
 
         # Save results
         result_file_path = os.path.join(
-            result_directory, f'threshold_hybrid_test-w_{config.window}-h_{config.horizon}-t_{threshold}.hdf5'
+            result_directory, f'threshold_hybrid_test-w_{config.window_size}-h_{config.horizon_size}-t_{threshold}.hdf5'
         )
         with h5py.File(result_file_path, 'w') as f:
             f.attrs['control_names'] = np.array([np.string_(name) for name in config.control_names])

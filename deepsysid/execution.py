@@ -6,7 +6,37 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 
-from .models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
+from .models.base import DynamicIdentificationModel
+
+
+class ExperimentModelConfiguration(BaseModel):
+    model_class: str
+    location: str
+    parameters: Dict[str, Any]
+
+
+class ExperimentGridSearchSettings(BaseModel):
+    train_fraction: float
+    validation_fraction: float
+    time_delta: float
+    window_size: int
+    horizon_size: int
+    control_names: List[str]
+    state_names: List[str]
+    thresholds: Optional[List[float]]
+
+
+class ModelGridSearchTemplate(BaseModel):
+    model_base_name: str
+    model_class: str
+    static_parameters: Dict[str, Any]
+    flexible_parameters: Dict[str, List[Any]]
+
+
+class ExperimentGridSearchTemplate(BaseModel):
+    base_path: str
+    settings: ExperimentGridSearchSettings
+    models: List[ModelGridSearchTemplate]
 
 
 class ExperimentConfiguration(BaseModel):
@@ -18,11 +48,11 @@ class ExperimentConfiguration(BaseModel):
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
-    models: Dict[str, 'ExperimentModelConfiguration']
+    models: Dict[str, ExperimentModelConfiguration]
 
     @classmethod
     def from_grid_search_template(
-            cls, template: 'ExperimentGridSearchTemplate', device_name: str
+            cls, template: ExperimentGridSearchTemplate, device_name: str
     ) -> 'ExperimentConfiguration':
         models: Dict[str, ExperimentModelConfiguration] = dict()
         for model_template in template.models:
@@ -32,7 +62,9 @@ class ExperimentConfiguration(BaseModel):
                 device_name=device_name,
                 control_names=template.settings.control_names,
                 state_names=template.settings.state_names,
-                time_delta=template.settings.time_delta
+                time_delta=template.settings.time_delta,
+                window_size=template.settings.window_size,
+                horizon_size=template.settings.horizon_size
             )
             static_model_params = model_template.static_parameters
 
@@ -46,13 +78,17 @@ class ExperimentConfiguration(BaseModel):
                     if issubclass(type(param_value), list):
                         model_name += '-' + '_'.join(map(str, param_value))
                     else:
-                        model_name += f'-{param_value:f}'.replace('.', '')
+                        if isinstance(param_value, float):
+                            model_name += f'-{param_value:f}'.replace('.', '')
+                        else:
+                            model_name += f'-{param_value}'.replace('.', '')
 
                 model_config = ExperimentModelConfiguration.parse_obj(dict(
                     model_class=model_class_str,
                     location=os.path.join(template.base_path, model_name),
                     parameters=model_class.CONFIG.parse_obj(
-                        base_model_params | static_model_params | flexible_model_params
+                        # Merge dictionaries
+                        {**base_model_params, **static_model_params, **flexible_model_params}
                     )
                 ))
                 models[model_name] = model_config
@@ -61,43 +97,13 @@ class ExperimentConfiguration(BaseModel):
             train_fraction=template.settings.train_fraction,
             validation_fraction=template.settings.validation_fraction,
             time_delta=template.settings.time_delta,
-            window=template.settings.window,
-            horizon=template.settings.horizon,
+            window=template.settings.window_size,
+            horizon=template.settings.horizon_size,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
             thresholds=template.settings.thresholds,
             models=models
         )
-
-
-class ExperimentModelConfiguration(BaseModel):
-    model_class: str
-    location: str
-    parameters: Dict[str, Any]
-
-
-class ExperimentGridSearchTemplate(BaseModel):
-    base_path: str
-    settings: 'ExperimentGridSearchSettings'
-    models: List['ModelGridSearchTemplate']
-
-
-class ExperimentGridSearchSettings(BaseModel):
-    train_fraction: float
-    validation_fraction: float
-    time_delta: float
-    window: int
-    horizon: int
-    control_names: List[str]
-    state_names: List[str]
-    thresholds: Optional[List[float]]
-
-
-class ModelGridSearchTemplate(BaseModel):
-    model_base_name: str
-    model_class: str
-    static_parameters: Dict[str, Any]
-    flexible_parameters: Dict[str, List[Any]]
 
 
 def initialize_model(
@@ -108,11 +114,6 @@ def initialize_model(
     model_class = retrieve_model_class(model_config.model_class)
 
     parameters = model_config.parameters
-    parameters['control_names'] = experiment_config.control_names
-    parameters['state_names'] = experiment_config.state_names
-    parameters['time_delta'] = experiment_config.time_delta
-    parameters['window_size'] = experiment_config.window
-    parameters['horizon_size'] = experiment_config.horizon
     parameters['device_name'] = device_name
 
     config = model_class.CONFIG.parse_obj(parameters)
@@ -120,6 +121,7 @@ def initialize_model(
     model = model_class(config=config)
 
     return model
+
 
 def load_control_and_state(
         file_path: str, control_names: List[str], state_names: List[str]

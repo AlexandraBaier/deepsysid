@@ -62,7 +62,7 @@ def main():
     whiteboxes = []
     blackboxes = []
     for initial_control, initial_state, true_control, true_state, file_name \
-            in split_simulations(config.window, config.horizon, simulations):
+            in split_simulations(config.window_size, config.horizon_size, simulations):
         try:
             # Hybrid models may return physical and LSTM output separately
             # If a model supports this output, we would like to record this.
@@ -88,7 +88,7 @@ def main():
     except FileExistsError:
         pass
 
-    result_file_path = os.path.join(result_directory, f'{mode}-w_{config.window}-h_{config.horizon}.hdf5')
+    result_file_path = os.path.join(result_directory, f'{mode}-w_{config.window_size}-h_{config.horizon_size}.hdf5')
     with h5py.File(result_file_path, 'w') as f:
         f.attrs['control_names'] = np.array([np.string_(name) for name in config.control_names])
         f.attrs['state_names'] = np.array([np.string_(name) for name in config.state_names])

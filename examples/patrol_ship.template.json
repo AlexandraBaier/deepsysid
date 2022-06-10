@@ -4,8 +4,8 @@
     "train_fraction": 0.6,
     "validation_fraction": 0.1,
     "time_delta": 1.0,
-    "window": 60,
-    "horizon": 900,
+    "window_size": 60,
+    "horizon_size": 900,
     "control_names": [
       "n",
       "deltal",
@@ -42,7 +42,7 @@
   "models": [
     {
       "model_base_name": "QuadraticLag",
-      "model_class": "multistep_sysid.models.linear.QuadraticControlLag",
+      "model_class": "deepsysid.models.linear.QuadraticControlLag",
       "static_parameters": {},
       "flexible_parameters": {
         "lag": [
@@ -54,7 +54,7 @@
     },
     {
       "model_base_name": "LSTM+Init",
-      "model_class": "multistep_sysid.models.recurrent.LSTMInitModel",
+      "model_class": "deepsysid.models.recurrent.LSTMInitModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
@@ -83,14 +83,15 @@
     },
     {
       "model_base_name": "Hybrid-Lin",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridLinearModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000
+        "epochs_parallel": 200,
+        "epochs_feedback": 800
       },
       "flexible_parameters": {
         "recurrent_dim": [
@@ -112,14 +113,15 @@
     },
     {
       "model_base_name": "Hybrid-Hyd",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankeModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridBlankeModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000
+        "epochs_parallel": 200,
+        "epochs_feedback": 800
       },
       "flexible_parameters": {
         "recurrent_dim": [
@@ -141,14 +143,15 @@
     },
     {
       "model_base_name": "Hybrid-Min",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridMinimalManeuveringModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridMinimalManeuveringModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000,
+        "epochs_parallel": 200,
+        "epochs_feedback": 800,
         "g": 9.81,
         "rho_water": 1025.0,
         "m": 365.79e3,
@@ -189,14 +192,15 @@
     },
     {
       "model_base_name": "Hybrid-Pro",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridPropulsionManeuveringModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridPropulsionManeuveringModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000,
+        "epochs_parallel": 200,
+        "epochs_feedback": 800,
         "g": 9.81,
         "rho_water": 1025.0,
         "m": 365.79e3,
@@ -247,14 +251,15 @@
     },
     {
       "model_base_name": "Hybrid-Min+Lin",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearMinimalManeuveringModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridLinearMinimalManeuveringModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000,
+        "epochs_parallel": 200,
+        "epochs_feedback": 800,
         "g": 9.81,
         "rho_water": 1025.0,
         "m": 365.79e3,
@@ -295,14 +300,15 @@
     },
     {
       "model_base_name": "Hybrid-Pro+Lin",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridLinearPropulsionManeuveringModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridLinearPropulsionManeuveringModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000,
+        "epochs_parallel": 200,
+        "epochs_feedback": 800,
         "g": 9.81,
         "rho_water": 1025.0,
         "m": 365.79e3,
@@ -353,14 +359,15 @@
     },
     {
       "model_base_name": "Hybrid-Min+Hyd",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankeMinimalManeuveringModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridBlankeMinimalManeuveringModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000,
+        "epochs_parallel": 200,
+        "epochs_feedback": 800,
         "g": 9.81,
         "rho_water": 1025.0,
         "m": 365.79e3,
@@ -401,14 +408,15 @@
     },
     {
       "model_base_name": "Hybrid-Pro+Hyd",
-      "model_class": "multistep_sysid.models.hybrid.bounded_residual.HybridBlankePropulsionModel",
+      "model_class": "deepsysid.models.hybrid.bounded_residual.HybridBlankePropulsionModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
         "epochs_initializer": 400,
-        "epochs_predictor": 1000,
+        "epochs_parallel": 200,
+        "epochs_feedback": 800,
         "g": 9.81,
         "rho_water": 1025.0,
         "m": 365.79e3,

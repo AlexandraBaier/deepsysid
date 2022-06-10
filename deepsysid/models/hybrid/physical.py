@@ -9,16 +9,16 @@ from torch.nn import functional as F
 
 
 class AddedMass4DOFConfig(BaseModel):
-    xud: float
-    yvd: float
-    ypd: float
-    yrd: float
-    kvd: float
-    kpd: float
-    krd: float
-    nvd: float
-    npd: float
-    nrd: float
+    Xud: float
+    Yvd: float
+    Ypd: float
+    Yrd: float
+    Kvd: float
+    Kpd: float
+    Krd: float
+    Nvd: float
+    Npd: float
+    Nrd: float
 
 
 class MinimalManeuveringConfig(AddedMass4DOFConfig):
@@ -249,16 +249,16 @@ def build_rigid_body_matrix(dof, mass, inertia_matrix, center_of_gravity):
 
 
 def build_4dof_added_mass_matrix(config: AddedMass4DOFConfig):
-    xud = config.xud
-    yvd = config.yvd
-    ypd = config.ypd
-    yrd = config.yrd
-    kvd = config.kvd
-    kpd = config.kpd
-    krd = config.krd
-    nvd = config.nvd
-    npd = config.npd
-    nrd = config.nrd
+    xud = config.Xud
+    yvd = config.Yvd
+    ypd = config.Ypd
+    yrd = config.Yrd
+    kvd = config.Kvd
+    kpd = config.Kpd
+    krd = config.Krd
+    nvd = config.Nvd
+    npd = config.Npd
+    nrd = config.Nrd
 
     ma = torch.tensor([
         [xud, 0.0, 0.0, 0.0],
