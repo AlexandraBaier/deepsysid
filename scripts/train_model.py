@@ -31,22 +31,16 @@ def main():
     with open(os.environ['CONFIGURATION'], mode='r') as f:
         config = json.load(f)
 
-    time_delta = config['time_delta']
-    window_size = config['window']
-    horizon_size = config['horizon']
-    control_names = config['control_names']
-    state_names = config['state_names']
+    config = execution.ExperimentConfiguration.parse_obj(config)
 
     # Load dataset
     dataset_directory = os.path.join(os.environ['DATASET_DIRECTORY'], 'processed', 'train')
     controls, states = execution.load_simulation_data(
-        directory=dataset_directory, control_names=control_names, state_names=state_names)
+        directory=dataset_directory, control_names=config.control_names, state_names=config.state_names
+    )
 
     # Initialize model
-    model_config = config['models'][model_name]
-    model_directory = os.path.expanduser(os.path.normpath(model_config['location']))
-    model_class = execution.retrieve_model_class(model_config['model_class'])
-
+    model_directory = os.path.expanduser(os.path.normpath(config.models[model_name].location))
     try:
         os.mkdir(model_directory)
     except FileExistsError:
@@ -62,22 +56,8 @@ def main():
         handlers=handlers
     )
 
-    parameters = model_config['parameters']
-    parameters['control_names'] = control_names
-    parameters['state_names'] = state_names
-    parameters['time_delta'] = time_delta
-    parameters['window_size'] = window_size
-    parameters['horizon_size'] = horizon_size
-    parameters['device_name'] = device_name
-
-    if model_class.CONFIG is not None:
-        config = model_class.CONFIG.parse_obj(parameters)
-    else:
-        config = None
-
-    model = model_class(config=config)
+    model = execution.initialize_model(config, model_name, device_name)
     model.train(control_seqs=controls, state_seqs=states)
-
     execution.save_model(model, model_directory, model_name)
 
 

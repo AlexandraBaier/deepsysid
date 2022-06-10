@@ -73,7 +73,7 @@ class ExperimentConfiguration(BaseModel):
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
     location: str
-    parameters: DynamicIdentificationModelConfig
+    parameters: Dict[str, Any]
 
 
 class ExperimentGridSearchTemplate(BaseModel):
@@ -99,6 +99,27 @@ class ModelGridSearchTemplate(BaseModel):
     static_parameters: Dict[str, Any]
     flexible_parameters: Dict[str, List[Any]]
 
+
+def initialize_model(
+        experiment_config: ExperimentConfiguration, model_name: str, device_name: str
+) -> DynamicIdentificationModel:
+    model_config = experiment_config.models[model_name]
+
+    model_class = retrieve_model_class(model_config.model_class)
+
+    parameters = model_config.parameters
+    parameters['control_names'] = experiment_config.control_names
+    parameters['state_names'] = experiment_config.state_names
+    parameters['time_delta'] = experiment_config.time_delta
+    parameters['window_size'] = experiment_config.window
+    parameters['horizon_size'] = experiment_config.horizon
+    parameters['device_name'] = device_name
+
+    config = model_class.CONFIG.parse_obj(parameters)
+
+    model = model_class(config=config)
+
+    return model
 
 def load_control_and_state(
         file_path: str, control_names: List[str], state_names: List[str]

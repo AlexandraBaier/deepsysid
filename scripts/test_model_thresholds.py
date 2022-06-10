@@ -7,9 +7,7 @@ import h5py
 import numpy as np
 
 import deepsysid.execution as execution
-from deepsysid.models.hybrid_extensive import HybridSerialCombinedLSTMModel
-from deepsysid.models.hybrid_first_principles import HybridSerialFirstPrinciplesLSTMModel
-from deepsysid.models.hybrid_semiphysical import HybridSerialSemiphysicalLSTMModel
+from deepsysid.models.hybrid.bounded_residual import HybridResidualLSTMModel
 
 logger = logging.getLogger()
 
@@ -34,39 +32,16 @@ def main():
     with open(os.environ['CONFIGURATION'], mode='r') as f:
         config = json.load(f)
 
-    thresholds = config['thresholds']
-
-    time_delta = config['time_delta']
-    window_size = config['window']
-    horizon_size = config['horizon']
-    control_names = config['control_names']
-    state_names = config['state_names']
+    config = execution.ExperimentConfiguration.parse_obj(config)
 
     # Initialize and load model
-    model_config = config['models'][model_name]
-    model_directory = os.path.expanduser(os.path.normpath(model_config['location']))
+    model_directory = os.path.expanduser(os.path.normpath(config.models[model_name].location))
 
-    model_class = execution.retrieve_model_class(model_config['model_class'])
-    params = model_config['parameters']
-    params['time_delta'] = time_delta
-    params['window_size'] = window_size
-    params['horizon_size'] = horizon_size
-    params['control_names'] = control_names
-    params['state_names'] = state_names
-    params['verbose'] = True
-    params['device_name'] = device_name
+    model = execution.initialize_model(config, model_name, device_name)
 
-    if (not issubclass(model_class, HybridSerialCombinedLSTMModel) and
-            not issubclass(model_class, HybridSerialSemiphysicalLSTMModel) and
-            not issubclass(model_class, HybridSerialFirstPrinciplesLSTMModel)):
-        raise ValueError(f'{str(model_class)} is not implemented for thresholded simulation.')
+    if not isinstance(model, HybridResidualLSTMModel):
+        raise ValueError(f'{type(model)} is not a subclass of HybridResidualLSTMModel')
 
-    if model_class.CONFIG is not None:
-        config = model_class.CONFIG.parse_obj(params)
-    else:
-        config = None
-
-    model = model_class(config=config)
     execution.load_model(model, model_directory, model_name)
 
     # Prepare directory for results
@@ -82,11 +57,11 @@ def main():
     file_names = list(map(lambda fn: os.path.basename(fn).split('.')[0],
                           execution.load_file_names(dataset_directory)))
     controls, states = execution.load_simulation_data(
-        directory=dataset_directory, control_names=control_names, state_names=state_names)
+        directory=dataset_directory, control_names=config.control_names, state_names=config.state_names)
 
     simulations = list(zip(controls, states, file_names))
 
-    for threshold in thresholds:
+    for threshold in config.thresholds:
         # Execute predictions on test data
         control = []
         pred_states = []
@@ -95,7 +70,7 @@ def main():
         blackboxes = []
         file_names = []
         for initial_control, initial_state, true_control, true_state, file_name \
-                in split_simulations(window_size, horizon_size, simulations):
+                in split_simulations(config.window, config.horizon, simulations):
             pred_target, whitebox, blackbox = model.simulate(initial_control, initial_state, true_control,
                                                              return_whitebox_blackbox=True, threshold=threshold)
 
@@ -108,11 +83,11 @@ def main():
 
         # Save results
         result_file_path = os.path.join(
-            result_directory, f'threshold_hybrid_test-w_{window_size}-h_{horizon_size}-t_{threshold}.hdf5'
+            result_directory, f'threshold_hybrid_test-w_{config.window}-h_{config.horizon}-t_{threshold}.hdf5'
         )
         with h5py.File(result_file_path, 'w') as f:
-            f.attrs['control_names'] = np.array([np.string_(name) for name in control_names])
-            f.attrs['state_names'] = np.array([np.string_(name) for name in state_names])
+            f.attrs['control_names'] = np.array([np.string_(name) for name in config.control_names])
+            f.attrs['state_names'] = np.array([np.string_(name) for name in config.state_names])
 
             f.create_dataset('file_names', data=np.array(list(map(np.string_, file_names))))
 
