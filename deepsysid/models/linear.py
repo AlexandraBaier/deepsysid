@@ -124,8 +124,8 @@ class LinearLag(FixedWindowModel):
     def __init__(self, config: LinearLagConfig):
         super().__init__(window_size=config.window_size, regressor=LinearRegression(fit_intercept=True))
 
-    def save(self, file_path):
-        with h5py.File(file_path, 'w') as f:
+    def save(self, file_path: Tuple[str, ...]):
+        with h5py.File(file_path[0], 'w') as f:
             f.attrs['window_size'] = self.window_size
             f.create_dataset('coef_', data=self.regressor.coef_)
             f.create_dataset('intercept_', data=self.regressor.intercept_)
@@ -135,8 +135,8 @@ class LinearLag(FixedWindowModel):
             f.create_dataset('state_mean', data=self.state_mean)
             f.create_dataset('state_stddev', data=self.state_stddev)
 
-    def load(self, file_path):
-        with h5py.File(file_path, 'r') as f:
+    def load(self, file_path: Tuple[str, ...]):
+        with h5py.File(file_path[0], 'r') as f:
             self.window_size = f.attrs['window_size']
             self.regressor.coef_ = f['coef_'][:]
             self.regressor.intercept_ = f['intercept_'][:]
@@ -146,10 +146,10 @@ class LinearLag(FixedWindowModel):
             self.state_mean = f['state_mean'][:]
             self.state_stddev = f['state_stddev'][:]
 
-    def get_file_extension(self):
-        return 'hdf5'
+    def get_file_extension(self) -> Tuple[str, ...]:
+        return 'hdf5',
 
-    def get_parameter_count(self):
+    def get_parameter_count(self) -> int:
         count = 0
         if len(self.regressor.coef_.shape) == 2:
             count += np.product(self.regressor.coef_.shape)
