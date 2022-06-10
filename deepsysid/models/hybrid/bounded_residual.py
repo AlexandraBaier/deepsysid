@@ -175,8 +175,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     )
                     ydot_physical = scale_acc(
                         self.physical.forward(
-                            state=x_physical_control[:, time, :],
-                            control=x_physical_state[:, time, :]
+                            control=x_physical_control[:, time, :],
+                            state=x_physical_state[:, time, :]
                         )
                     )
                     y_whitebox[:, time, :] = y_semiphysical + self.physical.time_delta * ydot_physical

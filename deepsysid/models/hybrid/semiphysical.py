@@ -73,11 +73,15 @@ class LinearComponent(SemiphysicalComponent):
             bias=False
         ).float().to(self.device)
         self.model.weight.requires_grad = False
-        self.model.bias.requires_grad = False
 
     def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        control = utils.normalize(control, self.control_mean, self.control_std)
-        state = utils.normalize(state, self.state_mean, self.state_std)
+        control_mean = torch.from_numpy(self.control_mean).float().to(self.device)
+        control_std = torch.from_numpy(self.control_std).float().to(self.device)
+        state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
+        state_std = torch.from_numpy(self.state_std).float().to(self.device)
+
+        control = utils.normalize(control, control_mean, control_std)
+        state = utils.normalize(state, state_mean, state_std)
         semiphysical_in = self.expand_semiphysical_input(control, state)
         return self.model.forward(semiphysical_in)
 
@@ -97,8 +101,9 @@ class LinearComponent(SemiphysicalComponent):
                 torch.from_numpy(utils.normalize(state[:-1], self.state_mean, self.state_std))
             ) for control, state in zip(control_seqs, state_seqs)]
 
+
         train_x, train_y = [], []
-        for sp_in, un_control, un_state, state \
+        for sp_in, un_control, un_state \
                 in zip(semiphysical_in_seqs, control_seqs, state_seqs):
             ydot_physical = physical.forward(
                 torch.from_numpy(un_control[1:, :]).float().to(self.device),
@@ -107,7 +112,10 @@ class LinearComponent(SemiphysicalComponent):
             ydot_physical = ydot_physical / self.state_std
 
             train_x.append(sp_in)
-            train_y.append(state[1:] - (physical.time_delta * ydot_physical))
+            train_y.append(
+                utils.normalize(un_state[1:], self.state_mean, self.state_std)
+                - (physical.time_delta * ydot_physical)
+            )
 
         train_x = np.vstack(train_x)
         train_y = np.vstack(train_y)
@@ -146,7 +154,7 @@ class BlankeComponent(LinearComponent):
             ) for control, state in zip(control_seqs, state_seqs)]
 
         train_x, train_y = [], []
-        for sp_in, un_control, un_state, state \
+        for sp_in, un_control, un_state \
                 in zip(semiphysical_in_seqs, control_seqs, state_seqs):
             ydot_physical = physical.forward(
                 torch.from_numpy(un_control[1:, :]).float().to(self.device),
@@ -155,7 +163,10 @@ class BlankeComponent(LinearComponent):
             ydot_physical = ydot_physical / self.state_std
 
             train_x.append(sp_in)
-            train_y.append(state[1:] - (physical.time_delta * ydot_physical))
+            train_y.append(
+                utils.normalize(un_state[1:], self.state_mean, self.state_std)
+                - (physical.time_delta * ydot_physical)
+            )
 
         train_x = np.vstack(train_x)
         train_y = np.vstack(train_y)
