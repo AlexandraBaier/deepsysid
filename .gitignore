@@ -2,7 +2,7 @@
 venv
 .idea
 .ipynb_checkpoints
-sysid.egg-info
+*.egg-info
 *.env
 build
 tmp
