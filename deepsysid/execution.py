@@ -1,14 +1,108 @@
+import itertools
 import os
-from typing import List, Tuple, Type
+from typing import List, Tuple, Type, Optional, Dict, Any
 
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel
 
-from .models.base import DynamicIdentificationModel
+from .models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
 
 
-def load_control_and_state(file_path: str, control_names: List[str], state_names: List[str]) -> Tuple[
-    np.array, np.array]:
+class ExperimentConfiguration(BaseModel):
+    train_fraction: float
+    validation_fraction: float
+    time_delta: float
+    window: int
+    horizon: int
+    control_names: List[str]
+    state_names: List[str]
+    thresholds: Optional[List[float]]
+    models: Dict[str, 'ExperimentModelConfiguration']
+
+    @classmethod
+    def from_grid_search_template(
+            cls, template: 'ExperimentGridSearchTemplate', device_name: str
+    ) -> 'ExperimentConfiguration':
+        models: Dict[str, ExperimentModelConfiguration] = dict()
+        for model_template in template.models:
+            model_class_str = model_template.model_class
+            model_class = retrieve_model_class(model_class_str)
+            base_model_params = dict(
+                device_name=device_name,
+                control_names=template.settings.control_names,
+                state_names=template.settings.state_names,
+                time_delta=template.settings.time_delta
+            )
+            static_model_params = model_template.static_parameters
+
+            for combination in itertools.product(*list(
+                model_template.flexible_parameters.values()
+            )):
+                model_name = model_template.model_base_name
+                flexible_model_params = dict()
+                for param_name, param_value in zip(model_template.flexible_parameters.keys(), combination):
+                    flexible_model_params[param_name] = param_value
+                    if issubclass(type(param_value), list):
+                        model_name += '-' + '_'.join(map(str, param_value))
+                    else:
+                        model_name += f'-{param_value:f}'.replace('.', '')
+
+                model_config = ExperimentModelConfiguration.parse_obj(dict(
+                    model_class=model_class_str,
+                    location=os.path.join(template.base_path, model_name),
+                    parameters=model_class.CONFIG.parse_obj(
+                        base_model_params | static_model_params | flexible_model_params
+                    )
+                ))
+                models[model_name] = model_config
+
+        return cls(
+            train_fraction=template.settings.train_fraction,
+            validation_fraction=template.settings.validation_fraction,
+            time_delta=template.settings.time_delta,
+            window=template.settings.window,
+            horizon=template.settings.horizon,
+            control_names=template.settings.control_names,
+            state_names=template.settings.state_names,
+            thresholds=template.settings.thresholds,
+            models=models
+        )
+
+
+class ExperimentModelConfiguration(BaseModel):
+    model_class: str
+    location: str
+    parameters: DynamicIdentificationModelConfig
+
+
+class ExperimentGridSearchTemplate(BaseModel):
+    base_path: str
+    settings: 'ExperimentGridSearchSettings'
+    models: List['ModelGridSearchTemplate']
+
+
+class ExperimentGridSearchSettings(BaseModel):
+    train_fraction: float
+    validation_fraction: float
+    time_delta: float
+    window: int
+    horizon: int
+    control_names: List[str]
+    state_names: List[str]
+    thresholds: Optional[List[float]]
+
+
+class ModelGridSearchTemplate(BaseModel):
+    model_base_name: str
+    model_class: str
+    static_parameters: Dict[str, Any]
+    flexible_parameters: Dict[str, List[Any]]
+
+
+def load_control_and_state(
+        file_path: str, control_names: List[str], state_names: List[str]
+) -> Tuple[np.array, np.array]:
     sim = pd.read_csv(file_path)
     control_df = sim[control_names]
     state_df = sim[state_names]
