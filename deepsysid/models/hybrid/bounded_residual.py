@@ -81,7 +81,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         elif config.loss == 'msge':
             self.loss = loss.MSGELoss().to(self.device)
         else:
-            raise ValueError(f'loss can only be "mse" or "msge"')
+            raise ValueError('loss can only be "mse" or "msge"')
 
         self.physical = physical
         self.semiphysical = semiphysical
@@ -143,8 +143,12 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
         state_stddev = torch.from_numpy(self.state_stddev).float().to(self.device)
-        denormalize_state = lambda x: (x * state_stddev) + state_mean
-        scale_acc = lambda x: x / state_stddev
+
+        def denormalize_state(x):
+            return (x * state_stddev) + state_mean
+
+        def scale_acc(x):
+            return x / state_stddev
 
         # Train linear model
         self.semiphysical.train_semiphysical(
@@ -170,7 +174,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 self.optimizer_initializer.step()
 
             logger.info(
-                f'Epoch {i + 1}/{self.epochs_initializer} - Epoch Loss (Initializer): {total_loss}'
+                f'Epoch {i + 1}/{self.epochs_initializer} '
+                f'- Epoch Loss (Initializer): {total_loss}'
             )
 
         dataset = End2EndDataset(
@@ -230,7 +235,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 self.optimizer_end2end.step()
 
             logger.info(
-                f'Epoch {i + 1}/{self.epochs_parallel} - Epoch Loss (Parallel): {total_epoch_loss}'
+                f'Epoch {i + 1}/{self.epochs_parallel} '
+                f'- Epoch Loss (Parallel): {total_epoch_loss}'
             )
 
         for i in range(self.epochs_feedback):
@@ -289,7 +295,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 self.optimizer_end2end.step()
 
             logger.info(
-                f'Epoch {i + 1}/{self.epochs_feedback} - Epoch Loss (Feedback): {total_epoch_loss}'
+                f'Epoch {i + 1}/{self.epochs_feedback} '
+                f'- Epoch Loss (Feedback): {total_epoch_loss}'
             )
 
     def simulate(
@@ -307,8 +314,12 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
         state_stddev = torch.from_numpy(self.state_stddev).float().to(self.device)
-        denormalize_state = lambda x: (x * state_stddev) + state_mean
-        scale_acc = lambda x: x / state_stddev
+
+        def denormalize_state(x):
+            return (x * state_stddev) + state_mean
+
+        def scale_acc(x):
+            return x / state_stddev
 
         un_control = control
         current_state = initial_state[-1, :]
@@ -421,9 +432,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         return semiphysical_count + blackbox_count + initializer_count
 
     def blackbox_forward(self, x_pred, y_wb, hx=None, return_state=False):
-        # You can overwrite to blackbox_forward to enable different treatment of inputs to model.
         # TODO: x_pred should instead be x_control.
-        # TODO: I don't remember the purpose of this function. Probably to generalize the code in some way?
+        # TODO: I don't remember the purpose of this function.
+        #  Probably to generalize the code in some way?
         return self.blackbox.forward(x_pred, hx=hx, return_state=return_state)
 
 

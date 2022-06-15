@@ -144,7 +144,6 @@ class MinimalManeuveringEquations(nn.Module):
         )
 
     def forward(self, control, state):
-        # control is not used but remains for a consistent interface between all whitebox models
         velocity = state[:, :4]
         position = torch.zeros(
             (state.shape[0], 4), device=state.device, dtype=state.dtype
@@ -228,12 +227,14 @@ def build_rigid_body_matrix(dof, mass, inertia_matrix, center_of_gravity):
         raise ValueError('Only degrees of freedom are 3, 4, and 6')
     if inertia_matrix.shape != (3, 3):
         raise ValueError(
-            'Expected shape of inertia matrix is (3,3). If values are unused due to DOF, set'
+            'Expected shape of inertia matrix is (3,3). '
+            'If values are unused due to DOF, set '
             'to zero, e.g. I_yy for 4-DOF.'
         )
     if center_of_gravity.size != 3:
         raise ValueError(
-            'Center of gravity is expected to have 3 coordinates. Set zg=0 for 3-DOF.'
+            'Center of gravity is expected to have 3 coordinates. '
+            'Set zg=0 for 3-DOF.'
         )
 
     m = mass

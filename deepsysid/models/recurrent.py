@@ -56,7 +56,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         elif config.loss == 'msge':
             self.loss = loss.MSGELoss().to(self.device)
         else:
-            raise ValueError(f'loss can only be "mse" or "msge"')
+            raise ValueError('loss can only be "mse" or "msge"')
 
         self.predictor = rnn.BasicLSTM(
             input_dim=self.control_dim,
@@ -121,7 +121,8 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 self.optimizer_init.step()
 
             logger.info(
-                f'Epoch {i + 1}/{self.epochs_initializer} - Epoch Loss (Initializer): {total_loss}'
+                f'Epoch {i + 1}/{self.epochs_initializer} '
+                f'- Epoch Loss (Initializer): {total_loss}'
             )
         time_end_init = time.time()
         predictor_dataset = _PredictorDataset(
@@ -148,14 +149,16 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 self.optimizer_pred.step()
 
             logger.info(
-                f'Epoch {i + 1}/{self.epochs_predictor} - Epoch Loss (Predictor): {total_loss}'
+                f'Epoch {i + 1}/{self.epochs_predictor} '
+                f'- Epoch Loss (Predictor): {total_loss}'
             )
 
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
         time_total_pred = time_end_pred - time_start_pred
         logger.info(
-            f'Training time for initializer {time_total_init}s and for predictor {time_total_pred}s'
+            f'Training time for initializer {time_total_init}s '
+            f'and for predictor {time_total_pred}s'
         )
 
     def simulate(self, initial_control, initial_state, control):

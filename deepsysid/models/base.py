@@ -152,6 +152,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         """
         Apply any transformations, e.g. nonlinearities, to input of regressor.
         Arguments:
-            x - each row has shape [u(t-W) x(t-W) ... u(t-1) x(t-1) u(t)] with window size W
+            x - each row has shape [u(t-W) x(t-W) ... u(t-1) x(t-1) u(t)]
+            with window size W
         """
         return x

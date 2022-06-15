@@ -1,3 +1,5 @@
+from typing import Callable, List
+
 import numpy as np
 
 
@@ -108,16 +110,11 @@ def index_of_agreement(true, pred, j=1):
     return 1 - (error_sum / partial_diff_sum)
 
 
-def score_on_sequence(true_seq, pred_seq, score_fnc):
-    """
-    :param true_seq:
-    :param pred_seq:
-    :param score_fnc: callable with (true: List[array], pred: List[array])->(score: array)
-        len(true) == len(pred)
-        true[i].shape == pred[i].shape == (time, states)
-        score.shape == (len(true), states)
-    :return:
-    """
+def score_on_sequence(
+    true_seq: List[np.ndarray],
+    pred_seq: List[np.ndarray],
+    score_fnc: Callable[[np.ndarray, np.ndarray], np.ndarray],
+) -> np.ndarray:
     score = np.zeros((len(pred_seq), pred_seq[0].shape[1]))
     for i, (true, pred) in enumerate(zip(true_seq, pred_seq)):
         score[i, :] = score_fnc(true, pred)
