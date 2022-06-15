@@ -52,7 +52,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.epochs_predictor = config.epochs_predictor
 
         if config.loss == 'mse':
-            self.loss = nn.MSELoss().to(self.device)
+            self.loss: nn.Module = nn.MSELoss().to(self.device)
         elif config.loss == 'msge':
             self.loss = loss.MSGELoss().to(self.device)
         else:

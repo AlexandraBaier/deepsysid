@@ -19,9 +19,7 @@ class DynamicIdentificationModelConfig(BaseModel):
 
 
 class DynamicIdentificationModel(metaclass=abc.ABCMeta):
-    CONFIG: Optional[
-        Type[DynamicIdentificationModelConfig]
-    ] = DynamicIdentificationModelConfig
+    CONFIG: Type[DynamicIdentificationModelConfig] = DynamicIdentificationModelConfig
 
     @abc.abstractmethod
     def __init__(self, config: Optional[DynamicIdentificationModelConfig]):
@@ -78,7 +76,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         self.state_mean, self.state_stddev = utils.mean_stddev(state_seqs)
 
         # Prepare training data
-        train_x, train_y = [], []
+        train_x_list, train_y_list = [], []
         for i in range(len(control_seqs)):
             control = utils.normalize(
                 control_seqs[i], self.control_mean, self.control_stddev
@@ -90,11 +88,11 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
             )
             x = self._map_regressor_input(x)
 
-            train_x.append(x)
-            train_y.append(y)
+            train_x_list.append(x)
+            train_y_list.append(y)
 
-        train_x = np.vstack(train_x)
-        train_y = np.vstack(train_y)
+        train_x = np.vstack(train_x_list)
+        train_y = np.vstack(train_y_list)
 
         self.regressor = self.regressor.fit(train_x, train_y)
         r2_fit = r2_score(
@@ -132,7 +130,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         )
         control = utils.normalize(control, self.control_mean, self.control_stddev)
 
-        pred_states = []
+        pred_states_list = []
         window = np.hstack(
             (initial_control[-self.window_size :], initial_state[-self.window_size :])
         ).flatten()
@@ -141,14 +139,12 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
             x = self._map_regressor_input(x)
 
             state = np.squeeze(self.regressor.predict(x))
-            pred_states.append(state)
+            pred_states_list.append(state)
             window = np.concatenate((window[full_dim:], control[i], state))
 
         pred_states = utils.denormalize(
-            np.array(pred_states), self.state_mean, self.state_stddev
+            np.array(pred_states_list), self.state_mean, self.state_stddev
         )
-
-        assert pred_states.shape == (control.shape[0], initial_state.shape[1])
 
         return pred_states
 

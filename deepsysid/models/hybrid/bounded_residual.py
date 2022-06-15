@@ -86,9 +86,11 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.epochs_feedback = config.epochs_feedback
 
         if config.loss == 'mse':
-            self.loss = nn.MSELoss().to(self.device)
+            self.loss: nn.Module = nn.MSELoss().to(self.device)
         elif config.loss == 'msge':
             self.loss = loss.MSGELoss().to(self.device)
+        else:
+            raise ValueError(f'loss can only be "mse" or "msge"')
 
         self.physical = physical
         self.semiphysical = semiphysical

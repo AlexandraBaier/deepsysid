@@ -13,7 +13,7 @@ class DenseReLUNetwork(nn.Module):
         self.output_dim = output_dim
         self.dropout = dropout
 
-        nn_layers = []
+        nn_layers: List[nn.Module] = []
         for input_dim, output_dim in zip([input_dim] + layers[:-1], layers):
             nn_layers.extend(
                 (nn.Linear(input_dim, output_dim), nn.Dropout(self.dropout), nn.ReLU())

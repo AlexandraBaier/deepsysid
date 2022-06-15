@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import numpy as np
 import torch
@@ -58,8 +58,10 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
             params=self.model.parameters(), lr=self.learning_rate
         )
 
-        self.state_mean, self.state_std = None, None
-        self.control_mean, self.control_std = None, None
+        self.state_mean: Optional[np.ndarray] = None
+        self.state_std: Optional[np.ndarray] = None
+        self.control_mean: Optional[np.ndarray] = None
+        self.control_std: Optional[np.ndarray] = None
 
     def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
         self.model.train()
@@ -145,7 +147,15 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
 
         return utils.denormalize(np.vstack(states), self.state_mean, self.state_std)
 
-    def save(self, file_path: Tuple[str, str]):
+    def save(self, file_path: Tuple[str, ...]):
+        if (
+            self.state_mean is None
+            or self.state_std is None
+            or self.control_mean is None
+            or self.control_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot be saved.')
+
         torch.save(self.model.state_dict(), file_path[0])
         with open(file_path[1], mode='w') as f:
             json.dump(
@@ -158,7 +168,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
                 f,
             )
 
-    def load(self, file_path: Tuple[str, str]):
+    def load(self, file_path: Tuple[str, ...]):
         self.model.load_state_dict(
             torch.load(file_path[0], map_location=self.device_name)
         )
@@ -169,7 +179,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         self.control_mean = np.array(norm['control_mean'])
         self.control_std = np.array(norm['control_std'])
 
-    def get_file_extension(self) -> Tuple[str, str]:
+    def get_file_extension(self) -> Tuple[str, ...]:
         return 'pth', 'json'
 
     def get_parameter_count(self) -> int:

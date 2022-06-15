@@ -35,7 +35,7 @@ class LinearModel(DynamicIdentificationModel):
         self.control_mean, self.control_stddev = utils.mean_stddev(control_seqs)
         self.state_mean, self.state_stddev = utils.mean_stddev(state_seqs)
 
-        train_x, train_y = [], []
+        train_x_list, train_y_list = [], []
         for i in range(len(control_seqs)):
             control = control_seqs[i]
             state = state_seqs[i]
@@ -46,12 +46,12 @@ class LinearModel(DynamicIdentificationModel):
             x = np.hstack((control[1:], state[:-1]))
             y = state[1:]
 
-            train_x.append(x)
-            train_y.append(y)
+            train_x_list.append(x)
+            train_y_list.append(y)
 
-        train_x = np.vstack(train_x)
+        train_x = np.vstack(train_x_list)
         train_x = self._map_input(train_x)
-        train_y = np.vstack(train_y)
+        train_y = np.vstack(train_y_list)
 
         self.regressor.fit(train_x, train_y)
 
@@ -68,22 +68,24 @@ class LinearModel(DynamicIdentificationModel):
         control = utils.normalize(control, self.control_mean, self.control_stddev)
         state = utils.normalize(initial_state, self.state_mean, self.state_stddev)[-1]
 
-        pred_states = []
-        for i in range(control.shape[0]):
-            x = np.concatenate((control[i], state)).reshape(1, -1)
-            x = self._map_input(x)
-            state = np.squeeze(self.regressor.predict(x))
-            pred_states.append(state)
-
-        pred_states = utils.denormalize(
-            np.array(pred_states), self.state_mean, self.state_stddev
+        pred_states = np.array(
+            [
+                np.squeeze(
+                    self.regressor.predict(
+                        self._map_input(
+                            np.concatenate((control[i], state)).reshape(1, -1)
+                        )
+                    )
+                )
+                for i in range(control.shape[0])
+            ]
         )
 
-        assert pred_states.shape == (control.shape[0], initial_state.shape[1])
+        pred_states = utils.denormalize(pred_states, self.state_mean, self.state_stddev)
 
         return pred_states
 
-    def save(self, file_path: Tuple[str]):
+    def save(self, file_path: Tuple[str, ...]):
         with h5py.File(file_path[0], 'w') as f:
             f.create_dataset('coef_', data=self.regressor.coef_)
             f.create_dataset('intercept_', data=self.regressor.intercept_)
@@ -93,7 +95,7 @@ class LinearModel(DynamicIdentificationModel):
             f.create_dataset('state_mean', data=self.state_mean)
             f.create_dataset('state_stddev', data=self.state_stddev)
 
-    def load(self, file_path: Tuple[str]):
+    def load(self, file_path: Tuple[str, ...]):
         with h5py.File(file_path[0], 'r') as f:
             self.regressor.coef_ = f['coef_'][:]
             self.regressor.intercept_ = f['intercept_'][:]
@@ -103,7 +105,7 @@ class LinearModel(DynamicIdentificationModel):
             self.state_mean = f['state_mean'][:]
             self.state_stddev = f['state_stddev'][:]
 
-    def get_file_extension(self) -> Tuple[str]:
+    def get_file_extension(self) -> Tuple[str, ...]:
         return ('hdf5',)
 
     def get_parameter_count(self) -> int:

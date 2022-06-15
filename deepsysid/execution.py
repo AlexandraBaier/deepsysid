@@ -133,7 +133,7 @@ def initialize_model(
 
 def load_control_and_state(
     file_path: str, control_names: List[str], state_names: List[str]
-) -> Tuple[np.array, np.array]:
+) -> Tuple[np.ndarray, np.ndarray]:
     sim = pd.read_csv(file_path)
     control_df = sim[control_names]
     state_df = sim[state_names]
@@ -143,7 +143,7 @@ def load_control_and_state(
 
 def load_simulation_data(
     directory: str, control_names: List[str], state_names: List[str]
-) -> Tuple[List[np.array], List[np.array]]:
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     file_names = load_file_names(directory)
 
     controls = []
@@ -185,6 +185,10 @@ def retrieve_model_class(model_class_string: str) -> Type[DynamicIdentificationM
     module_string = '.'.join(parts[:-1])
     module = __import__(module_string)
 
+    cls = getattr(module, parts[2])
     for component in parts[1:]:
-        module = getattr(module, component)
-    return module
+        cls = getattr(cls, component)
+
+    if not issubclass(cls, DynamicIdentificationModel):
+        raise ValueError(f'{cls} is not a subclass of DynamicIdentificationModel')
+    return cls

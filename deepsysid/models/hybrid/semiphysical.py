@@ -121,7 +121,7 @@ class LinearComponent(SemiphysicalComponent):
             for control, state in zip(control_seqs, state_seqs)
         ]
 
-        train_x, train_y = [], []
+        train_x_list, train_y_list = [], []
         for sp_in, un_control, un_state in zip(
             semiphysical_in_seqs, control_seqs, state_seqs
         ):
@@ -136,14 +136,14 @@ class LinearComponent(SemiphysicalComponent):
             )
             ydot_physical = ydot_physical / self.state_std
 
-            train_x.append(sp_in)
-            train_y.append(
+            train_x_list.append(sp_in)
+            train_y_list.append(
                 utils.normalize(un_state[1:], self.state_mean, self.state_std)
                 - (physical.time_delta * ydot_physical)
             )
 
-        train_x = np.vstack(train_x)
-        train_y = np.vstack(train_y)
+        train_x = np.vstack(train_x_list)
+        train_y = np.vstack(train_y_list)
 
         # No intercept in linear time invariant systems
         regressor = LinearRegression(fit_intercept=False)
@@ -188,7 +188,7 @@ class BlankeComponent(LinearComponent):
             for control, state in zip(control_seqs, state_seqs)
         ]
 
-        train_x, train_y = [], []
+        train_x_list, train_y_list = [], []
         for sp_in, un_control, un_state in zip(
             semiphysical_in_seqs, control_seqs, state_seqs
         ):
@@ -203,14 +203,14 @@ class BlankeComponent(LinearComponent):
             )
             ydot_physical = ydot_physical / self.state_std
 
-            train_x.append(sp_in)
-            train_y.append(
+            train_x_list.append(sp_in)
+            train_y_list.append(
                 utils.normalize(un_state[1:], self.state_mean, self.state_std)
                 - (physical.time_delta * ydot_physical)
             )
 
-        train_x = np.vstack(train_x)
-        train_y = np.vstack(train_y)
+        train_x = np.vstack(train_x_list)
+        train_y = np.vstack(train_y_list)
 
         # Train each dimension as separate equation
         def train_dimension(dim_mask, dim_name, dim_idx):
