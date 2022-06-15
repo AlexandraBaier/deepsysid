@@ -6,7 +6,9 @@ from deepsysid.execution import ExperimentGridSearchTemplate, ExperimentConfigur
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Build configuration file given grid-search template.')
+    parser = argparse.ArgumentParser(
+        description='Build configuration file given grid-search template.'
+    )
     parser.add_argument('template', help='path to grid-search template')
     args = parser.parse_args()
 
@@ -14,7 +16,9 @@ def main():
         template = json.load(f)
 
     grid_search_template = ExperimentGridSearchTemplate.parse_obj(template)
-    configuration = ExperimentConfiguration.from_grid_search_template(grid_search_template, 'cpu')
+    configuration = ExperimentConfiguration.from_grid_search_template(
+        grid_search_template, 'cpu'
+    )
 
     with open(os.environ['CONFIGURATION'], mode='w') as f:
         json.dump(configuration.dict(), f)

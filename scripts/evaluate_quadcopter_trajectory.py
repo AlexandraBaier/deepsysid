@@ -23,9 +23,9 @@ def compute_trajectory(state, state_names, sample_time):
     z[0] = 0.0
 
     for i in range(1, shape[0]):
-        x[i] = x[i-1] + sample_time * xdot[i]
-        y[i] = y[i-1] + sample_time * ydot[i]
-        z[i] = z[i-1] + sample_time * zdot[i]
+        x[i] = x[i - 1] + sample_time * xdot[i]
+        y[i] = y[i - 1] + sample_time * ydot[i]
+        z[i] = z[i - 1] + sample_time * zdot[i]
 
     return x, y, z
 
@@ -46,11 +46,18 @@ def main():
 
     test_directory = os.environ['RESULT_DIRECTORY']
     test_file_path = os.path.join(
-        test_directory, model_name, f'test-w_{window_size}-h_{horizon_size}.hdf5')
+        test_directory, model_name, f'test-w_{window_size}-h_{horizon_size}.hdf5'
+    )
     scores_file_path = os.path.join(
-        test_directory, model_name, f'test-trajectory-w_{window_size}-h_{horizon_size}.hdf5')
+        test_directory,
+        model_name,
+        f'test-trajectory-w_{window_size}-h_{horizon_size}.hdf5',
+    )
     readable_scores_file_path = os.path.join(
-        test_directory, model_name, f'test-trajectory-w_{window_size}-h_{horizon_size}.json')
+        test_directory,
+        model_name,
+        f'test-trajectory-w_{window_size}-h_{horizon_size}.json',
+    )
 
     pred = []
     true = []
@@ -70,7 +77,7 @@ def main():
         px, py, pz = compute_trajectory(pred_state, state_names, config['time_delta'])
         tx, ty, tz = compute_trajectory(true_state, state_names, config['time_delta'])
 
-        traj_rmse_per_step = np.sqrt((px - tx)**2 + (py - ty)**2 + (pz - tz)**2)
+        traj_rmse_per_step = np.sqrt((px - tx) ** 2 + (py - ty) ** 2 + (pz - tz) ** 2)
         traj_rmse_per_step_seq.append(traj_rmse_per_step)
 
     traj_rmse = np.mean(np.concatenate(traj_rmse_per_step_seq))

@@ -11,7 +11,9 @@ import deepsysid.utils as utils
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate model')
-    parser.add_argument('--mode', action='store', help='either "train", "validation" or "test"')
+    parser.add_argument(
+        '--mode', action='store', help='either "train", "validation" or "test"'
+    )
     parser.add_argument('model', help='model')
     args = parser.parse_args()
 
@@ -29,12 +31,19 @@ def main():
 
     test_directory = os.environ['RESULT_DIRECTORY']
     test_file_path = os.path.join(
-        test_directory, model_name, f'{mode}-w_{window_size}-h_{horizon_size}.hdf5')
+        test_directory, model_name, f'{mode}-w_{window_size}-h_{horizon_size}.hdf5'
+    )
 
     scores_file_path = os.path.join(
-        test_directory, model_name, f'{mode}-scores-w_{window_size}-h_{horizon_size}.hdf5')
+        test_directory,
+        model_name,
+        f'{mode}-scores-w_{window_size}-h_{horizon_size}.hdf5',
+    )
     readable_scores_file_path = os.path.join(
-        test_directory, model_name, f'{mode}-scores-w_{window_size}-h_{horizon_size}.json')
+        test_directory,
+        model_name,
+        f'{mode}-scores-w_{window_size}-h_{horizon_size}.json',
+    )
 
     pred = []
     true = []
@@ -50,10 +59,18 @@ def main():
 
     score_functions = (
         ('mse', lambda t, p: mean_squared_error(t, p, multioutput='raw_values')),
-        ('rmse', lambda t, p: np.sqrt(mean_squared_error(t, p, multioutput='raw_values'))),
-        ('rmse-std', lambda t, p: np.std(np.sqrt(mean_squared_error(t, p, multioutput='raw_values')),  axis=0)),
+        (
+            'rmse',
+            lambda t, p: np.sqrt(mean_squared_error(t, p, multioutput='raw_values')),
+        ),
+        (
+            'rmse-std',
+            lambda t, p: np.std(
+                np.sqrt(mean_squared_error(t, p, multioutput='raw_values')), axis=0
+            ),
+        ),
         ('mae', lambda t, p: mean_absolute_error(t, p, multioutput='raw_values')),
-        ('d1', utils.index_of_agreement)
+        ('d1', utils.index_of_agreement),
     )
 
     scores = dict()

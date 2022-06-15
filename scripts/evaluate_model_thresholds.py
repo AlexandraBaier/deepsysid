@@ -10,7 +10,9 @@ import deepsysid.utils as utils
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Evaluate models on thresholds on the test set')
+    parser = argparse.ArgumentParser(
+        description='Evaluate models on thresholds on the test set'
+    )
     parser.add_argument('model', help='model')
     args = parser.parse_args()
 
@@ -28,11 +30,20 @@ def main():
 
     for threshold in thresholds:
         test_file_path = os.path.join(
-            test_directory, model_name, f'threshold_hybrid_test-w_{window_size}-h_{horizon_size}-t_{threshold}.hdf5')
+            test_directory,
+            model_name,
+            f'threshold_hybrid_test-w_{window_size}-h_{horizon_size}-t_{threshold}.hdf5',
+        )
         scores_file_path = os.path.join(
-            test_directory, model_name, f'threshold_hybrid_scores-w_{window_size}-h_{horizon_size}-t_{threshold}.hdf5')
+            test_directory,
+            model_name,
+            f'threshold_hybrid_scores-w_{window_size}-h_{horizon_size}-t_{threshold}.hdf5',
+        )
         readable_scores_file_path = os.path.join(
-            test_directory, model_name, f'threshold_hybrid_scores-w_{window_size}-h_{horizon_size}-t_{threshold}.json')
+            test_directory,
+            model_name,
+            f'threshold_hybrid_scores-w_{window_size}-h_{horizon_size}-t_{threshold}.json',
+        )
 
         pred = []
         true = []
@@ -48,9 +59,14 @@ def main():
 
         score_functions = (
             ('mse', lambda t, p: mean_squared_error(t, p, multioutput='raw_values')),
-            ('rmse', lambda t, p: np.sqrt(mean_squared_error(t, p, multioutput='raw_values'))),
+            (
+                'rmse',
+                lambda t, p: np.sqrt(
+                    mean_squared_error(t, p, multioutput='raw_values')
+                ),
+            ),
             ('mae', lambda t, p: mean_absolute_error(t, p, multioutput='raw_values')),
-            ('d1', utils.index_of_agreement)
+            ('d1', utils.index_of_agreement),
         )
         scores = dict()
 
@@ -59,7 +75,9 @@ def main():
 
         with h5py.File(scores_file_path, 'w') as f:
             f.attrs['state_names'] = np.array(list(map(np.string_, state_names)))
-            f.create_dataset('file_names', data=np.array(list(map(np.string_, file_names))))
+            f.create_dataset(
+                'file_names', data=np.array(list(map(np.string_, file_names)))
+            )
             f.create_dataset('steps', data=np.array(steps))
 
             for name, _ in score_functions:
@@ -67,7 +85,9 @@ def main():
 
         average_scores = dict()
         for name, _ in score_functions:
-            average_scores[name] = np.average(scores[name], weights=steps, axis=0).tolist()
+            average_scores[name] = np.average(
+                scores[name], weights=steps, axis=0
+            ).tolist()
 
         with open(readable_scores_file_path, mode='w') as f:
             obj = dict()

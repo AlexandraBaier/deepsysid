@@ -11,7 +11,9 @@ import deepsysid.utils as utils
 def main():
     parser = argparse.ArgumentParser(description='Evaluate trajectory prediction')
     parser.add_argument('model', help='model')
-    parser.add_argument('--mode', action='store', help='either "train", "validation" or "test"')
+    parser.add_argument(
+        '--mode', action='store', help='either "train", "validation" or "test"'
+    )
     args = parser.parse_args()
 
     model_name = args.model
@@ -28,12 +30,19 @@ def main():
 
     test_directory = os.environ['RESULT_DIRECTORY']
     test_file_path = os.path.join(
-        test_directory, model_name, f'{mode}-w_{window_size}-h_{horizon_size}.hdf5')
+        test_directory, model_name, f'{mode}-w_{window_size}-h_{horizon_size}.hdf5'
+    )
 
     scores_file_path = os.path.join(
-        test_directory, model_name, f'{mode}-trajectory-w_{window_size}-h_{horizon_size}.hdf5')
+        test_directory,
+        model_name,
+        f'{mode}-trajectory-w_{window_size}-h_{horizon_size}.hdf5',
+    )
     readable_scores_file_path = os.path.join(
-        test_directory, model_name, f'{mode}-trajectory-w_{window_size}-h_{horizon_size}.json')
+        test_directory,
+        model_name,
+        f'{mode}-trajectory-w_{window_size}-h_{horizon_size}.json',
+    )
 
     pred = []
     true = []
@@ -50,10 +59,14 @@ def main():
     traj_rmse_per_step_seq = []
 
     for pred_state, true_state in zip(pred, true):
-        pred_x, pred_y, _, _ = utils.compute_trajectory_4dof(pred_state, state_names, config['time_delta'])
-        true_x, true_y, _, _ = utils.compute_trajectory_4dof(true_state, state_names, config['time_delta'])
+        pred_x, pred_y, _, _ = utils.compute_trajectory_4dof(
+            pred_state, state_names, config['time_delta']
+        )
+        true_x, true_y, _, _ = utils.compute_trajectory_4dof(
+            true_state, state_names, config['time_delta']
+        )
 
-        traj_rmse_per_step = np.sqrt((pred_x - true_x)**2 + (pred_y - true_y)**2)
+        traj_rmse_per_step = np.sqrt((pred_x - true_x) ** 2 + (pred_y - true_y) ** 2)
 
         traj_rmse_per_step_seq.append(traj_rmse_per_step)
 

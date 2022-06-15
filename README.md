@@ -9,6 +9,8 @@ Install via pip:
 pip install git+https://github.com/AlexandraBaier/deepsysid.git
 ```
 
+Install PyTorch separately, see instructions here: [TODO](TODO)
+
 ### Environment Variables
 
 Set the following environment variables:

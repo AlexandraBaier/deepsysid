@@ -4,7 +4,9 @@ import os
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Write all model names from configuration.')
+    parser = argparse.ArgumentParser(
+        description='Write all model names from configuration.'
+    )
     parser.add_argument('output')
     args = parser.parse_args()
 
