@@ -19,7 +19,9 @@ class DynamicIdentificationModelConfig(BaseModel):
 
 
 class DynamicIdentificationModel(metaclass=abc.ABCMeta):
-    CONFIG: Optional[Type[DynamicIdentificationModelConfig]] = DynamicIdentificationModelConfig
+    CONFIG: Optional[
+        Type[DynamicIdentificationModelConfig]
+    ] = DynamicIdentificationModelConfig
 
     @abc.abstractmethod
     def __init__(self, config: Optional[DynamicIdentificationModelConfig]):
@@ -30,7 +32,12 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def simulate(self, initial_control: np.ndarray, initial_state: np.ndarray, control: np.ndarray) -> np.ndarray:
+    def simulate(
+        self,
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
+    ) -> np.ndarray:
         pass
 
     @abc.abstractmethod
@@ -73,10 +80,14 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         # Prepare training data
         train_x, train_y = [], []
         for i in range(len(control_seqs)):
-            control = utils.normalize(control_seqs[i], self.control_mean, self.control_stddev)
+            control = utils.normalize(
+                control_seqs[i], self.control_mean, self.control_stddev
+            )
             state = utils.normalize(state_seqs[i], self.state_mean, self.state_stddev)
 
-            x, y = utils.transform_to_single_step_training_data(control, state, self.window_size)
+            x, y = utils.transform_to_single_step_training_data(
+                control, state, self.window_size
+            )
             x = self._map_regressor_input(x)
 
             train_x.append(x)
@@ -86,10 +97,17 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         train_y = np.vstack(train_y)
 
         self.regressor = self.regressor.fit(train_x, train_y)
-        r2_fit = r2_score(self.regressor.predict(train_x), train_y, multioutput='uniform_average')
+        r2_fit = r2_score(
+            self.regressor.predict(train_x), train_y, multioutput='uniform_average'
+        )
         logger.info(f'R2 Score: {r2_fit}')
 
-    def simulate(self, initial_control: np.ndarray, initial_state: np.ndarray, control: np.ndarray) -> np.ndarray:
+    def simulate(
+        self,
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
+    ) -> np.ndarray:
         """
         Multi-step prediction of system states given control inputs and initial window.
 
@@ -106,12 +124,18 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
 
         full_dim = initial_control.shape[1] + initial_state.shape[1]
 
-        initial_control = utils.normalize(initial_control, self.control_mean, self.control_stddev)
-        initial_state = utils.normalize(initial_state, self.state_mean, self.state_stddev)
+        initial_control = utils.normalize(
+            initial_control, self.control_mean, self.control_stddev
+        )
+        initial_state = utils.normalize(
+            initial_state, self.state_mean, self.state_stddev
+        )
         control = utils.normalize(control, self.control_mean, self.control_stddev)
 
         pred_states = []
-        window = np.hstack((initial_control[-self.window_size:], initial_state[-self.window_size:])).flatten()
+        window = np.hstack(
+            (initial_control[-self.window_size :], initial_state[-self.window_size :])
+        ).flatten()
         for i in range(control.shape[0]):
             x = np.concatenate((window, control[i])).reshape(1, -1)
             x = self._map_regressor_input(x)
@@ -120,7 +144,9 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
             pred_states.append(state)
             window = np.concatenate((window[full_dim:], control[i], state))
 
-        pred_states = utils.denormalize(np.array(pred_states), self.state_mean, self.state_stddev)
+        pred_states = utils.denormalize(
+            np.array(pred_states), self.state_mean, self.state_stddev
+        )
 
         assert pred_states.shape == (control.shape[0], initial_state.shape[1])
 

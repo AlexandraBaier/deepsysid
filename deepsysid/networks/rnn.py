@@ -3,7 +3,9 @@ import torch.nn.functional as F
 
 
 class BasicLSTM(nn.Module):
-    def __init__(self, input_dim, recurrent_dim, num_recurrent_layers, output_dim, dropout):
+    def __init__(
+        self, input_dim, recurrent_dim, num_recurrent_layers, output_dim, dropout
+    ):
         super().__init__()
 
         self.num_recurrent_layers = num_recurrent_layers
@@ -14,12 +16,16 @@ class BasicLSTM(nn.Module):
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
             dropout=dropout,
-            batch_first=True
+            batch_first=True,
         )
 
         layer_dim = [recurrent_dim] + output_dim
-        self.out = nn.ModuleList([nn.Linear(in_features=layer_dim[i-1], out_features=layer_dim[i])
-                                  for i in range(1, len(layer_dim))])
+        self.out = nn.ModuleList(
+            [
+                nn.Linear(in_features=layer_dim[i - 1], out_features=layer_dim[i])
+                for i in range(1, len(layer_dim))
+            ]
+        )
 
         for name, param in self.predictor_lstm.named_parameters():
             if 'weight' in name:
@@ -30,9 +36,11 @@ class BasicLSTM(nn.Module):
 
     def forward(self, x_pred, y_init=None, hx=None, return_state=False):
         if y_init is not None:
-            h0 = y_init.new_zeros((self.num_recurrent_layers, y_init.shape[0], self.recurrent_dim))
+            h0 = y_init.new_zeros(
+                (self.num_recurrent_layers, y_init.shape[0], self.recurrent_dim)
+            )
             for i in range(self.num_recurrent_layers):
-                h0[i, :, :y_init.shape[1]] = y_init
+                h0[i, :, : y_init.shape[1]] = y_init
             c0 = h0.new_zeros(h0.shape)
             hx = (h0, c0)
 
@@ -48,7 +56,9 @@ class BasicLSTM(nn.Module):
 
 
 class LinearOutputLSTM(nn.Module):
-    def __init__(self, input_dim, recurrent_dim, num_recurrent_layers, output_dim, dropout):
+    def __init__(
+        self, input_dim, recurrent_dim, num_recurrent_layers, output_dim, dropout
+    ):
         super().__init__()
 
         self.num_recurrent_layers = num_recurrent_layers
@@ -59,10 +69,12 @@ class LinearOutputLSTM(nn.Module):
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
             dropout=dropout,
-            batch_first=True
+            batch_first=True,
         )
 
-        self.out = nn.Linear(in_features=recurrent_dim, out_features=output_dim, bias=False)
+        self.out = nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=False
+        )
 
         for name, param in self.predictor_lstm.named_parameters():
             if 'weight' in name:

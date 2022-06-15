@@ -22,7 +22,7 @@ def state2target_index(state_names, target_names):
 
 def sliding_window(arr, width):
     # non-overlapping windows
-    return np.hstack([arr[i:1+i-width or None:width] for i in range(width)])
+    return np.hstack([arr[i : 1 + i - width or None : width] for i in range(width)])
 
 
 def transform_to_single_step_training_data(control, state, window_size):
@@ -30,11 +30,11 @@ def transform_to_single_step_training_data(control, state, window_size):
     control_dim = control.shape[1]
 
     rows = np.hstack((control, state))
-    windows = sliding_window(rows, window_size+1)
+    windows = sliding_window(rows, window_size + 1)
     # x = [u(t-W) x(t-W) ... u(t-1) x(t-1) u(t)]
-    x = windows[:, :full_dim*window_size+control_dim]
+    x = windows[:, : full_dim * window_size + control_dim]
     # y = x(t)
-    y = windows[:, full_dim*window_size+control_dim:]
+    y = windows[:, full_dim * window_size + control_dim :]
 
     return x, y
 
@@ -44,7 +44,7 @@ def euler_method(ic, dx, dt):
 
 
 def two_step_adam_bashford(ic, dx0, dx1, dt):
-    return ic + 1.5*dt*dx1 - 0.5*dt*dx0
+    return ic + 1.5 * dt * dx1 - 0.5 * dt * dx0
 
 
 def coord2angle(cos_alpha, sin_alpha):
@@ -72,19 +72,19 @@ def compute_trajectory_4dof(state, state_names, sample_time, x0=0.0, y0=0.0, psi
 
     for i in range(1, shape[0]):
         if i == 1:
-            psi[i] = euler_method(psi[i-1], r[i], sample_time)
+            psi[i] = euler_method(psi[i - 1], r[i], sample_time)
         else:
-            psi[i] = two_step_adam_bashford(psi[i-1], r[i-1], r[i], sample_time)
+            psi[i] = two_step_adam_bashford(psi[i - 1], r[i - 1], r[i], sample_time)
 
         xd = np.cos(psi[i]) * u[i] - (np.sin(psi[i]) * np.cos(phi[i]) * v[i])
         yd = np.sin(psi[i]) * u[i] + (np.cos(psi[i]) * np.cos(phi[i]) * v[i])
 
         if i == 1:
-            x[i] = euler_method(x[i-1], xd, sample_time)
-            y[i] = euler_method(y[i-1], yd, sample_time)
+            x[i] = euler_method(x[i - 1], xd, sample_time)
+            y[i] = euler_method(y[i - 1], yd, sample_time)
         else:
-            x[i] = two_step_adam_bashford(x[i-1], old_xd, xd, sample_time)
-            y[i] = two_step_adam_bashford(y[i-1], old_yd, yd, sample_time)
+            x[i] = two_step_adam_bashford(x[i - 1], old_xd, xd, sample_time)
+            y[i] = two_step_adam_bashford(y[i - 1], old_yd, yd, sample_time)
 
         old_xd = xd
         old_yd = yd
@@ -102,7 +102,9 @@ def index_of_agreement(true, pred, j=1):
     error_sum = np.sum(np.power(np.abs(true - pred), j), axis=0)
     partial_diff_true = np.abs(true - np.mean(true, axis=0))
     partial_diff_pred = np.abs(pred - np.mean(true, axis=0))
-    partial_diff_sum = np.sum(np.power(partial_diff_true + partial_diff_pred, j), axis=0)
+    partial_diff_sum = np.sum(
+        np.power(partial_diff_true + partial_diff_pred, j), axis=0
+    )
     return 1 - (error_sum / partial_diff_sum)
 
 
@@ -120,4 +122,3 @@ def score_on_sequence(true_seq, pred_seq, score_fnc):
     for i, (true, pred) in enumerate(zip(true_seq, pred_seq)):
         score[i, :] = score_fnc(true, pred)
     return score
-

@@ -63,19 +63,23 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             recurrent_dim=self.recurrent_dim,
             num_recurrent_layers=self.num_recurrent_layers,
             output_dim=[self.state_dim],
-            dropout=self.dropout
+            dropout=self.dropout,
         ).to(self.device)
 
         self.initializer = rnn.BasicLSTM(
-            input_dim=self.control_dim+self.state_dim,
+            input_dim=self.control_dim + self.state_dim,
             recurrent_dim=self.recurrent_dim,
             num_recurrent_layers=self.num_recurrent_layers,
             output_dim=[self.state_dim],
-            dropout=self.dropout
+            dropout=self.dropout,
         ).to(self.device)
 
-        self.optimizer_pred = optim.Adam(self.predictor.parameters(), lr=self.learning_rate)
-        self.optimizer_init = optim.Adam(self.initializer.parameters(), lr=self.learning_rate)
+        self.optimizer_pred = optim.Adam(
+            self.predictor.parameters(), lr=self.learning_rate
+        )
+        self.optimizer_init = optim.Adam(
+            self.initializer.parameters(), lr=self.learning_rate
+        )
 
         self.control_mean = None
         self.control_stddev = None
@@ -89,14 +93,24 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.control_mean, self.control_stddev = utils.mean_stddev(control_seqs)
         self.state_mean, self.state_stddev = utils.mean_stddev(state_seqs)
 
-        control_seqs = [utils.normalize(control, self.control_mean, self.control_stddev) for control in control_seqs]
-        state_seqs = [utils.normalize(state, self.state_mean, self.state_stddev) for state in state_seqs]
+        control_seqs = [
+            utils.normalize(control, self.control_mean, self.control_stddev)
+            for control in control_seqs
+        ]
+        state_seqs = [
+            utils.normalize(state, self.state_mean, self.state_stddev)
+            for state in state_seqs
+        ]
 
-        initializer_dataset = _InitializerDataset(control_seqs, state_seqs, self.sequence_length)
+        initializer_dataset = _InitializerDataset(
+            control_seqs, state_seqs, self.sequence_length
+        )
 
         time_start_init = time.time()
         for i in range(self.epochs_initializer):
-            data_loader = data.DataLoader(initializer_dataset, self.batch_size, shuffle=True, drop_last=True)
+            data_loader = data.DataLoader(
+                initializer_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
@@ -106,18 +120,26 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 batch_loss.backward()
                 self.optimizer_init.step()
 
-            logger.info(f'Epoch {i + 1}/{self.epochs_initializer} - Epoch Loss (Initializer): {total_loss}')
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_initializer} - Epoch Loss (Initializer): {total_loss}'
+            )
         time_end_init = time.time()
-        predictor_dataset = _PredictorDataset(control_seqs, state_seqs, self.sequence_length)
+        predictor_dataset = _PredictorDataset(
+            control_seqs, state_seqs, self.sequence_length
+        )
 
         time_start_pred = time.time()
         for i in range(self.epochs_predictor):
-            data_loader = data.DataLoader(predictor_dataset, self.batch_size, shuffle=True, drop_last=True)
+            data_loader = data.DataLoader(
+                predictor_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
             total_loss = 0
             for batch_idx, batch in enumerate(data_loader):
                 self.predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self.initializer.forward(batch['x0'].float().to(self.device), return_state=True)
+                _, hx = self.initializer.forward(
+                    batch['x0'].float().to(self.device), return_state=True
+                )
                 # Predict and optimize
                 y = self.predictor.forward(batch['x'].float().to(self.device), hx=hx)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
@@ -125,24 +147,36 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 batch_loss.backward()
                 self.optimizer_pred.step()
 
-            logger.info(f'Epoch {i + 1}/{self.epochs_predictor} - Epoch Loss (Predictor): {total_loss}')
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_predictor} - Epoch Loss (Predictor): {total_loss}'
+            )
 
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
         time_total_pred = time_end_pred - time_start_pred
-        logger.info(f'Training time for initializer {time_total_init}s and for predictor {time_total_pred}s')
+        logger.info(
+            f'Training time for initializer {time_total_init}s and for predictor {time_total_pred}s'
+        )
 
     def simulate(self, initial_control, initial_state, control):
         self.initializer.eval()
         self.predictor.eval()
 
-        initial_control = utils.normalize(initial_control, self.control_mean, self.control_stddev)
-        initial_state = utils.normalize(initial_state, self.state_mean, self.state_stddev)
+        initial_control = utils.normalize(
+            initial_control, self.control_mean, self.control_stddev
+        )
+        initial_state = utils.normalize(
+            initial_state, self.state_mean, self.state_stddev
+        )
         control = utils.normalize(control, self.control_mean, self.control_stddev)
 
         with torch.no_grad():
-            init_x = torch.from_numpy(np.hstack((initial_control[1:], initial_state[:-1])))\
-                .unsqueeze(0).float().to(self.device)
+            init_x = (
+                torch.from_numpy(np.hstack((initial_control[1:], initial_state[:-1])))
+                .unsqueeze(0)
+                .float()
+                .to(self.device)
+            )
             pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
 
             _, hx = self.initializer.forward(init_x, return_state=True)
@@ -156,16 +190,23 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         torch.save(self.initializer.state_dict(), file_path[0])
         torch.save(self.predictor.state_dict(), file_path[1])
         with open(file_path[2], mode='w') as f:
-            json.dump({
-                'state_mean': self.state_mean.tolist(),
-                'state_stddev': self.state_stddev.tolist(),
-                'control_mean': self.control_mean.tolist(),
-                'control_stddev': self.control_stddev.tolist()
-            }, f)
+            json.dump(
+                {
+                    'state_mean': self.state_mean.tolist(),
+                    'state_stddev': self.state_stddev.tolist(),
+                    'control_mean': self.control_mean.tolist(),
+                    'control_stddev': self.control_stddev.tolist(),
+                },
+                f,
+            )
 
     def load(self, file_path):
-        self.initializer.load_state_dict(torch.load(file_path[0], map_location=self.device_name))
-        self.predictor.load_state_dict(torch.load(file_path[1], map_location=self.device_name))
+        self.initializer.load_state_dict(
+            torch.load(file_path[0], map_location=self.device_name)
+        )
+        self.predictor.load_state_dict(
+            torch.load(file_path[1], map_location=self.device_name)
+        )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
         self.state_mean = np.array(norm['state_mean'])
@@ -178,8 +219,12 @@ class LSTMInitModel(base.DynamicIdentificationModel):
 
     def get_parameter_count(self):
         # technically parameter counts of both networks are equal
-        init_count = sum(p.numel() for p in self.initializer.parameters() if p.requires_grad)
-        predictor_count = sum(p.numel() for p in self.predictor.parameters() if p.requires_grad)
+        init_count = sum(
+            p.numel() for p in self.initializer.parameters() if p.requires_grad
+        )
+        predictor_count = sum(
+            p.numel() for p in self.predictor.parameters() if p.requires_grad
+        )
         return init_count + predictor_count
 
 
@@ -197,17 +242,25 @@ class _InitializerDataset(data.Dataset):
         x_seq = list()
         y_seq = list()
         for control, state in zip(control_seqs, state_seqs):
-            n_samples = int((control.shape[0] - self.sequence_length - 1) / self.sequence_length)
+            n_samples = int(
+                (control.shape[0] - self.sequence_length - 1) / self.sequence_length
+            )
 
-            x = np.zeros((n_samples, self.sequence_length, self.control_dim + self.state_dim))
+            x = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
+            )
             y = np.zeros((n_samples, self.sequence_length, self.state_dim))
 
             for idx in range(n_samples):
                 time = idx * self.sequence_length
 
-                x[idx, :, :] = np.hstack((control[time + 1:time + 1 + self.sequence_length, :],
-                                          state[time:time + self.sequence_length, :]))
-                y[idx, :, :] = state[time + 1:time + 1 + self.sequence_length, :]
+                x[idx, :, :] = np.hstack(
+                    (
+                        control[time + 1 : time + 1 + self.sequence_length, :],
+                        state[time : time + self.sequence_length, :],
+                    )
+                )
+                y[idx, :, :] = state[time + 1 : time + 1 + self.sequence_length, :]
 
             x_seq.append(x)
             y_seq.append(y)
@@ -237,19 +290,31 @@ class _PredictorDataset(data.Dataset):
         x_seq = list()
         y_seq = list()
         for control, state in zip(control_seqs, state_seqs):
-            n_samples = int((control.shape[0] - 2 * self.sequence_length) / self.sequence_length)
+            n_samples = int(
+                (control.shape[0] - 2 * self.sequence_length) / self.sequence_length
+            )
 
-            x0 = np.zeros((n_samples, self.sequence_length, self.control_dim + self.state_dim))
+            x0 = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
+            )
             x = np.zeros((n_samples, self.sequence_length, self.control_dim))
             y = np.zeros((n_samples, self.sequence_length, self.state_dim))
 
             for idx in range(n_samples):
                 time = idx * self.sequence_length
 
-                x0[idx, :, :] = np.hstack((control[time:time + self.sequence_length],
-                                           state[time:time + self.sequence_length, :]))
-                x[idx, :, :] = control[time + self.sequence_length:time + 2 * self.sequence_length, :]
-                y[idx, :, :] = state[time + self.sequence_length:time + 2 * self.sequence_length, :]
+                x0[idx, :, :] = np.hstack(
+                    (
+                        control[time : time + self.sequence_length],
+                        state[time : time + self.sequence_length, :],
+                    )
+                )
+                x[idx, :, :] = control[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
+                y[idx, :, :] = state[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
 
             x0_seq.append(x0)
             x_seq.append(x)

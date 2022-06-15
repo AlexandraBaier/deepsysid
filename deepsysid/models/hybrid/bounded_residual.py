@@ -10,9 +10,20 @@ from torch import optim
 from torch.nn.functional import mse_loss
 from torch.utils import data
 
-from .physical import PhysicalComponent, NoOpPhysicalComponent, MinimalManeuveringComponent, \
-    PropulsionManeuveringComponent, MinimalManeuveringConfig, PropulsionManeuveringConfig
-from .semiphysical import SemiphysicalComponent, NoOpSemiphysicalComponent, LinearComponent, BlankeComponent
+from .physical import (
+    PhysicalComponent,
+    NoOpPhysicalComponent,
+    MinimalManeuveringComponent,
+    PropulsionManeuveringComponent,
+    MinimalManeuveringConfig,
+    PropulsionManeuveringConfig,
+)
+from .semiphysical import (
+    SemiphysicalComponent,
+    NoOpSemiphysicalComponent,
+    LinearComponent,
+    BlankeComponent,
+)
 from ..base import DynamicIdentificationModelConfig
 from ... import utils
 from .. import base
@@ -34,21 +45,25 @@ class HybridResidualLSTMModelConfig(DynamicIdentificationModelConfig):
     loss: Literal['mse', 'msge']
 
 
-class HybridMinimalManeuveringModelConfig(HybridResidualLSTMModelConfig, MinimalManeuveringConfig):
+class HybridMinimalManeuveringModelConfig(
+    HybridResidualLSTMModelConfig, MinimalManeuveringConfig
+):
     pass
 
 
-class HybridPropulsionManeuveringModelConfig(HybridResidualLSTMModelConfig, PropulsionManeuveringConfig):
+class HybridPropulsionManeuveringModelConfig(
+    HybridResidualLSTMModelConfig, PropulsionManeuveringConfig
+):
     pass
 
 
 class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
     def __init__(
-            self,
-            physical: PhysicalComponent,
-            semiphysical: SemiphysicalComponent,
-            config: HybridResidualLSTMModelConfig,
-            device_name: str
+        self,
+        physical: PhysicalComponent,
+        semiphysical: SemiphysicalComponent,
+        config: HybridResidualLSTMModelConfig,
+        device_name: str,
     ):
         super().__init__(config)
 
@@ -79,11 +94,12 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.semiphysical = semiphysical
 
         self.blackbox = rnn.LinearOutputLSTM(
-            input_dim=self.control_dim + self.state_dim,  # control input and whitebox estimate
+            input_dim=self.control_dim
+            + self.state_dim,  # control input and whitebox estimate
             recurrent_dim=self.recurrent_dim,
             num_recurrent_layers=self.num_recurrent_layers,
             output_dim=self.state_dim,
-            dropout=self.dropout
+            dropout=self.dropout,
         ).to(self.device)
 
         self.initializer = rnn.BasicLSTM(
@@ -91,16 +107,14 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             recurrent_dim=self.recurrent_dim,
             output_dim=[self.state_dim],
             num_recurrent_layers=self.num_recurrent_layers,
-            dropout=self.dropout
+            dropout=self.dropout,
         ).to(self.device)
 
         self.optimizer_initializer = optim.Adam(
-            params=self.initializer.parameters(),
-            lr=self.learning_rate
+            params=self.initializer.parameters(), lr=self.learning_rate
         )
         self.optimizer_end2end = optim.Adam(
-            params=self.blackbox.parameters(),
-            lr=self.learning_rate
+            params=self.blackbox.parameters(), lr=self.learning_rate
         )
 
         self.control_mean = None
@@ -117,14 +131,22 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.control_mean, self.control_stddev = utils.mean_stddev(control_seqs)
         self.state_mean, self.state_stddev = utils.mean_stddev(state_seqs)
         self.semiphysical.set_normalization_values(
-            control_mean=self.control_mean, control_std=self.control_stddev,
-            state_mean=self.state_mean, state_std=self.state_stddev
+            control_mean=self.control_mean,
+            control_std=self.control_stddev,
+            state_mean=self.state_mean,
+            state_std=self.state_stddev,
         )
 
         un_control_seqs = control_seqs
         un_state_seqs = state_seqs
-        control_seqs = [utils.normalize(control, self.control_mean, self.control_stddev) for control in control_seqs]
-        state_seqs = [utils.normalize(state, self.state_mean, self.state_stddev) for state in state_seqs]
+        control_seqs = [
+            utils.normalize(control, self.control_mean, self.control_stddev)
+            for control in control_seqs
+        ]
+        state_seqs = [
+            utils.normalize(state, self.state_mean, self.state_stddev)
+            for state in state_seqs
+        ]
 
         state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
         state_stddev = torch.from_numpy(self.state_stddev).float().to(self.device)
@@ -135,12 +157,16 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.semiphysical.train_semiphysical(
             control_seqs=un_control_seqs,
             state_seqs=un_state_seqs,
-            physical=self.physical
+            physical=self.physical,
         )
 
-        initializer_dataset = InitializerDataset(control_seqs, state_seqs, self.sequence_length)
+        initializer_dataset = InitializerDataset(
+            control_seqs, state_seqs, self.sequence_length
+        )
         for i in range(self.epochs_initializer):
-            data_loader = data.DataLoader(initializer_dataset, self.batch_size, shuffle=True, drop_last=True)
+            data_loader = data.DataLoader(
+                initializer_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
@@ -150,39 +176,55 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 batch_loss.backward()
                 self.optimizer_initializer.step()
 
-            logger.info(f'Epoch {i + 1}/{self.epochs_initializer} - Epoch Loss (Initializer): {total_loss}')
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_initializer} - Epoch Loss (Initializer): {total_loss}'
+            )
 
         dataset = End2EndDataset(
-            control_seqs=control_seqs, state_seqs=state_seqs,
-            un_control_seqs=un_control_seqs, un_state_seqs=un_state_seqs,
-            sequence_length=self.sequence_length
+            control_seqs=control_seqs,
+            state_seqs=state_seqs,
+            un_control_seqs=un_control_seqs,
+            un_state_seqs=un_state_seqs,
+            sequence_length=self.sequence_length,
         )
         for i in range(self.epochs_parallel):
-            data_loader = data.DataLoader(dataset=dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
+            data_loader = data.DataLoader(
+                dataset=dataset,
+                batch_size=self.batch_size,
+                shuffle=True,
+                drop_last=True,
+            )
             total_epoch_loss = 0.0
             for batch in data_loader:
                 self.blackbox.zero_grad()
 
                 x_physical_control = batch['x_control_unnormed'].float().to(self.device)
                 x_physical_state = batch['x_state_unnormed'].float().to(self.device)
-                y_whitebox = torch.zeros((self.batch_size, self.sequence_length, self.state_dim))\
-                    .float().to(self.device)
+                y_whitebox = (
+                    torch.zeros((self.batch_size, self.sequence_length, self.state_dim))
+                    .float()
+                    .to(self.device)
+                )
 
                 for time in range(self.sequence_length):
                     y_semiphysical = self.semiphysical.forward(
                         control=x_physical_control[:, time, :],
-                        state=x_physical_state[:, time, :]
+                        state=x_physical_state[:, time, :],
                     )
                     ydot_physical = scale_acc(
                         self.physical.forward(
                             control=x_physical_control[:, time, :],
-                            state=x_physical_state[:, time, :]
+                            state=x_physical_state[:, time, :],
                         )
                     )
-                    y_whitebox[:, time, :] = y_semiphysical + self.physical.time_delta * ydot_physical
+                    y_whitebox[:, time, :] = (
+                        y_semiphysical + self.physical.time_delta * ydot_physical
+                    )
 
                 x_init = batch['x_init'].float().to(self.device)
-                x_pred = torch.cat((batch['x_pred'].float().to(self.device), y_whitebox), dim=2)  # serial connection
+                x_pred = torch.cat(
+                    (batch['x_pred'].float().to(self.device), y_whitebox), dim=2
+                )  # serial connection
 
                 _, hx_init = self.initializer.forward(x_init, return_state=True)
 
@@ -194,10 +236,17 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 batch_loss.backward()
                 self.optimizer_end2end.step()
 
-            logger.info(f'Epoch {i + 1}/{self.epochs_parallel} - Epoch Loss (Parallel): {total_epoch_loss}')
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_parallel} - Epoch Loss (Parallel): {total_epoch_loss}'
+            )
 
         for i in range(self.epochs_feedback):
-            data_loader = data.DataLoader(dataset=dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
+            data_loader = data.DataLoader(
+                dataset=dataset,
+                batch_size=self.batch_size,
+                shuffle=True,
+                drop_last=True,
+            )
             total_epoch_loss = 0.0
             for batch in data_loader:
                 self.blackbox.zero_grad()
@@ -205,35 +254,59 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 current_state = batch['initial_state'].float().to(self.device)
                 x_control_unnormed = batch['x_control_unnormed'].float().to(self.device)
                 x_pred = batch['x_pred'].float().to(self.device)
-                y_est = torch.zeros((self.batch_size, self.sequence_length, self.state_dim)).float().to(self.device)
+                y_est = (
+                    torch.zeros((self.batch_size, self.sequence_length, self.state_dim))
+                    .float()
+                    .to(self.device)
+                )
 
                 x_init = batch['x_init'].float().to(self.device)
                 _, hx_init = self.initializer.forward(x_init, return_state=True)
 
                 for time in range(self.sequence_length):
-                    y_semiphysical = self.semiphysical.forward(x_control_unnormed[:, time, :], current_state)
+                    y_semiphysical = self.semiphysical.forward(
+                        x_control_unnormed[:, time, :], current_state
+                    )
 
                     ydot_physical = scale_acc(
-                        self.physical.forward(x_control_unnormed[:, time, :], current_state)
+                        self.physical.forward(
+                            x_control_unnormed[:, time, :], current_state
+                        )
                     )
                     y_whitebox = y_semiphysical + self.time_delta * ydot_physical
 
                     y_blackbox, hx_init = self.blackbox_forward(
-                        torch.cat((x_pred[:, time, :].unsqueeze(1), y_whitebox.unsqueeze(1)), dim=2),
+                        torch.cat(
+                            (x_pred[:, time, :].unsqueeze(1), y_whitebox.unsqueeze(1)),
+                            dim=2,
+                        ),
                         y_whitebox.unsqueeze(1),
-                        hx=hx_init, return_state=True)
+                        hx=hx_init,
+                        return_state=True,
+                    )
                     current_state = y_blackbox.squeeze(1) + y_whitebox
                     y_est[:, time, :] = current_state
                     current_state = denormalize_state(current_state)
 
-                batch_loss = self.loss.forward(y_est, batch['y'].float().to(self.device))
+                batch_loss = self.loss.forward(
+                    y_est, batch['y'].float().to(self.device)
+                )
                 total_epoch_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_end2end.step()
 
-            logger.info(f'Epoch {i + 1}/{self.epochs_feedback} - Epoch Loss (Feedback): {total_epoch_loss}')
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_feedback} - Epoch Loss (Feedback): {total_epoch_loss}'
+            )
 
-    def simulate(self, initial_control, initial_state, control, return_whitebox_blackbox=False, threshold=np.infty):
+    def simulate(
+        self,
+        initial_control,
+        initial_state,
+        control,
+        return_whitebox_blackbox=False,
+        threshold=np.infty,
+    ):
         self.blackbox.eval()
         self.initializer.eval()
         self.semiphysical.eval()
@@ -246,8 +319,12 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         un_control = control
         current_state = initial_state[-1, :]
-        initial_control = utils.normalize(initial_control, self.control_mean, self.control_stddev)
-        initial_state = utils.normalize(initial_state, self.state_mean, self.state_stddev)
+        initial_control = utils.normalize(
+            initial_control, self.control_mean, self.control_stddev
+        )
+        initial_state = utils.normalize(
+            initial_state, self.state_mean, self.state_stddev
+        )
         control = utils.normalize(control, self.control_mean, self.control_stddev)
 
         y = np.zeros((control.shape[0], self.state_dim))
@@ -255,21 +332,38 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         blackbox = np.zeros((control.shape[0], self.state_dim))
 
         with torch.no_grad():
-            x_init = torch.from_numpy(np.hstack((initial_control, initial_state))).unsqueeze(0).float().to(self.device)
-            _, hx = self.initializer.forward(x_init, return_state=True)  # hx is hidden state of predictor LSTM
+            x_init = (
+                torch.from_numpy(np.hstack((initial_control, initial_state)))
+                .unsqueeze(0)
+                .float()
+                .to(self.device)
+            )
+            _, hx = self.initializer.forward(
+                x_init, return_state=True
+            )  # hx is hidden state of predictor LSTM
 
-            x_control_un = torch.from_numpy(un_control).unsqueeze(0).float().to(self.device)
-            current_state = torch.from_numpy(current_state).unsqueeze(0).float().to(self.device)
+            x_control_un = (
+                torch.from_numpy(un_control).unsqueeze(0).float().to(self.device)
+            )
+            current_state = (
+                torch.from_numpy(current_state).unsqueeze(0).float().to(self.device)
+            )
             x_pred = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
             for time in range(control.shape[0]):
-                y_semiphysical = self.semiphysical.forward(control=x_control_un[:, time, :], state=current_state)
+                y_semiphysical = self.semiphysical.forward(
+                    control=x_control_un[:, time, :], state=current_state
+                )
                 ydot_physical = scale_acc(
                     self.physical.forward(x_control_un[:, time, :], current_state)
                 )
                 y_whitebox = y_semiphysical + self.time_delta * ydot_physical
 
-                x_blackbox = torch.cat((x_pred[:, time, :], y_whitebox), dim=1).unsqueeze(1)
-                y_blackbox, hx = self.blackbox_forward(x_blackbox, None, hx=hx, return_state=True)
+                x_blackbox = torch.cat(
+                    (x_pred[:, time, :], y_whitebox), dim=1
+                ).unsqueeze(1)
+                y_blackbox, hx = self.blackbox_forward(
+                    x_blackbox, None, hx=hx, return_state=True
+                )
                 y_blackbox = torch.clamp(y_blackbox, -threshold, threshold)
                 y_est = y_blackbox.squeeze(1) + y_whitebox
                 current_state = denormalize_state(y_est)
@@ -287,17 +381,26 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         torch.save(self.blackbox.state_dict(), file_path[1])
         torch.save(self.initializer.state_dict(), file_path[2])
         with open(file_path[3], mode='w') as f:
-            json.dump({
-                'state_mean': self.state_mean.tolist(),
-                'state_stddev': self.state_stddev.tolist(),
-                'control_mean': self.control_mean.tolist(),
-                'control_stddev': self.control_stddev.tolist()
-            }, f)
+            json.dump(
+                {
+                    'state_mean': self.state_mean.tolist(),
+                    'state_stddev': self.state_stddev.tolist(),
+                    'control_mean': self.control_mean.tolist(),
+                    'control_stddev': self.control_stddev.tolist(),
+                },
+                f,
+            )
 
     def load(self, file_path):
-        self.semiphysical.load_state_dict(torch.load(file_path[0], map_location=self.device_name))
-        self.blackbox.load_state_dict(torch.load(file_path[1], map_location=self.device_name))
-        self.initializer.load_state_dict(torch.load(file_path[2], map_location=self.device_name))
+        self.semiphysical.load_state_dict(
+            torch.load(file_path[0], map_location=self.device_name)
+        )
+        self.blackbox.load_state_dict(
+            torch.load(file_path[1], map_location=self.device_name)
+        )
+        self.initializer.load_state_dict(
+            torch.load(file_path[2], map_location=self.device_name)
+        )
         with open(file_path[3], mode='r') as f:
             norm = json.load(f)
         self.state_mean = np.array(norm['state_mean'])
@@ -305,8 +408,10 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.control_mean = np.array(norm['control_mean'])
         self.control_stddev = np.array(norm['control_stddev'])
         self.semiphysical.set_normalization_values(
-            control_mean=self.control_mean, control_std=self.control_stddev,
-            state_mean=self.state_mean, state_std=self.state_stddev
+            control_mean=self.control_mean,
+            control_std=self.control_stddev,
+            state_mean=self.state_mean,
+            state_std=self.state_stddev,
         )
 
     def get_file_extension(self):
@@ -314,8 +419,12 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
     def get_parameter_count(self):
         semiphysical_count = sum(p.numel() for p in self.semiphysical.parameters())
-        blackbox_count = sum(p.numel() for p in self.blackbox.parameters() if p.requires_grad)
-        initializer_count = sum(p.numel() for p in self.initializer.parameters() if p.requires_grad)
+        blackbox_count = sum(
+            p.numel() for p in self.blackbox.parameters() if p.requires_grad
+        )
+        initializer_count = sum(
+            p.numel() for p in self.initializer.parameters() if p.requires_grad
+        )
         return semiphysical_count + blackbox_count + initializer_count
 
     def blackbox_forward(self, x_pred, y_wb, hx=None, return_state=False):
@@ -331,21 +440,19 @@ class HybridMinimalManeuveringModel(HybridResidualLSTMModel):
     def __init__(self, config: HybridMinimalManeuveringModelConfig):
         device = torch.device(config.device_name)
         physical = MinimalManeuveringComponent(
-            time_delta=config.time_delta,
-            device=device,
-            config=config
+            time_delta=config.time_delta, device=device, config=config
         )
         semiphysical = NoOpSemiphysicalComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -355,21 +462,19 @@ class HybridPropulsionManeuveringModel(HybridResidualLSTMModel):
     def __init__(self, config: HybridPropulsionManeuveringModelConfig):
         device = torch.device(config.device_name)
         physical = PropulsionManeuveringComponent(
-            time_delta=config.time_delta,
-            device=device,
-            config=config
+            time_delta=config.time_delta, device=device, config=config
         )
         semiphysical = NoOpSemiphysicalComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -378,21 +483,18 @@ class HybridLinearModel(HybridResidualLSTMModel):
 
     def __init__(self, config: HybridResidualLSTMModelConfig):
         device = torch.device(config.device_name)
-        physical = NoOpPhysicalComponent(
-            time_delta=config.time_delta,
-            device=device
-        )
+        physical = NoOpPhysicalComponent(time_delta=config.time_delta, device=device)
         semiphysical = LinearComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -401,21 +503,18 @@ class HybridBlankeModel(HybridResidualLSTMModelConfig):
 
     def __init__(self, config: HybridResidualLSTMModelConfig):
         device = torch.device(config.device_name)
-        physical = NoOpPhysicalComponent(
-            time_delta=config.time_delta,
-            device=device
-        )
+        physical = NoOpPhysicalComponent(time_delta=config.time_delta, device=device)
         semiphysical = BlankeComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -425,21 +524,19 @@ class HybridLinearMinimalManeuveringModel(HybridResidualLSTMModel):
     def __init__(self, config: HybridMinimalManeuveringModelConfig):
         device = torch.device(config.device_name)
         physical = MinimalManeuveringComponent(
-            time_delta=config.time_delta,
-            device=device,
-            config=config
+            time_delta=config.time_delta, device=device, config=config
         )
         semiphysical = LinearComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -449,21 +546,19 @@ class HybridLinearPropulsionManeuveringModel(HybridResidualLSTMModel):
     def __init__(self, config: HybridPropulsionManeuveringModelConfig):
         device = torch.device(config.device_name)
         physical = PropulsionManeuveringComponent(
-            time_delta=config.time_delta,
-            device=device,
-            config=config
+            time_delta=config.time_delta, device=device, config=config
         )
         semiphysical = LinearComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -473,21 +568,19 @@ class HybridBlankeMinimalManeuveringModel(HybridResidualLSTMModel):
     def __init__(self, config: HybridMinimalManeuveringModelConfig):
         device = torch.device(config.device_name)
         physical = MinimalManeuveringComponent(
-            time_delta=config.time_delta,
-            device=device,
-            config=config
+            time_delta=config.time_delta, device=device, config=config
         )
         semiphysical = BlankeComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -497,21 +590,19 @@ class HybridBlankePropulsionModel(HybridResidualLSTMModel):
     def __init__(self, config: HybridPropulsionManeuveringModelConfig):
         device = torch.device(config.device_name)
         physical = PropulsionManeuveringComponent(
-            time_delta=config.time_delta,
-            device=device,
-            config=config
+            time_delta=config.time_delta, device=device, config=config
         )
         semiphysical = BlankeComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
-            device=device
+            device=device,
         )
 
         super().__init__(
             physical=physical,
             semiphysical=semiphysical,
             config=config,
-            device_name=config.device_name
+            device_name=config.device_name,
         )
 
 
@@ -529,17 +620,25 @@ class InitializerDataset(data.Dataset):
         x_seq = list()
         y_seq = list()
         for control, state in zip(control_seqs, state_seqs):
-            n_samples = int((control.shape[0] - self.sequence_length - 1) / self.sequence_length)
+            n_samples = int(
+                (control.shape[0] - self.sequence_length - 1) / self.sequence_length
+            )
 
-            x = np.zeros((n_samples, self.sequence_length, self.control_dim + self.state_dim))
+            x = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
+            )
             y = np.zeros((n_samples, self.sequence_length, self.state_dim))
 
             for idx in range(n_samples):
                 time = idx * self.sequence_length
 
-                x[idx, :, :] = np.hstack((control[time + 1:time + 1 + self.sequence_length, :],
-                                          state[time:time + self.sequence_length, :]))
-                y[idx, :, :] = state[time + 1:time + 1 + self.sequence_length, :]
+                x[idx, :, :] = np.hstack(
+                    (
+                        control[time + 1 : time + 1 + self.sequence_length, :],
+                        state[time : time + self.sequence_length, :],
+                    )
+                )
+                y[idx, :, :] = state[time + 1 : time + 1 + self.sequence_length, :]
 
             x_seq.append(x)
             y_seq.append(y)
@@ -555,8 +654,9 @@ class InitializerDataset(data.Dataset):
 
 
 class End2EndDataset(data.Dataset):
-    def __init__(self, control_seqs, state_seqs, sequence_length, un_control_seqs,
-                 un_state_seqs):
+    def __init__(
+        self, control_seqs, state_seqs, sequence_length, un_control_seqs, un_state_seqs
+    ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
@@ -580,32 +680,68 @@ class End2EndDataset(data.Dataset):
         x_control_unnormed_seq = list()
         x_state_unnormed_seq = list()
 
-        for control, state, un_control, un_state \
-                in zip(control_seqs, state_seqs, un_control_seqs, un_state_seqs):
-            n_samples = int((control.shape[0] - self.sequence_length - 1) / (2 * self.sequence_length))
+        for control, state, un_control, un_state in zip(
+            control_seqs, state_seqs, un_control_seqs, un_state_seqs
+        ):
+            n_samples = int(
+                (control.shape[0] - self.sequence_length - 1)
+                / (2 * self.sequence_length)
+            )
 
-            x_init = np.zeros((n_samples, self.sequence_length, self.control_dim + self.state_dim))
+            x_init = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
+            )
             x_pred = np.zeros((n_samples, self.sequence_length, self.control_dim))
             ydot = np.zeros((n_samples, self.sequence_length, self.state_dim))
             y = np.zeros((n_samples, self.sequence_length, self.state_dim))
             initial_state = np.zeros((n_samples, self.state_dim))
-            x_control_unnormed = np.zeros((n_samples, self.sequence_length, self.control_dim))
-            x_state_unnormed = np.zeros((n_samples, self.sequence_length, self.state_dim))
+            x_control_unnormed = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim)
+            )
+            x_state_unnormed = np.zeros(
+                (n_samples, self.sequence_length, self.state_dim)
+            )
 
             for idx in range(n_samples):
                 time = idx * self.sequence_length
 
-                x_init[idx, :, :] = np.hstack((control[time:time + self.sequence_length, :],
-                                               state[time:time + self.sequence_length, :]))
-                x_pred[idx, :, :] = control[time + self.sequence_length:time + 2 * self.sequence_length, :]
-                ydot[idx, :, :] = (state[time + self.sequence_length:time + 2 * self.sequence_length, :]
-                                   - state[time + self.sequence_length - 1:time + 2 * self.sequence_length - 1, :])
-                y[idx, :, :] = state[time + self.sequence_length:time + 2 * self.sequence_length, :]
+                x_init[idx, :, :] = np.hstack(
+                    (
+                        control[time : time + self.sequence_length, :],
+                        state[time : time + self.sequence_length, :],
+                    )
+                )
+                x_pred[idx, :, :] = control[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
+                ydot[idx, :, :] = (
+                    state[
+                        time + self.sequence_length : time + 2 * self.sequence_length, :
+                    ]
+                    - state[
+                        time
+                        + self.sequence_length
+                        - 1 : time
+                        + 2 * self.sequence_length
+                        - 1,
+                        :,
+                    ]
+                )
+                y[idx, :, :] = state[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
                 initial_state[idx, :] = un_state[time + self.sequence_length - 1, :]
-                x_control_unnormed[idx, :, :] = un_control[time + self.sequence_length
-                                                           :time + 2 * self.sequence_length, :]
-                x_state_unnormed[idx, :, :] = un_state[time + self.sequence_length - 1
-                                                       :time + 2 * self.sequence_length - 1, :]
+                x_control_unnormed[idx, :, :] = un_control[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
+                x_state_unnormed[idx, :, :] = un_state[
+                    time
+                    + self.sequence_length
+                    - 1 : time
+                    + 2 * self.sequence_length
+                    - 1,
+                    :,
+                ]
 
             x_init_seq.append(x_init)
             x_pred_seq.append(x_pred)
@@ -627,10 +763,12 @@ class End2EndDataset(data.Dataset):
         return self.x_init.shape[0]
 
     def __getitem__(self, idx):
-        return {'x_init': self.x_init[idx],
-                'x_pred': self.x_pred[idx],
-                'ydot': self.ydot[idx],
-                'y': self.y[idx],
-                'initial_state': self.initial_state[idx],
-                'x_control_unnormed': self.x_control_unnormed[idx],
-                'x_state_unnormed': self.x_state_unnormed[idx]}
+        return {
+            'x_init': self.x_init[idx],
+            'x_pred': self.x_pred[idx],
+            'ydot': self.ydot[idx],
+            'y': self.y[idx],
+            'initial_state': self.initial_state[idx],
+            'x_control_unnormed': self.x_control_unnormed[idx],
+            'x_state_unnormed': self.x_state_unnormed[idx],
+        }

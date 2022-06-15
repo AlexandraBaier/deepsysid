@@ -75,27 +75,42 @@ class NoOpPhysicalComponent(PhysicalComponent):
 
 
 class MinimalManeuveringComponent(PhysicalComponent):
-    def __init__(self, time_delta: float, device: torch.device, config: MinimalManeuveringConfig):
+    def __init__(
+        self, time_delta: float, device: torch.device, config: MinimalManeuveringConfig
+    ):
         super().__init__(time_delta=time_delta, device=device)
-        self.model = MinimalManeuveringEquations(time_delta=time_delta, config=config).to(self.device)
+        self.model = MinimalManeuveringEquations(
+            time_delta=time_delta, config=config
+        ).to(self.device)
 
     def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         return self.model.forward(control, state)
 
 
 class PropulsionManeuveringComponent(PhysicalComponent):
-    def __init__(self, time_delta: float, device: torch.device, config: PropulsionManeuveringConfig):
+    def __init__(
+        self,
+        time_delta: float,
+        device: torch.device,
+        config: PropulsionManeuveringConfig,
+    ):
         super().__init__(time_delta=time_delta, device=device)
-        self.model = PropulsionManeuveringEquations(time_delta=time_delta, config=config).to(self.device)
+        self.model = PropulsionManeuveringEquations(
+            time_delta=time_delta, config=config
+        ).to(self.device)
 
     def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         return self.model.forward(control, state)
 
 
 class BasicPelicanMotionComponent(PhysicalComponent):
-    def __init__(self, time_delta: float, device: torch.device, config: BasicPelicanMotionConfig):
+    def __init__(
+        self, time_delta: float, device: torch.device, config: BasicPelicanMotionConfig
+    ):
         super().__init__(time_delta=time_delta, device=device)
-        self.model = BasicPelicanMotionEquations(time_delta=time_delta, config=config).to(self.device)
+        self.model = BasicPelicanMotionEquations(
+            time_delta=time_delta, config=config
+        ).to(self.device)
 
     def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         return self.model.forward(control, state)
@@ -108,61 +123,10 @@ class MinimalManeuveringEquations(nn.Module):
         self.dt = time_delta
 
         mass = config.m
-        inertia = np.array([
-            [config.Ixx, 0.0, 0.0],
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, config.Izz]
-        ])
-        cog = np.array([
-            config.xg, 0.0, config.zg
-        ])
-        m_rb = build_rigid_body_matrix(
-            dof=4, mass=mass, inertia_matrix=inertia, center_of_gravity=cog
+        inertia = np.array(
+            [[config.Ixx, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, config.Izz]]
         )
-        m_a = build_4dof_added_mass_matrix(config)
-        # transpose for correct multiplication with batch
-        self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())
-        self.inv_mass.requires_grad = False
-
-        self.coriolis_rb = RigidBodyCoriolis4DOF(mass=mass, cog=cog)
-        self.buoyancy = Buoyancy(
-            rho_water=config.rho_water, displacement=config.disp, metacentric_height=config.gm,
-            grav_acc=config.g
-        )
-
-    def forward(self, control, state):
-        # control is not used but remains for a consistent interface between all whitebox models
-        velocity = state[:, :4]
-        position = torch.zeros((state.shape[0], 4), device=state.device, dtype=state.dtype)
-        position[:, 2] = state[:, 4]
-
-        tau_crb = self.coriolis_rb.forward(velocity)
-        tau_hs = self.buoyancy.forward(position)
-        tau_total = -tau_crb - tau_hs
-
-        acceleration = torch.mm(tau_total, self.inv_mass)
-        acceleration = torch.cat((
-            acceleration,
-            (position[:, 2] + self.dt * acceleration[:, 2]).unsqueeze(1)
-        ), dim=1)
-        return acceleration
-
-
-class PropulsionManeuveringEquations(nn.Module):
-    def __init__(self, time_delta: float, config: PropulsionManeuveringConfig):
-        super().__init__()
-
-        self.dt = time_delta
-
-        mass = config.m
-        inertia = np.array([
-            [config.Ixx, 0.0, 0.0],
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, config.Izz]
-        ])
-        cog = np.array([
-            config.xg, 0.0, config.zg
-        ])
+        cog = np.array([config.xg, 0.0, config.zg])
         m_rb = build_rigid_body_matrix(
             dof=4, mass=mass, inertia_matrix=inertia, center_of_gravity=cog
         )
@@ -176,19 +140,71 @@ class PropulsionManeuveringEquations(nn.Module):
             rho_water=config.rho_water,
             displacement=config.disp,
             metacentric_height=config.gm,
-            grav_acc=config.g
+            grav_acc=config.g,
+        )
+
+    def forward(self, control, state):
+        # control is not used but remains for a consistent interface between all whitebox models
+        velocity = state[:, :4]
+        position = torch.zeros(
+            (state.shape[0], 4), device=state.device, dtype=state.dtype
+        )
+        position[:, 2] = state[:, 4]
+
+        tau_crb = self.coriolis_rb.forward(velocity)
+        tau_hs = self.buoyancy.forward(position)
+        tau_total = -tau_crb - tau_hs
+
+        acceleration = torch.mm(tau_total, self.inv_mass)
+        acceleration = torch.cat(
+            (
+                acceleration,
+                (position[:, 2] + self.dt * acceleration[:, 2]).unsqueeze(1),
+            ),
+            dim=1,
+        )
+        return acceleration
+
+
+class PropulsionManeuveringEquations(nn.Module):
+    def __init__(self, time_delta: float, config: PropulsionManeuveringConfig):
+        super().__init__()
+
+        self.dt = time_delta
+
+        mass = config.m
+        inertia = np.array(
+            [[config.Ixx, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, config.Izz]]
+        )
+        cog = np.array([config.xg, 0.0, config.zg])
+        m_rb = build_rigid_body_matrix(
+            dof=4, mass=mass, inertia_matrix=inertia, center_of_gravity=cog
+        )
+        m_a = build_4dof_added_mass_matrix(config)
+        # transpose for correct multiplication with batch
+        self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())
+        self.inv_mass.requires_grad = False
+
+        self.coriolis_rb = RigidBodyCoriolis4DOF(mass=mass, cog=cog)
+        self.buoyancy = Buoyancy(
+            rho_water=config.rho_water,
+            displacement=config.disp,
+            metacentric_height=config.gm,
+            grav_acc=config.g,
         )
         self.propulsion = SymmetricRudderPropellerPair(
             wake_factor=config.wake_factor,
             diameter=config.diameter,
             rho_water=config.rho_water,
             thrust_coefficient=np.array(config.Kt),
-            propeller_location=np.array([config.lx, config.ly, config.lz])
+            propeller_location=np.array([config.lx, config.ly, config.lz]),
         )
 
     def forward(self, control, state):
         velocity = state[:, :4]
-        position = torch.zeros((state.shape[0], 4), device=state.device, dtype=state.dtype)
+        position = torch.zeros(
+            (state.shape[0], 4), device=state.device, dtype=state.dtype
+        )
         position[:, 2] = state[:, 4]
 
         tau_crb = self.coriolis_rb.forward(velocity)
@@ -197,10 +213,13 @@ class PropulsionManeuveringEquations(nn.Module):
         tau_total = tau_propulsion - tau_crb - tau_hs
 
         acceleration = torch.mm(tau_total, self.inv_mass)
-        acceleration = torch.cat((
-            acceleration,
-            (position[:, 2] + self.dt * acceleration[:, 2]).unsqueeze(1)
-        ), dim=1)
+        acceleration = torch.cat(
+            (
+                acceleration,
+                (position[:, 2] + self.dt * acceleration[:, 2]).unsqueeze(1),
+            ),
+            dim=1,
+        )
         return acceleration
 
 
@@ -208,10 +227,14 @@ def build_rigid_body_matrix(dof, mass, inertia_matrix, center_of_gravity):
     if dof not in {3, 4, 6}:
         raise ValueError('Only degrees of freedom are 3, 4, and 6')
     if inertia_matrix.shape != (3, 3):
-        raise ValueError('Expected shape of inertia matrix is (3,3). If values are unused due to DOF, set'
-                         'to zero, e.g. I_yy for 4-DOF.')
+        raise ValueError(
+            'Expected shape of inertia matrix is (3,3). If values are unused due to DOF, set'
+            'to zero, e.g. I_yy for 4-DOF.'
+        )
     if center_of_gravity.size != 3:
-        raise ValueError('Center of gravity is expected to have 3 coordinates. Set zg=0 for 3-DOF.')
+        raise ValueError(
+            'Center of gravity is expected to have 3 coordinates. Set zg=0 for 3-DOF.'
+        )
 
     m = mass
     ixx = inertia_matrix[0, 0]
@@ -227,14 +250,16 @@ def build_rigid_body_matrix(dof, mass, inertia_matrix, center_of_gravity):
     yg = center_of_gravity[1]
     zg = center_of_gravity[2]
 
-    mrb = torch.tensor([
-        [m, 0.0, 0.0, 0.0, m * zg, -m * yg],
-        [0.0, m, 0.0, -m * zg, 0.0, m * xg],
-        [0.0, 0.0, m, m * yg, -m * xg, 0.0],
-        [0.0, -m * zg, m * yg, ixx, -ixy, -ixz],
-        [m * zg, 0, -m * xg, -iyx, iyy, -iyz],
-        [-m * yg, m * xg, 0.0, -izx, -izy, izz]
-    ]).float()
+    mrb = torch.tensor(
+        [
+            [m, 0.0, 0.0, 0.0, m * zg, -m * yg],
+            [0.0, m, 0.0, -m * zg, 0.0, m * xg],
+            [0.0, 0.0, m, m * yg, -m * xg, 0.0],
+            [0.0, -m * zg, m * yg, ixx, -ixy, -ixz],
+            [m * zg, 0, -m * xg, -iyx, iyy, -iyz],
+            [-m * yg, m * xg, 0.0, -izx, -izy, izz],
+        ]
+    ).float()
 
     if dof == 6:
         mrb = mrb
@@ -260,12 +285,14 @@ def build_4dof_added_mass_matrix(config: AddedMass4DOFConfig):
     npd = config.Npd
     nrd = config.Nrd
 
-    ma = torch.tensor([
-        [xud, 0.0, 0.0, 0.0],
-        [0.0, yvd, ypd, yrd],
-        [0.0, kvd, kpd, krd],
-        [0.0, nvd, npd, nrd]
-    ]).float()
+    ma = torch.tensor(
+        [
+            [xud, 0.0, 0.0, 0.0],
+            [0.0, yvd, ypd, yrd],
+            [0.0, kvd, kpd, krd],
+            [0.0, nvd, npd, nrd],
+        ]
+    ).float()
     ma = -ma
     return ma
 
@@ -275,24 +302,32 @@ class RigidBodyCoriolis4DOF(nn.Module):
         super().__init__()
 
         if cog.size != 3:
-            raise ValueError('Center of gravity is expected as (x_g, y_g, z_g). Assume y_g=0.')
+            raise ValueError(
+                'Center of gravity is expected as (x_g, y_g, z_g). Assume y_g=0.'
+            )
 
         m = mass
         xg = cog[0]
         zg = cog[2]
 
         # transpose for correct multiplication with batch
-        self.crb = nn.Parameter(torch.tensor([
-            [0.0, -m, m*zg, -m*xg],
-            [m, 0.0, 0.0, 0.0],
-            [-m*zg, 0.0, 0.0, 0.0],
-            [m*xg, 0.0, 0.0, 0.0]
-        ]).float().t())
+        self.crb = nn.Parameter(
+            torch.tensor(
+                [
+                    [0.0, -m, m * zg, -m * xg],
+                    [m, 0.0, 0.0, 0.0],
+                    [-m * zg, 0.0, 0.0, 0.0],
+                    [m * xg, 0.0, 0.0, 0.0],
+                ]
+            )
+            .float()
+            .t()
+        )
         self.crb.requires_grad = False
 
     def forward(self, velocity):
         r = velocity[:, 3].unsqueeze(1)
-        tau_crb = torch.mm(r*velocity, self.crb)
+        tau_crb = torch.mm(r * velocity, self.crb)
         return tau_crb
 
 
@@ -300,12 +335,21 @@ class Buoyancy(nn.Module):
     def __init__(self, rho_water, grav_acc, displacement, metacentric_height):
         super().__init__()
 
-        self.G = nn.Parameter(torch.tensor([
-            [0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, rho_water*grav_acc*displacement*metacentric_height, 0.0],
-            [0.0, 0.0, 0.0, 0.0]
-        ]).float())
+        self.G = nn.Parameter(
+            torch.tensor(
+                [
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [
+                        0.0,
+                        0.0,
+                        rho_water * grav_acc * displacement * metacentric_height,
+                        0.0,
+                    ],
+                    [0.0, 0.0, 0.0, 0.0],
+                ]
+            ).float()
+        )
         self.G.requires_grad = False
 
     def forward(self, position):
@@ -315,11 +359,15 @@ class Buoyancy(nn.Module):
 
 
 class SymmetricRudderPropellerPair(nn.Module):
-    def __init__(self, wake_factor, diameter, rho_water, thrust_coefficient, propeller_location):
+    def __init__(
+        self, wake_factor, diameter, rho_water, thrust_coefficient, propeller_location
+    ):
         super().__init__()
 
         if propeller_location.size != 3:
-            raise ValueError('Propeller location relative to COG has expected form (lx, ly, lz).')
+            raise ValueError(
+                'Propeller location relative to COG has expected form (lx, ly, lz).'
+            )
 
         self.w = nn.Parameter(torch.tensor(wake_factor).float())
         self.w.requires_grad = False
@@ -344,26 +392,32 @@ class SymmetricRudderPropellerPair(nn.Module):
         """
         u = velocity[:, 0]
         v = velocity[:, 1]
-        nl = (1.0/60.0) * control[:, 0]
-        nr = (1.0/60.0) * control[:, 0]
+        nl = (1.0 / 60.0) * control[:, 0]
+        nr = (1.0 / 60.0) * control[:, 0]
         deltal = control[:, 1]
         deltar = control[:, 2]
 
-        val = F.relu((1.0-self.w)*(torch.cos(deltal)*u + torch.sin(deltal)*v))
-        var = F.relu((1.0-self.w)*(torch.cos(deltar)*u + torch.sin(deltar)*v))
+        val = F.relu((1.0 - self.w) * (torch.cos(deltal) * u + torch.sin(deltal) * v))
+        var = F.relu((1.0 - self.w) * (torch.cos(deltar) * u + torch.sin(deltar) * v))
 
-        xl = torch.cat((
-            (self.rho*self.d**2*val*val).unsqueeze(1),
-            (self.rho*self.d**3*val*nl).unsqueeze(1),
-            (self.rho*self.d**4*nl*nl).unsqueeze(1)
-        ), dim=1)
+        xl = torch.cat(
+            (
+                (self.rho * self.d**2 * val * val).unsqueeze(1),
+                (self.rho * self.d**3 * val * nl).unsqueeze(1),
+                (self.rho * self.d**4 * nl * nl).unsqueeze(1),
+            ),
+            dim=1,
+        )
         tl = F.relu(xl @ self.kt)
 
-        xr = torch.cat((
-            (self.rho*self.d**2*var*var).unsqueeze(1),
-            (self.rho*self.d**3*var*nr).unsqueeze(1),
-            (self.rho*self.d**4*nr*nr).unsqueeze(1)
-        ), dim=1)
+        xr = torch.cat(
+            (
+                (self.rho * self.d**2 * var * var).unsqueeze(1),
+                (self.rho * self.d**3 * var * nr).unsqueeze(1),
+                (self.rho * self.d**4 * nr * nr).unsqueeze(1),
+            ),
+            dim=1,
+        )
         tr = F.relu(xr @ self.kt)
 
         fxl = torch.cos(deltal) * tl
@@ -371,12 +425,15 @@ class SymmetricRudderPropellerPair(nn.Module):
         fyl = torch.sin(deltal) * tl
         fyr = torch.sin(deltar) * tr
 
-        tau_control = torch.cat((
-            (fxl + fxr).unsqueeze(1),
-            (fyl + fyr).unsqueeze(1),
-            (self.lz * (-fyl - fyr)).unsqueeze(1),
-            (self.lx * (fyl + fyr) + self.ly * (fxl - fxr)).unsqueeze(1)
-        ), dim=1)
+        tau_control = torch.cat(
+            (
+                (fxl + fxr).unsqueeze(1),
+                (fyl + fyr).unsqueeze(1),
+                (self.lz * (-fyl - fyr)).unsqueeze(1),
+                (self.lx * (fyl + fyr) + self.ly * (fxl - fxr)).unsqueeze(1),
+            ),
+            dim=1,
+        )
 
         return tau_control
 
@@ -385,6 +442,7 @@ class BasicPelicanMotionEquations(nn.Module):
     """
     Motion model of quadrotor without propulsion.
     """
+
     def __init__(self, time_delta: float, config: BasicPelicanMotionConfig):
         super().__init__()
 
@@ -429,15 +487,18 @@ class BasicPelicanMotionEquations(nn.Module):
         phidot = p + q * sphi * ttheta + r * cphi * ttheta
         thetadot = q * cphi - r * sphi
 
-        acceleration = torch.cat((
-            phidot.unsqueeze(1),
-            thetadot.unsqueeze(1),
-            xdotdot.unsqueeze(1),
-            ydotdot.unsqueeze(1),
-            zdotdot.unsqueeze(1),
-            pdot.unsqueeze(1),
-            qdot.unsqueeze(1),
-            rdot.unsqueeze(1)
-        ), dim=1)
+        acceleration = torch.cat(
+            (
+                phidot.unsqueeze(1),
+                thetadot.unsqueeze(1),
+                xdotdot.unsqueeze(1),
+                ydotdot.unsqueeze(1),
+                zdotdot.unsqueeze(1),
+                pdot.unsqueeze(1),
+                qdot.unsqueeze(1),
+                rdot.unsqueeze(1),
+            ),
+            dim=1,
+        )
 
         return acceleration

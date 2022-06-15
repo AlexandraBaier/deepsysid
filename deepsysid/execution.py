@@ -52,7 +52,7 @@ class ExperimentConfiguration(BaseModel):
 
     @classmethod
     def from_grid_search_template(
-            cls, template: ExperimentGridSearchTemplate, device_name: str
+        cls, template: ExperimentGridSearchTemplate, device_name: str
     ) -> 'ExperimentConfiguration':
         models: Dict[str, ExperimentModelConfiguration] = dict()
         for model_template in template.models:
@@ -64,16 +64,18 @@ class ExperimentConfiguration(BaseModel):
                 state_names=template.settings.state_names,
                 time_delta=template.settings.time_delta,
                 window_size=template.settings.window_size,
-                horizon_size=template.settings.horizon_size
+                horizon_size=template.settings.horizon_size,
             )
             static_model_params = model_template.static_parameters
 
-            for combination in itertools.product(*list(
-                model_template.flexible_parameters.values()
-            )):
+            for combination in itertools.product(
+                *list(model_template.flexible_parameters.values())
+            ):
                 model_name = model_template.model_base_name
                 flexible_model_params = dict()
-                for param_name, param_value in zip(model_template.flexible_parameters.keys(), combination):
+                for param_name, param_value in zip(
+                    model_template.flexible_parameters.keys(), combination
+                ):
                     flexible_model_params[param_name] = param_value
                     if issubclass(type(param_value), list):
                         model_name += '-' + '_'.join(map(str, param_value))
@@ -83,14 +85,20 @@ class ExperimentConfiguration(BaseModel):
                         else:
                             model_name += f'-{param_value}'.replace('.', '')
 
-                model_config = ExperimentModelConfiguration.parse_obj(dict(
-                    model_class=model_class_str,
-                    location=os.path.join(template.base_path, model_name),
-                    parameters=model_class.CONFIG.parse_obj(
-                        # Merge dictionaries
-                        {**base_model_params, **static_model_params, **flexible_model_params}
+                model_config = ExperimentModelConfiguration.parse_obj(
+                    dict(
+                        model_class=model_class_str,
+                        location=os.path.join(template.base_path, model_name),
+                        parameters=model_class.CONFIG.parse_obj(
+                            # Merge dictionaries
+                            {
+                                **base_model_params,
+                                **static_model_params,
+                                **flexible_model_params,
+                            }
+                        ),
                     )
-                ))
+                )
                 models[model_name] = model_config
 
         return cls(
@@ -102,12 +110,12 @@ class ExperimentConfiguration(BaseModel):
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
             thresholds=template.settings.thresholds,
-            models=models
+            models=models,
         )
 
 
 def initialize_model(
-        experiment_config: ExperimentConfiguration, model_name: str, device_name: str
+    experiment_config: ExperimentConfiguration, model_name: str, device_name: str
 ) -> DynamicIdentificationModel:
     model_config = experiment_config.models[model_name]
 
@@ -124,7 +132,7 @@ def initialize_model(
 
 
 def load_control_and_state(
-        file_path: str, control_names: List[str], state_names: List[str]
+    file_path: str, control_names: List[str], state_names: List[str]
 ) -> Tuple[np.array, np.array]:
     sim = pd.read_csv(file_path)
     control_df = sim[control_names]
@@ -134,14 +142,16 @@ def load_control_and_state(
 
 
 def load_simulation_data(
-        directory: str, control_names: List[str], state_names: List[str]
+    directory: str, control_names: List[str], state_names: List[str]
 ) -> Tuple[List[np.array], List[np.array]]:
     file_names = load_file_names(directory)
 
     controls = []
     states = []
     for fn in file_names:
-        control, state = load_control_and_state(file_path=fn, control_names=control_names, state_names=state_names)
+        control, state = load_control_and_state(
+            file_path=fn, control_names=control_names, state_names=state_names
+        )
         controls.append(control)
         states.append(state)
     return controls, states
@@ -157,12 +167,16 @@ def load_file_names(directory: str) -> List[str]:
 
 def load_model(model: DynamicIdentificationModel, directory: str, model_name: str):
     extension = model.get_file_extension()
-    model.load(tuple(os.path.join(directory, f'{model_name}.{ext}') for ext in extension))
+    model.load(
+        tuple(os.path.join(directory, f'{model_name}.{ext}') for ext in extension)
+    )
 
 
 def save_model(model: DynamicIdentificationModel, directory: str, model_name: str):
     extension = model.get_file_extension()
-    model.save(tuple(os.path.join(directory, f'{model_name}.{ext}') for ext in extension))
+    model.save(
+        tuple(os.path.join(directory, f'{model_name}.{ext}') for ext in extension)
+    )
 
 
 def retrieve_model_class(model_class_string: str) -> Type[DynamicIdentificationModel]:

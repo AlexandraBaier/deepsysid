@@ -4,7 +4,11 @@ import h5py
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-from .base import DynamicIdentificationModel, FixedWindowModel, DynamicIdentificationModelConfig
+from .base import (
+    DynamicIdentificationModel,
+    FixedWindowModel,
+    DynamicIdentificationModelConfig,
+)
 from .. import utils
 
 
@@ -51,7 +55,12 @@ class LinearModel(DynamicIdentificationModel):
 
         self.regressor.fit(train_x, train_y)
 
-    def simulate(self, initial_control: np.ndarray, initial_state: np.ndarray, control: np.ndarray) -> np.ndarray:
+    def simulate(
+        self,
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
+    ) -> np.ndarray:
         assert initial_control.shape[1] == self.control_dim
         assert initial_state.shape[1] == self.state_dim
         assert control.shape[1] == self.control_dim
@@ -61,12 +70,14 @@ class LinearModel(DynamicIdentificationModel):
 
         pred_states = []
         for i in range(control.shape[0]):
-            x = np.concatenate((control[i], state)).reshape(1,-1)
+            x = np.concatenate((control[i], state)).reshape(1, -1)
             x = self._map_input(x)
             state = np.squeeze(self.regressor.predict(x))
             pred_states.append(state)
 
-        pred_states = utils.denormalize(np.array(pred_states), self.state_mean, self.state_stddev)
+        pred_states = utils.denormalize(
+            np.array(pred_states), self.state_mean, self.state_stddev
+        )
 
         assert pred_states.shape == (control.shape[0], initial_state.shape[1])
 
@@ -93,7 +104,7 @@ class LinearModel(DynamicIdentificationModel):
             self.state_stddev = f['state_stddev'][:]
 
     def get_file_extension(self) -> Tuple[str]:
-        return 'hdf5',
+        return ('hdf5',)
 
     def get_parameter_count(self) -> int:
         count = 0
@@ -119,10 +130,14 @@ class LinearLag(FixedWindowModel):
 
     x(t) = P*s(t) with s(t)=[u(t-W) ... u(t) x(t-W) ... x(t-1)]
     """
+
     CONFIG = LinearLagConfig
 
     def __init__(self, config: LinearLagConfig):
-        super().__init__(window_size=config.window_size, regressor=LinearRegression(fit_intercept=True))
+        super().__init__(
+            window_size=config.window_size,
+            regressor=LinearRegression(fit_intercept=True),
+        )
 
     def save(self, file_path: Tuple[str, ...]):
         with h5py.File(file_path[0], 'w') as f:
@@ -147,7 +162,7 @@ class LinearLag(FixedWindowModel):
             self.state_stddev = f['state_stddev'][:]
 
     def get_file_extension(self) -> Tuple[str, ...]:
-        return 'hdf5',
+        return ('hdf5',)
 
     def get_parameter_count(self) -> int:
         count = 0
@@ -179,7 +194,9 @@ class QuadraticControlLag(LinearLag):
         # Apply square to control inputs
         cmask = np.ones(self.control_dim, dtype=bool)
         tmask = np.zeros(self.state_dim, dtype=bool)
-        mask = np.concatenate((np.tile(np.concatenate((cmask, tmask)), self.window_size), cmask))
+        mask = np.concatenate(
+            (np.tile(np.concatenate((cmask, tmask)), self.window_size), cmask)
+        )
         squared_control = np.square(x[:, mask])
         x = np.hstack((x, squared_control))
         return x

@@ -29,7 +29,9 @@ class SemiphysicalComponent(nn.Module, abc.ABC):
         self.state_mean = None
         self.state_std = None
 
-    def set_normalization_values(self, control_mean, state_mean, control_std, state_std):
+    def set_normalization_values(
+        self, control_mean, state_mean, control_std, state_std
+    ):
         self.control_mean = control_mean
         self.state_mean = state_mean
         self.control_std = control_std
@@ -46,8 +48,10 @@ class SemiphysicalComponent(nn.Module, abc.ABC):
 
     @abc.abstractmethod
     def train_semiphysical(
-            self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray],
-            physical: PhysicalComponent
+        self,
+        control_seqs: List[np.ndarray],
+        state_seqs: List[np.ndarray],
+        physical: PhysicalComponent,
     ):
         pass
 
@@ -57,8 +61,10 @@ class NoOpSemiphysicalComponent(SemiphysicalComponent):
         return torch.zeros_like(state)
 
     def train_semiphysical(
-            self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray],
-            physical: PhysicalComponent
+        self,
+        control_seqs: List[np.ndarray],
+        state_seqs: List[np.ndarray],
+        physical: PhysicalComponent,
     ):
         pass
 
@@ -67,11 +73,15 @@ class LinearComponent(SemiphysicalComponent):
     def __init__(self, control_dim: int, state_dim: int, device: torch.device):
         super().__init__(control_dim, state_dim, device)
 
-        self.model = nn.Linear(
-            in_features=self.get_semiphysical_features(),
-            out_features=state_dim,
-            bias=False
-        ).float().to(self.device)
+        self.model = (
+            nn.Linear(
+                in_features=self.get_semiphysical_features(),
+                out_features=state_dim,
+                bias=False,
+            )
+            .float()
+            .to(self.device)
+        )
         self.model.weight.requires_grad = False
 
     def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
@@ -88,27 +98,42 @@ class LinearComponent(SemiphysicalComponent):
     def get_semiphysical_features(self) -> int:
         return self.control_dim + self.state_dim
 
-    def expand_semiphysical_input(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+    def expand_semiphysical_input(
+        self, control: torch.Tensor, state: torch.Tensor
+    ) -> torch.Tensor:
         return torch.cat((control, state), dim=1)
 
     def train_semiphysical(
-            self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray],
-            physical: PhysicalComponent
+        self,
+        control_seqs: List[np.ndarray],
+        state_seqs: List[np.ndarray],
+        physical: PhysicalComponent,
     ):
         semiphysical_in_seqs = [
             self.expand_semiphysical_input(
-                torch.from_numpy(utils.normalize(control[1:], self.control_mean, self.control_std)),
-                torch.from_numpy(utils.normalize(state[:-1], self.state_mean, self.state_std))
-            ) for control, state in zip(control_seqs, state_seqs)]
-
+                torch.from_numpy(
+                    utils.normalize(control[1:], self.control_mean, self.control_std)
+                ),
+                torch.from_numpy(
+                    utils.normalize(state[:-1], self.state_mean, self.state_std)
+                ),
+            )
+            for control, state in zip(control_seqs, state_seqs)
+        ]
 
         train_x, train_y = [], []
-        for sp_in, un_control, un_state \
-                in zip(semiphysical_in_seqs, control_seqs, state_seqs):
-            ydot_physical = physical.forward(
-                torch.from_numpy(un_control[1:, :]).float().to(self.device),
-                torch.from_numpy(un_state[:-1, :]).float().to(self.device)
-            ).cpu().detach().numpy()
+        for sp_in, un_control, un_state in zip(
+            semiphysical_in_seqs, control_seqs, state_seqs
+        ):
+            ydot_physical = (
+                physical.forward(
+                    torch.from_numpy(un_control[1:, :]).float().to(self.device),
+                    torch.from_numpy(un_state[:-1, :]).float().to(self.device),
+                )
+                .cpu()
+                .detach()
+                .numpy()
+            )
             ydot_physical = ydot_physical / self.state_std
 
             train_x.append(sp_in)
@@ -123,43 +148,59 @@ class LinearComponent(SemiphysicalComponent):
         # No intercept in linear time invariant systems
         regressor = LinearRegression(fit_intercept=False)
         regressor.fit(train_x, train_y)
-        linear_fit = r2_score(regressor.predict(train_x), train_y, multioutput='uniform_average')
+        linear_fit = r2_score(
+            regressor.predict(train_x), train_y, multioutput='uniform_average'
+        )
         logger.info(f'Whitebox R2 Score: {linear_fit}')
 
-        self.model.weight = nn.Parameter(torch.from_numpy(regressor.coef_).float().to(self.device), requires_grad=False)
+        self.model.weight = nn.Parameter(
+            torch.from_numpy(regressor.coef_).float().to(self.device),
+            requires_grad=False,
+        )
 
 
 class QuadraticComponent(LinearComponent):
     def get_semiphysical_features(self) -> int:
         return 2 * (self.control_dim + self.state_dim)
 
-    def expand_semiphysical_input(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        return torch.cat((
-            control,
-            state,
-            control * control,
-            state * state
-        ), dim=1)
+    def expand_semiphysical_input(
+        self, control: torch.Tensor, state: torch.Tensor
+    ) -> torch.Tensor:
+        return torch.cat((control, state, control * control, state * state), dim=1)
 
 
 class BlankeComponent(LinearComponent):
     def train_semiphysical(
-            self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray],
-            physical: PhysicalComponent
+        self,
+        control_seqs: List[np.ndarray],
+        state_seqs: List[np.ndarray],
+        physical: PhysicalComponent,
     ):
         semiphysical_in_seqs = [
             self.expand_semiphysical_input(
-                torch.from_numpy(utils.normalize(control[1:], self.control_mean, self.control_std)),
-                torch.from_numpy(utils.normalize(state[:-1], self.state_mean, self.state_std))
-            ) for control, state in zip(control_seqs, state_seqs)]
+                torch.from_numpy(
+                    utils.normalize(control[1:], self.control_mean, self.control_std)
+                ),
+                torch.from_numpy(
+                    utils.normalize(state[:-1], self.state_mean, self.state_std)
+                ),
+            )
+            for control, state in zip(control_seqs, state_seqs)
+        ]
 
         train_x, train_y = [], []
-        for sp_in, un_control, un_state \
-                in zip(semiphysical_in_seqs, control_seqs, state_seqs):
-            ydot_physical = physical.forward(
-                torch.from_numpy(un_control[1:, :]).float().to(self.device),
-                torch.from_numpy(un_state[:-1, :]).float().to(self.device)
-            ).cpu().detach().numpy()
+        for sp_in, un_control, un_state in zip(
+            semiphysical_in_seqs, control_seqs, state_seqs
+        ):
+            ydot_physical = (
+                physical.forward(
+                    torch.from_numpy(un_control[1:, :]).float().to(self.device),
+                    torch.from_numpy(un_state[:-1, :]).float().to(self.device),
+                )
+                .cpu()
+                .detach()
+                .numpy()
+            )
             ydot_physical = ydot_physical / self.state_std
 
             train_x.append(sp_in)
@@ -176,7 +217,9 @@ class BlankeComponent(LinearComponent):
             regressor = LinearRegression(fit_intercept=False)
             regressor.fit(train_x[:, dim_mask], train_y[:, dim_idx])
             linear_fit = r2_score(
-                regressor.predict(train_x[:, dim_mask]), train_y[:, dim_idx], multioutput='uniform_average'
+                regressor.predict(train_x[:, dim_mask]),
+                train_y[:, dim_idx],
+                multioutput='uniform_average',
             )
             logger.info(f'Whitebox R2 Score ({dim_name}): {linear_fit}')
             return regressor
@@ -196,12 +239,16 @@ class BlankeComponent(LinearComponent):
         weight[3, mask_r] = reg_r.coef_
         weight[4, mask_phi] = reg_phi.coef_
 
-        self.model.weight = nn.Parameter(torch.from_numpy(weight).float().to(self.device), requires_grad=False)
+        self.model.weight = nn.Parameter(
+            torch.from_numpy(weight).float().to(self.device), requires_grad=False
+        )
 
     def get_semiphysical_in_features(self) -> int:
         return 20 + self.control_dim
 
-    def expand_semiphysical_input(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+    def expand_semiphysical_input(
+        self, control: torch.Tensor, state: torch.Tensor
+    ) -> torch.Tensor:
         u = state[:, 0].unsqueeze(1)
         v = state[:, 1].unsqueeze(1)
         p = state[:, 2].unsqueeze(1)
@@ -214,26 +261,29 @@ class BlankeComponent(LinearComponent):
         aur = torch.abs(u * r)
         auphi = torch.abs(u * phi)
 
-        state = torch.cat((
-            u,  # 0: X
-            v,  # 1: Y
-            p,  # 2: phi
-            r,  # 3: N
-            phi,  # 4: phi
-            au * u,  # 5: X
-            v * r,  # 6: X
-            au * v,  # 7: Y, N
-            u * r,  # 8: Y
-            av * v,  # 9: Y
-            ar * v,  # 10: Y
-            av * r,  # 11: Y, N
-            auv * phi,  # 12: Y
-            aur * phi,  # 13: Y
-            u * u * phi,  # 14: Y
-            au * r,  # 15: N
-            ar * r,  # 16: N
-            auphi * phi,  # 17: N
-            ar * u * phi,  # 18: N
-            au * u * phi  # 19: N
-        ), dim=1)
+        state = torch.cat(
+            (
+                u,  # 0: X
+                v,  # 1: Y
+                p,  # 2: phi
+                r,  # 3: N
+                phi,  # 4: phi
+                au * u,  # 5: X
+                v * r,  # 6: X
+                au * v,  # 7: Y, N
+                u * r,  # 8: Y
+                av * v,  # 9: Y
+                ar * v,  # 10: Y
+                av * r,  # 11: Y, N
+                auv * phi,  # 12: Y
+                aur * phi,  # 13: Y
+                u * u * phi,  # 14: Y
+                au * r,  # 15: N
+                ar * r,  # 16: N
+                auphi * phi,  # 17: N
+                ar * u * phi,  # 18: N
+                au * u * phi,  # 19: N
+            ),
+            dim=1,
+        )
         return torch.cat((control, state), dim=1)
