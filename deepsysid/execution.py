@@ -185,9 +185,10 @@ def retrieve_model_class(model_class_string: str) -> Type[DynamicIdentificationM
     module_string = '.'.join(parts[:-1])
     module = __import__(module_string)
 
-    cls = getattr(module, parts[2])
-    for component in parts[1:]:
-        cls = getattr(cls, component)
+    cls = getattr(module, parts[1])
+    if len(parts) > 2:
+        for component in parts[2:]:
+            cls = getattr(cls, component)
 
     if not issubclass(cls, DynamicIdentificationModel):
         raise ValueError(f'{cls} is not a subclass of DynamicIdentificationModel')
