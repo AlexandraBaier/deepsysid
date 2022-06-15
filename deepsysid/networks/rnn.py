@@ -1,10 +1,18 @@
+from typing import List, Optional, Tuple, Union
+
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class BasicLSTM(nn.Module):
     def __init__(
-        self, input_dim, recurrent_dim, num_recurrent_layers, output_dim, dropout
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: List[int],
+        dropout: float,
     ):
         super().__init__()
 
@@ -34,7 +42,13 @@ class BasicLSTM(nn.Module):
         for layer in self.out:
             nn.init.xavier_normal_(layer.weight)
 
-    def forward(self, x_pred, y_init=None, hx=None, return_state=False):
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        y_init: Optional[torch.Tensor] = None,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        return_state=False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
         if y_init is not None:
             h0 = y_init.new_zeros(
                 (self.num_recurrent_layers, y_init.shape[0], self.recurrent_dim)
@@ -57,7 +71,12 @@ class BasicLSTM(nn.Module):
 
 class LinearOutputLSTM(nn.Module):
     def __init__(
-        self, input_dim, recurrent_dim, num_recurrent_layers, output_dim, dropout
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: int,
+        dropout: float,
     ):
         super().__init__()
 
@@ -82,7 +101,12 @@ class LinearOutputLSTM(nn.Module):
 
         nn.init.xavier_normal_(self.out.weight)
 
-    def forward(self, x_pred, hx=None, return_state=False):
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        return_state=False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
         x, (h0, c0) = self.predictor_lstm.forward(x_pred, hx)
         x = self.out.forward(x)
 

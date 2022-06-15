@@ -1,9 +1,9 @@
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 import numpy as np
 
 
-def mean_stddev(array_seq):
+def mean_stddev(array_seq: List[np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
     mean = np.mean(np.vstack(array_seq), axis=0)
     stddev = np.std(np.vstack(array_seq), axis=0)
     return mean, stddev
@@ -17,17 +17,14 @@ def normalize(x, mean, stddev):
     return (x - mean) / stddev
 
 
-def state2target_index(state_names, target_names):
-    index_map = [state_names.index(target) for target in target_names]
-    return index_map
-
-
-def sliding_window(arr, width):
+def sliding_window(arr: np.ndarray, width: int) -> np.ndarray:
     # non-overlapping windows
     return np.hstack([arr[i : 1 + i - width or None : width] for i in range(width)])
 
 
-def transform_to_single_step_training_data(control, state, window_size):
+def transform_to_single_step_training_data(
+    control: np.ndarray, state: np.ndarray, window_size: int
+) -> Tuple[np.ndarray, np.ndarray]:
     full_dim = control.shape[1] + state.shape[1]
     control_dim = control.shape[1]
 
@@ -53,7 +50,14 @@ def coord2angle(cos_alpha, sin_alpha):
     return np.arctan(sin_alpha / cos_alpha)
 
 
-def compute_trajectory_4dof(state, state_names, sample_time, x0=0.0, y0=0.0, psi0=0.0):
+def compute_trajectory_4dof(
+    state: np.ndarray,
+    state_names: List[str],
+    sample_time: float,
+    x0=0.0,
+    y0=0.0,
+    psi0=0.0,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     name2idx = dict((name, idx) for idx, name in enumerate(state_names))
 
     u = state[:, name2idx['u']]
@@ -94,13 +98,13 @@ def compute_trajectory_4dof(state, state_names, sample_time, x0=0.0, y0=0.0, psi
     return x, y, phi, psi
 
 
-def velocity2speed(state, state_names):
+def velocity2speed(state: np.ndarray, state_names: List[str]) -> np.ndarray:
     u = state[:, state_names.index('u')]
     v = state[:, state_names.index('v')]
     return np.sqrt(np.multiply(u, u) + np.multiply(v, v)).reshape(-1, 1)
 
 
-def index_of_agreement(true, pred, j=1):
+def index_of_agreement(true: np.ndarray, pred: np.ndarray, j=1) -> np.ndarray:
     error_sum = np.sum(np.power(np.abs(true - pred), j), axis=0)
     partial_diff_true = np.abs(true - np.mean(true, axis=0))
     partial_diff_pred = np.abs(pred - np.mean(true, axis=0))

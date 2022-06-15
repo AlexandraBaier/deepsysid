@@ -63,10 +63,10 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         self.window_size = window_size
         self.regressor = regressor
 
-        self.control_mean = None
-        self.control_stddev = None
-        self.state_mean = None
-        self.state_stddev = None
+        self.control_mean: Optional[np.ndarray] = None
+        self.control_stddev: Optional[np.ndarray] = None
+        self.state_mean: Optional[np.ndarray] = None
+        self.state_stddev: Optional[np.ndarray] = None
 
     def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
         assert len(control_seqs) == len(state_seqs)

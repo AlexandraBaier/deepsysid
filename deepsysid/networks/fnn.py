@@ -1,5 +1,6 @@
 from typing import List
 
+import torch
 import torch.nn as nn
 
 
@@ -21,7 +22,7 @@ class DenseReLUNetwork(nn.Module):
         nn_layers.append(nn.Linear(layers[-1], self.output_dim))
         self.network = nn.Sequential(*nn_layers)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Output layer is linear.
         :param x: (batch, input_dim)

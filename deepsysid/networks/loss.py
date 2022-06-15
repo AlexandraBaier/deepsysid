@@ -1,9 +1,10 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class MSGELoss(nn.Module):
-    def forward(self, predicted, true):
+    def forward(self, predicted: torch.Tensor, true: torch.Tensor) -> torch.Tensor:
         """
         :param predicted: shape=(batch, time, _)
         :param true: shape=(batch, time, _)

@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import h5py
 import numpy as np
@@ -18,10 +18,10 @@ class LinearModel(DynamicIdentificationModel):
         self.control_dim = len(config.control_names)
         self.state_dim = len(config.state_names)
 
-        self.control_mean = None
-        self.control_stddev = None
-        self.state_mean = None
-        self.state_stddev = None
+        self.control_mean: Optional[np.ndarray] = None
+        self.control_stddev: Optional[np.ndarray] = None
+        self.state_mean: Optional[np.ndarray] = None
+        self.state_stddev: Optional[np.ndarray] = None
 
     def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
         assert len(control_seqs) == len(state_seqs)
