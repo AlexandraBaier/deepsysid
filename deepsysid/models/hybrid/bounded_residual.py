@@ -5,29 +5,20 @@ from typing import Literal
 
 import numpy as np
 import torch
-from torch import nn
-from torch import optim
+from torch import nn, optim
 from torch.nn.functional import mse_loss
 from torch.utils import data
 
-from .physical import (
-    PhysicalComponent,
-    NoOpPhysicalComponent,
-    MinimalManeuveringComponent,
-    PropulsionManeuveringComponent,
-    MinimalManeuveringConfig,
-    PropulsionManeuveringConfig,
-)
-from .semiphysical import (
-    SemiphysicalComponent,
-    NoOpSemiphysicalComponent,
-    LinearComponent,
-    BlankeComponent,
-)
-from ..base import DynamicIdentificationModelConfig
 from ... import utils
-from .. import base
 from ...networks import loss, rnn
+from .. import base
+from ..base import DynamicIdentificationModelConfig
+from .physical import (MinimalManeuveringComponent, MinimalManeuveringConfig,
+                       NoOpPhysicalComponent, PhysicalComponent,
+                       PropulsionManeuveringComponent,
+                       PropulsionManeuveringConfig)
+from .semiphysical import (BlankeComponent, LinearComponent,
+                           NoOpSemiphysicalComponent, SemiphysicalComponent)
 
 logger = logging.getLogger()
 

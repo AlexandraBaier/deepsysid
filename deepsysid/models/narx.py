@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -8,11 +8,10 @@ from torch import optim
 from torch.nn import functional
 from torch.utils import data
 
+from .. import utils
+from ..networks.fnn import DenseReLUNetwork
 from . import base
 from .base import DynamicIdentificationModelConfig
-from ..networks.fnn import DenseReLUNetwork
-from .. import utils
-
 
 logger = logging.getLogger()
 

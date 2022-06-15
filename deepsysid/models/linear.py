@@ -4,12 +4,9 @@ import h5py
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-from .base import (
-    DynamicIdentificationModel,
-    FixedWindowModel,
-    DynamicIdentificationModelConfig,
-)
 from .. import utils
+from .base import (DynamicIdentificationModel,
+                   DynamicIdentificationModelConfig, FixedWindowModel)
 
 
 class LinearModel(DynamicIdentificationModel):

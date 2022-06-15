@@ -9,10 +9,10 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
 
+from .. import utils
+from ..networks import loss, rnn
 from . import base
 from .base import DynamicIdentificationModelConfig
-from ..networks import loss, rnn
-from .. import utils
 
 logger = logging.getLogger()
 

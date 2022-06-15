@@ -9,9 +9,7 @@ from sklearn.metrics import r2_score
 from torch import nn
 
 from ... import utils
-
 from .physical import PhysicalComponent
-
 
 logger = logging.getLogger()
 

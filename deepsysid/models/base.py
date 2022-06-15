@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Tuple, List, Optional, Type
+from typing import List, Optional, Tuple, Type
 
 import numpy as np
 from pydantic import BaseModel
