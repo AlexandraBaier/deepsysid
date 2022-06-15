@@ -3,9 +3,11 @@ venv
 .idea
 .ipynb_checkpoints
 *.egg-info
-*.env
+env
 build
 tmp
 environment_variables
 *.pgf
 multistep_sysid.egg-info
+dist
+poetry.lock
