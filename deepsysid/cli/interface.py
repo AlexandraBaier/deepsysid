@@ -69,6 +69,36 @@ class DeepSysIdCommandLineInterface:
         )
         self.evaluate_parser.set_defaults(func=self.__evaluate_model)
 
+        self.evaluate_4dof_ship_trajectory_parser = self.subparsers.add_parser(
+            name='evaluate_4dof_ship_trajectory',
+            help=(
+                'Evaluate the trajectory of a 4-DOF ship model, '
+                'such as the 4-DOF ship motion dataset found at '
+                'https://darus.uni-stuttgart.de/dataset.xhtml?persistentId=doi:10.18419/darus-2905.'
+            )
+        )
+        add_parser_arguments(
+            self.evaluate_4dof_ship_trajectory_parser,
+            model_argument=True,
+            mode_argument=True
+        )
+        self.evaluate_4dof_ship_trajectory_parser.set_defaults(func=self.__evaluate_4dof_ship_trajectory)
+
+        self.evaluate_quadcopter_parser = self.subparsers.add_parser(
+            name='evaluate_quadcopter_trajectory',
+            help=(
+                'Evaluate the trajectory of a 6-DOF quadcopter model, '
+                'such as the quadcopter motion dataset found at '
+                'https://github.com/wavelab/pelican_dataset.'
+            )
+        )
+        add_parser_arguments(
+            self.evaluate_quadcopter_parser,
+            model_argument=True,
+            mode_argument=True
+        )
+        self.evaluate_4dof_ship_trajectory_parser.set_defaults(func=self.__evaluate_quadcopter_trajectory)
+
         self.write_model_names_parser = self.subparsers.add_parser(
             name='write_model_names',
             help='Write all model names from the configuration to a text file.',
@@ -134,7 +164,7 @@ class DeepSysIdCommandLineInterface:
             dataset_directory=os.environ['DATASET_DIRECTORY'],
         )
 
-        test_result = run_model_tests(
+        test_result = test_model(
             simulations=simulations, config=configuration, model=model
         )
         save_model_tests(
@@ -147,7 +177,7 @@ class DeepSysIdCommandLineInterface:
 
         if configuration.thresholds and isinstance(model, HybridResidualLSTMModel):
             for threshold in configuration.thresholds:
-                test_result = run_model_tests(
+                test_result = test_model(
                     simulations=simulations,
                     config=configuration,
                     model=model,
@@ -186,6 +216,66 @@ class DeepSysIdCommandLineInterface:
                     result_directory=os.environ['RESULT_DIRECTORY'],
                     threshold=threshold,
                 )
+
+    def __evaluate_4dof_ship_trajectory(self, args):
+        with open(os.environ['CONFIGURATION'], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
+
+        result_directory = os.environ['RESULT_DIRECTORY']
+        result_file_path = os.path.join(
+            result_directory,
+            args.model,
+            build_result_file_name(
+                mode=args.mode,
+                window_size=config.window_size,
+                horizon_size=config.horizon_size,
+                extension='hdf5'
+            )
+        )
+
+        result = test_4dof_ship_trajectory(
+            config=config,
+            result_file_path=result_file_path
+        )
+
+        save_trajectory_results(
+            result=result,
+            config=config,
+            result_directory=result_directory,
+            model_name=args.model,
+            mode=args.mode
+        )
+
+    def __evaluate_quadcopter_trajectory(self, args):
+        with open(os.environ['CONFIGURATION'], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
+
+        test_directory = os.environ['RESULT_DIRECTORY']
+        test_file_path = os.path.join(
+            test_directory,
+            args.model,
+            build_result_file_name(
+                mode=args.mode,
+                window_size=config.window_size,
+                horizon_size=config.horizon_size,
+                extension='hdf5'
+            )
+        )
+
+        result = test_quadcopter_trajectory(
+            config=config,
+            result_file_path=test_file_path
+        )
+
+        save_trajectory_results(
+            result=result,
+            config=config,
+            result_directory=test_directory,
+            model_name=args.model,
+            mode=args.mode
+        )
 
     def __write_model_names(self, args):
         with open(os.environ['CONFIGURATION'], mode='r') as f:
@@ -333,7 +423,7 @@ class ModelTestResult:
     blackbox: List[np.ndarray]
 
 
-def run_model_tests(
+def test_model(
     simulations: List[Tuple[np.ndarray, np.ndarray, str]],
     config: execution.ExperimentConfiguration,
     model: DynamicIdentificationModel,
@@ -517,6 +607,160 @@ def evaluate_model(
         obj: Dict[str, Any] = dict()
         obj['scores'] = average_scores
         obj['state_names'] = config.state_names
+        json.dump(obj, f)
+
+
+@dataclasses.dataclass
+class TrajectoryResult:
+    file_names: List[str]
+    rmse_mean: float
+    rmse_stddev: float
+    n_samples: int
+    rmse_per_step: List[np.ndarray]
+
+
+def test_4dof_ship_trajectory(
+    config: execution.ExperimentConfiguration,
+    result_file_path: str
+) -> TrajectoryResult:
+    pred = []
+    true = []
+    steps = []
+
+    # Load predicted and true states for each multi-step sequence.
+    with h5py.File(result_file_path, 'r') as f:
+        file_names = [fn.decode('UTF-8') for fn in f['file_names'][:].tolist()]
+        for i in range(len(file_names)):
+            pred.append(f['predicted'][str(i)][:])
+            true.append(f['true'][str(i)][:])
+            steps.append(f['predicted'][str(i)][:].shape[0])
+
+    traj_rmse_per_step_seq = []
+
+    for pred_state, true_state in zip(pred, true):
+        pred_x, pred_y, _, _ = utils.compute_trajectory_4dof(
+            pred_state, config.state_names, config.time_delta
+        )
+        true_x, true_y, _, _ = utils.compute_trajectory_4dof(
+            true_state, config.state_names, config.time_delta
+        )
+
+        traj_rmse_per_step = np.sqrt((pred_x - true_x) ** 2 + (pred_y - true_y) ** 2)
+
+        traj_rmse_per_step_seq.append(traj_rmse_per_step)
+
+    traj_rmse = float(np.mean(np.concatenate(traj_rmse_per_step_seq)))
+    traj_stddev = float(np.std(np.concatenate(traj_rmse_per_step_seq)))
+    n_samples = np.concatenate(traj_rmse_per_step_seq).size
+
+    return TrajectoryResult(
+        file_names=file_names,
+        rmse_mean=traj_rmse,
+        rmse_stddev=traj_stddev,
+        n_samples=n_samples,
+        rmse_per_step=traj_rmse_per_step_seq
+    )
+
+
+def test_quadcopter_trajectory(
+    config: execution.ExperimentConfiguration,
+    result_file_path: str
+) -> TrajectoryResult:
+    pred = []
+    true = []
+    steps = []
+
+    # Load predicted and true states for each multi-step sequence.
+    with h5py.File(result_file_path, 'r') as f:
+        file_names = [fn.decode('UTF-8') for fn in f['file_names'][:].tolist()]
+        for i in range(len(file_names)):
+            pred.append(f['predicted'][str(i)][:])
+            true.append(f['true'][str(i)][:])
+            steps.append(f['predicted'][str(i)][:].shape[0])
+
+    traj_rmse_per_step_seq = []
+
+    for pred_state, true_state in zip(pred, true):
+        px, py, pz = utils.compute_trajectory_quadcopter(
+            pred_state,
+            config.state_names,
+            config.time_delta
+        )
+        tx, ty, tz = utils.compute_trajectory_quadcopter(
+            true_state,
+            config.state_names,
+            config.time_delta
+        )
+
+        traj_rmse_per_step = np.sqrt((px - tx) ** 2 + (py - ty) ** 2 + (pz - tz) ** 2)
+        traj_rmse_per_step_seq.append(traj_rmse_per_step)
+
+    traj_rmse = float(np.mean(np.concatenate(traj_rmse_per_step_seq)))
+    traj_stddev = float(np.std(np.concatenate(traj_rmse_per_step_seq)))
+    n_samples = np.concatenate(traj_rmse_per_step_seq).size
+
+    return TrajectoryResult(
+        file_names=file_names,
+        rmse_mean=traj_rmse,
+        rmse_stddev=traj_stddev,
+        n_samples=n_samples,
+        rmse_per_step=traj_rmse_per_step_seq
+    )
+
+
+def build_trajectory_file_name(
+    mode: Literal['train', 'validation', 'test'],
+    window_size: int,
+    horizon_size: int,
+    extension: str
+) -> str:
+    return f'trajectory-{mode}-w_{window_size}-h_{horizon_size}.{extension}'
+
+
+def save_trajectory_results(
+    result: TrajectoryResult,
+    config: execution.ExperimentConfiguration,
+    result_directory: str,
+    model_name: str,
+    mode: Literal['train', 'validation', 'test']
+):
+    scores_file_path = os.path.join(
+        result_directory,
+        model_name,
+        build_trajectory_file_name(
+            mode=mode,
+            window_size=config.window_size,
+            horizon_size=config.horizon_size,
+            extension='hdf5'
+        )
+    )
+    readable_scores_file_path = os.path.join(
+        result_directory,
+        model_name,
+        build_trajectory_file_name(
+            mode=mode,
+            window_size=config.window_size,
+            horizon_size=config.horizon_size,
+            extension='json'
+        )
+    )
+
+    with h5py.File(scores_file_path, 'w') as f:
+        f.attrs['state_names'] = np.array(list(map(np.string_, config.state_names)))
+        f.create_dataset('file_names', data=np.array(list(map(np.string_, result.file_names))))
+        f.create_dataset('rmse_mean', data=result.rmse_mean)
+        f.create_dataset('rmse_stddev', data=result.rmse_stddev)
+        f.create_dataset('n_samples', data=result.n_samples)
+
+        rmse_grp = f.create_group('rmse_per_step')
+        for idx, traj_rmse_per_step in enumerate(result.rmse_per_step):
+            rmse_grp.create_dataset(str(idx), data=traj_rmse_per_step)
+
+    with open(readable_scores_file_path, mode='w') as f:
+        obj = dict()
+        obj['rmse_mean'] = result.rmse_mean
+        obj['rmse_stddev'] = result.rmse_stddev
+        obj['n_samples'] = result.n_samples
         json.dump(obj, f)
 
 

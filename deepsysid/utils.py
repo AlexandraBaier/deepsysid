@@ -98,6 +98,30 @@ def compute_trajectory_4dof(
     return x, y, phi, psi
 
 
+def compute_trajectory_quadcopter(state, state_names, sample_time):
+    name2idx = dict((name, idx) for idx, name in enumerate(state_names))
+
+    xdot = state[:, name2idx['vx']]
+    ydot = state[:, name2idx['vy']]
+    zdot = state[:, name2idx['vz']]
+
+    shape = xdot.shape
+
+    x = np.zeros(shape)
+    y = np.zeros(shape)
+    z = np.zeros(shape)
+    x[0] = 0.0
+    y[0] = 0.0
+    z[0] = 0.0
+
+    for i in range(1, shape[0]):
+        x[i] = x[i - 1] + sample_time * xdot[i]
+        y[i] = y[i - 1] + sample_time * ydot[i]
+        z[i] = z[i - 1] + sample_time * zdot[i]
+
+    return x, y, z
+
+
 def velocity2speed(state: np.ndarray, state_names: List[str]) -> np.ndarray:
     u = state[:, state_names.index('u')]
     v = state[:, state_names.index('v')]
