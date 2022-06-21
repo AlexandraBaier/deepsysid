@@ -98,7 +98,9 @@ def compute_trajectory_4dof(
     return x, y, phi, psi
 
 
-def compute_trajectory_quadcopter(state, state_names, sample_time):
+def compute_trajectory_quadcopter(
+    state: np.ndarray, state_names: List[str], sample_time: float
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     name2idx = dict((name, idx) for idx, name in enumerate(state_names))
 
     xdot = state[:, name2idx['vx']]
