@@ -104,7 +104,7 @@ def velocity2speed(state: np.ndarray, state_names: List[str]) -> np.ndarray:
     return np.sqrt(np.multiply(u, u) + np.multiply(v, v)).reshape(-1, 1)
 
 
-def index_of_agreement(true: np.ndarray, pred: np.ndarray, j=1) -> np.ndarray:
+def index_of_agreement(true: np.ndarray, pred: np.ndarray, j: int = 1) -> np.ndarray:
     error_sum = np.sum(np.power(np.abs(true - pred), j), axis=0)
     partial_diff_true = np.abs(true - np.mean(true, axis=0))
     partial_diff_pred = np.abs(pred - np.mean(true, axis=0))

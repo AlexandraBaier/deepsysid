@@ -26,6 +26,11 @@ mypy = "^0.961"
 isort = "^5.10.1"
 flake8 = "^4.0.1"
 
+[tool.poetry.scripts]
+deepsysid="deepsysid.cli.interface:run_deepsysid_cli"
+deepsysid-evaluate-quadcopter-trajectory = "deepsysid.cli.evaluate_quadcopter_trajectory:main"
+deepsysid-evaluate-4dofship-trajectory = "deepsysid.cli.evaluate_4dof_ship_trajectory:main"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
