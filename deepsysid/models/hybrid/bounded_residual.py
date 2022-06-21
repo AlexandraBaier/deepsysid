@@ -1,7 +1,7 @@
 import abc
 import json
 import logging
-from typing import Literal
+from typing import Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -301,12 +301,12 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
     def simulate(
         self,
-        initial_control,
-        initial_state,
-        control,
-        return_whitebox_blackbox=False,
-        threshold=np.infty,
-    ):
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
+        return_whitebox_blackbox: bool = False,
+        threshold: float = np.infty,
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         self.blackbox.eval()
         self.initializer.eval()
         self.semiphysical.eval()
@@ -380,7 +380,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         else:
             return y
 
-    def save(self, file_path):
+    def save(self, file_path: Tuple[str, ...]):
         torch.save(self.semiphysical.state_dict(), file_path[0])
         torch.save(self.blackbox.state_dict(), file_path[1])
         torch.save(self.initializer.state_dict(), file_path[2])
@@ -395,7 +395,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 f,
             )
 
-    def load(self, file_path):
+    def load(self, file_path: Tuple[str, ...]):
         self.semiphysical.load_state_dict(
             torch.load(file_path[0], map_location=self.device_name)
         )
@@ -418,10 +418,10 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             state_std=self.state_stddev,
         )
 
-    def get_file_extension(self):
+    def get_file_extension(self) -> Tuple[str, ...]:
         return 'semi-physical.pth', 'blackbox.pth', 'initializer.pth', 'json'
 
-    def get_parameter_count(self):
+    def get_parameter_count(self) -> int:
         semiphysical_count = sum(p.numel() for p in self.semiphysical.parameters())
         blackbox_count = sum(
             p.numel() for p in self.blackbox.parameters() if p.requires_grad
