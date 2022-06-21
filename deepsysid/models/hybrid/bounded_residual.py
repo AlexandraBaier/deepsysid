@@ -1,7 +1,7 @@
 import abc
 import json
 import logging
-from typing import Literal, Tuple, Union
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -110,10 +110,10 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             params=self.blackbox.parameters(), lr=self.learning_rate
         )
 
-        self.control_mean = None
-        self.control_stddev = None
-        self.state_mean = None
-        self.state_stddev = None
+        self.state_mean: Optional[np.ndarray] = None
+        self.state_std: Optional[np.ndarray] = None
+        self.control_mean: Optional[np.ndarray] = None
+        self.control_std: Optional[np.ndarray] = None
 
     def train(self, control_seqs, state_seqs):
         self.blackbox.train()
@@ -304,9 +304,21 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         initial_control: np.ndarray,
         initial_state: np.ndarray,
         control: np.ndarray,
-        return_whitebox_blackbox: bool = False,
+    ) -> np.ndarray:
+        y, _, _ = self.simulate_hybrid(
+            initial_control=initial_control,
+            initial_state=initial_state,
+            control=control,
+        )
+        return y
+
+    def simulate_hybrid(
+        self,
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
         threshold: float = np.infty,
-    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         self.blackbox.eval()
         self.initializer.eval()
         self.semiphysical.eval()
@@ -322,7 +334,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             return x / state_stddev
 
         un_control = control
-        current_state = initial_state[-1, :]
+        current_state_np = initial_state[-1, :]
         initial_control = utils.normalize(
             initial_control, self.control_mean, self.control_stddev
         )
@@ -350,7 +362,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 torch.from_numpy(un_control).unsqueeze(0).float().to(self.device)
             )
             current_state = (
-                torch.from_numpy(current_state).unsqueeze(0).float().to(self.device)
+                torch.from_numpy(current_state_np).unsqueeze(0).float().to(self.device)
             )
             x_pred = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
             for time in range(control.shape[0]):
@@ -375,12 +387,17 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 whitebox[time, :] = y_whitebox.cpu().detach().numpy()
                 blackbox[time, :] = y_blackbox.squeeze(1).cpu().detach().numpy()
 
-        if return_whitebox_blackbox:
-            return y, whitebox, blackbox
-        else:
-            return y
+        return y, whitebox, blackbox
 
     def save(self, file_path: Tuple[str, ...]):
+        if (
+            self.state_mean is None
+            or self.state_stddev is None
+            or self.control_mean is None
+            or self.control_stddev is None
+        ):
+            raise ValueError('Model has not been trained and cannot be saved.')
+
         torch.save(self.semiphysical.state_dict(), file_path[0])
         torch.save(self.blackbox.state_dict(), file_path[1])
         torch.save(self.initializer.state_dict(), file_path[2])

@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Literal
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -81,10 +81,10 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             self.initializer.parameters(), lr=self.learning_rate
         )
 
-        self.control_mean = None
-        self.control_stddev = None
-        self.state_mean = None
-        self.state_stddev = None
+        self.state_mean: Optional[np.ndarray] = None
+        self.state_std: Optional[np.ndarray] = None
+        self.control_mean: Optional[np.ndarray] = None
+        self.control_std: Optional[np.ndarray] = None
 
     def train(self, control_seqs, state_seqs):
         self.predictor.train()
@@ -161,7 +161,12 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             f'and for predictor {time_total_pred}s'
         )
 
-    def simulate(self, initial_control, initial_state, control):
+    def simulate(
+        self,
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
+    ) -> np.ndarray:
         self.initializer.eval()
         self.predictor.eval()
 
@@ -183,13 +188,21 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
 
             _, hx = self.initializer.forward(init_x, return_state=True)
-            y = self.predictor.forward(pred_x, hx=hx)
-            y = y.cpu().detach().squeeze().numpy()
+            y = self.predictor.forward(pred_x, hx=hx, return_state=False)
+            y_np = y.cpu().detach().squeeze().numpy()  # type: ignore
 
-        y = utils.denormalize(y, self.state_mean, self.state_stddev)
-        return y
+        y_np = utils.denormalize(y_np, self.state_mean, self.state_stddev)
+        return y_np
 
-    def save(self, file_path):
+    def save(self, file_path: Tuple[str, ...]):
+        if (
+            self.state_mean is None
+            or self.state_stddev is None
+            or self.control_mean is None
+            or self.control_stddev is None
+        ):
+            raise ValueError('Model has not been trained and cannot be saved.')
+
         torch.save(self.initializer.state_dict(), file_path[0])
         torch.save(self.predictor.state_dict(), file_path[1])
         with open(file_path[2], mode='w') as f:
@@ -203,7 +216,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 f,
             )
 
-    def load(self, file_path):
+    def load(self, file_path: Tuple[str, ...]):
         self.initializer.load_state_dict(
             torch.load(file_path[0], map_location=self.device_name)
         )
@@ -217,10 +230,10 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.control_mean = np.array(norm['control_mean'])
         self.control_stddev = np.array(norm['control_stddev'])
 
-    def get_file_extension(self):
+    def get_file_extension(self) -> Tuple[str, ...]:
         return 'initializer.pth', 'predictor.pth', 'json'
 
-    def get_parameter_count(self):
+    def get_parameter_count(self) -> int:
         # technically parameter counts of both networks are equal
         init_count = sum(
             p.numel() for p in self.initializer.parameters() if p.requires_grad
