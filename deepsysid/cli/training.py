@@ -23,6 +23,10 @@ def train_model(
     model_directory = os.path.expanduser(
         os.path.normpath(config.models[model_name].location)
     )
+    try:
+        os.mkdir(model_directory)
+    except FileExistsError:
+        pass
 
     # Configure logging
     logger = logging.getLogger()
@@ -48,8 +52,4 @@ def train_model(
     logger.info(f'Training model on {device_name} if implemented.')
     model.train(control_seqs=controls, state_seqs=states)
     # Save model
-    try:
-        os.mkdir(model_directory)
-    except FileExistsError:
-        pass
     execution.save_model(model, model_directory, model_name)
