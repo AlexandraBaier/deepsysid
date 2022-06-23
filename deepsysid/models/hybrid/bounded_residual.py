@@ -121,34 +121,34 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.physical.train()
         self.semiphysical.train()
 
-        self.control_mean, self.control_stddev = utils.mean_stddev(control_seqs)
-        self.state_mean, self.state_stddev = utils.mean_stddev(state_seqs)
+        self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
+        self.state_mean, self.state_std = utils.mean_stddev(state_seqs)
         self.semiphysical.set_normalization_values(
             control_mean=self.control_mean,
-            control_std=self.control_stddev,
+            control_std=self.control_std,
             state_mean=self.state_mean,
-            state_std=self.state_stddev,
+            state_std=self.state_std,
         )
 
         un_control_seqs = control_seqs
         un_state_seqs = state_seqs
         control_seqs = [
-            utils.normalize(control, self.control_mean, self.control_stddev)
+            utils.normalize(control, self.control_mean, self.control_std)
             for control in control_seqs
         ]
         state_seqs = [
-            utils.normalize(state, self.state_mean, self.state_stddev)
+            utils.normalize(state, self.state_mean, self.state_std)
             for state in state_seqs
         ]
 
         state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
-        state_stddev = torch.from_numpy(self.state_stddev).float().to(self.device)
+        state_std = torch.from_numpy(self.state_std).float().to(self.device)
 
         def denormalize_state(x):
-            return (x * state_stddev) + state_mean
+            return (x * state_std) + state_mean
 
         def scale_acc(x):
-            return x / state_stddev
+            return x / state_std
 
         # Train linear model
         self.semiphysical.train_semiphysical(
@@ -325,23 +325,23 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.physical.eval()
 
         state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
-        state_stddev = torch.from_numpy(self.state_stddev).float().to(self.device)
+        state_std = torch.from_numpy(self.state_std).float().to(self.device)
 
         def denormalize_state(x):
-            return (x * state_stddev) + state_mean
+            return (x * state_std) + state_mean
 
         def scale_acc(x):
-            return x / state_stddev
+            return x / state_std
 
         un_control = control
         current_state_np = initial_state[-1, :]
         initial_control = utils.normalize(
-            initial_control, self.control_mean, self.control_stddev
+            initial_control, self.control_mean, self.control_std
         )
         initial_state = utils.normalize(
-            initial_state, self.state_mean, self.state_stddev
+            initial_state, self.state_mean, self.state_std
         )
-        control = utils.normalize(control, self.control_mean, self.control_stddev)
+        control = utils.normalize(control, self.control_mean, self.control_std)
 
         y = np.zeros((control.shape[0], self.state_dim))
         whitebox = np.zeros((control.shape[0], self.state_dim))
@@ -392,9 +392,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
     def save(self, file_path: Tuple[str, ...]):
         if (
             self.state_mean is None
-            or self.state_stddev is None
+            or self.state_std is None
             or self.control_mean is None
-            or self.control_stddev is None
+            or self.control_std is None
         ):
             raise ValueError('Model has not been trained and cannot be saved.')
 
@@ -405,9 +405,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             json.dump(
                 {
                     'state_mean': self.state_mean.tolist(),
-                    'state_stddev': self.state_stddev.tolist(),
+                    'state_std': self.state_std.tolist(),
                     'control_mean': self.control_mean.tolist(),
-                    'control_stddev': self.control_stddev.tolist(),
+                    'control_std': self.control_std.tolist(),
                 },
                 f,
             )
@@ -425,14 +425,14 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         with open(file_path[3], mode='r') as f:
             norm = json.load(f)
         self.state_mean = np.array(norm['state_mean'])
-        self.state_stddev = np.array(norm['state_stddev'])
+        self.state_std = np.array(norm['state_std'])
         self.control_mean = np.array(norm['control_mean'])
-        self.control_stddev = np.array(norm['control_stddev'])
+        self.control_std = np.array(norm['control_std'])
         self.semiphysical.set_normalization_values(
             control_mean=self.control_mean,
-            control_std=self.control_stddev,
+            control_std=self.control_std,
             state_mean=self.state_mean,
-            state_std=self.state_stddev,
+            state_std=self.state_std,
         )
 
     def get_file_extension(self) -> Tuple[str, ...]:
@@ -519,7 +519,7 @@ class HybridLinearModel(HybridResidualLSTMModel):
         )
 
 
-class HybridBlankeModel(HybridResidualLSTMModelConfig):
+class HybridBlankeModel(HybridResidualLSTMModel):
     CONFIG = HybridResidualLSTMModelConfig
 
     def __init__(self, config: HybridResidualLSTMModelConfig):
