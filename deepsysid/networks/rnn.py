@@ -240,6 +240,7 @@ class LTIRnn(nn.Module):
         beta = self.beta
         # storage function
         Y = self.Y
+        device = Y.device
 
         # state
         A_tilde = self.A_tilde.weight
@@ -257,11 +258,11 @@ class LTIRnn(nn.Module):
         ga = self.ga
 
         # M << 0
-        M = torch.cat([ torch.cat([-Y,                                      torch.zeros((nx,nu)),   beta * C2_tilde.T,      A_tilde.T,                       C1.T], axis=1),
-                torch.cat([torch.zeros((nu,nx)),        -ga**2*torch.eye(nu),  beta * D21_tilde.T,     B1_tilde.T,                      D11.T], axis=1),
+        M = torch.cat([ torch.cat([-Y,                                      torch.zeros((nx,nu), device=device),   beta * C2_tilde.T,      A_tilde.T,                       C1.T], axis=1),
+                torch.cat([torch.zeros((nu,nx), device=device),        -ga**2*torch.eye(nu, device=device),  beta * D21_tilde.T,     B1_tilde.T,                      D11.T], axis=1),
                 torch.cat([beta * C2_tilde,                                 beta * D21_tilde,                           -2*T,                   B2_tilde.T,                      D12.T], axis=1),
-                torch.cat([A_tilde,                                         B1_tilde,                                   B2_tilde,               -Y,                             torch.zeros((nx, ny))], axis=1),
-                torch.cat([C1,                                              D11,                                        D12,                    torch.zeros((ny, nx)),     -torch.eye(ny)], axis=1)])
+                torch.cat([A_tilde,                                         B1_tilde,                                   B2_tilde,               -Y,                             torch.zeros((nx, ny), device=device)], axis=1),
+                torch.cat([C1,                                              D11,                                        D12,                    torch.zeros((ny, nx), device=device),     -torch.eye(ny, device=device)], axis=1)])
 
         return 0.5 * (M + M.T)
     

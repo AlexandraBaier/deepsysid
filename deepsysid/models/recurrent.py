@@ -98,6 +98,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         ys = state_seqs
         self.predictor.train()
         self.predictor.initialize_lmi()
+        self.predictor.to(self.device)
         self.initializer.train()
 
         self.u_mean, self.u_stddev = utils.mean_stddev(us)
@@ -152,9 +153,9 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                     batch['x0'].float().to(self.device), return_state=True
                 )
                 # Predict and optimize
-                y = self.predictor.forward(batch['x'].float().to(self.device), hx=hx)
+                y = self.predictor.forward(batch['x'].float().to(self.device), hx=hx).to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
-                barrier = self.predictor.get_barrier(self.decay_parameter)
+                barrier = self.predictor.get_barrier(self.decay_parameter).to(self.device)
                 total_loss += batch_loss.item()
                 (batch_loss+barrier).backward()
 
