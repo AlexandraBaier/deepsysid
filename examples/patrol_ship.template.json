@@ -7,7 +7,7 @@
     "window_size": 60,
     "horizon_size": 900,
     "control_names": [
-      "n",
+      "nr",
       "deltal",
       "deltar",
       "Vw",
@@ -476,32 +476,20 @@
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 128,
-        "epochs_initializer": 400,
-        "epochs_predictor": 1000
+        "epochs_initializer": 5,
+        "epochs_predictor": 5,
+        "decay_parameter":1e-3,
+        "nx":20,
+        "nw":20
       },
       "flexible_parameters": {
-        "decay_parameter": [
-          1e-2,
-          1e-3,
-          1e-4
-        ],
-        "nx": [
-          50,
-          60,
-          70
-        ],
-        "nw":[
-          50,
-          60,
-          70
-        ],
         "gamma":[
           5.0,
           10.0,
           15.0
         ],
         "learning_rate": [
-          1e-3,
+          1e-2,
           0.0025
         ]
       }

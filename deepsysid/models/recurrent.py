@@ -96,9 +96,9 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
     def train(self, control_seqs, state_seqs):
         us = control_seqs
         ys = state_seqs
-        self.predictor.train()
         self.predictor.initialize_lmi()
         self.predictor.to(self.device)
+        self.predictor.train()
         self.initializer.train()
 
         self.u_mean, self.u_stddev = utils.mean_stddev(us)
@@ -146,6 +146,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
             )
             total_loss = 0
+            max_grad = 0
             for batch_idx, batch in enumerate(data_loader):
                 self.predictor.zero_grad()
                 # Initialize predictor with state of initializer network
@@ -154,14 +155,20 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 )
                 # Predict and optimize
                 y = self.predictor.forward(batch['x'].float().to(self.device), hx=hx).to(self.device)
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 barrier = self.predictor.get_barrier(self.decay_parameter).to(self.device)
+                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
-                (batch_loss+barrier).backward()
+                (batch_loss + barrier).backward()
+
+                # gradient infos
+                grads_norm = [torch.linalg.norm(p.grad) for p in self.predictor.parameters()]
+                max_grad += max(grads_norm)
 
                 # save old parameter set
                 old_pars = [par.clone().detach() for par in self.predictor.parameters()]
+
                 self.optimizer_pred.step()
+
 
                 # perform backtracking line search if constraints are not satisfied
                 max_iter = 100
@@ -186,9 +193,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
-                f'Batch Loss (Predictor): {batch_loss.item():1f} \t' 
+                f'Total Loss (Predictor): {total_loss:1f} \t' 
                 f'Barrier: {barrier:1f}\t'
                 f'Backtracking Line Search iteration: {bls_iter}\t'
+                f'Max accumulated gradient norm: {max_grad:1f}'
             )
 
         time_end_pred = time.time()

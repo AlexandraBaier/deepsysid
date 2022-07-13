@@ -201,17 +201,17 @@ class LTIRnn(nn.Module):
         print(f'Write back Parameters values ...')
         dtype = torch.get_default_dtype()
         
-        self.Y = torch.nn.Parameter(torch.tensor(Y.value, dtype=dtype))
-        self.A_tilde.weight = torch.nn.Parameter(torch.tensor(A_tilde.value, dtype=dtype))
+        self.Y.data = torch.tensor(Y.value, dtype=dtype)
+        self.A_tilde.weight.data = torch.tensor(A_tilde.value, dtype=dtype)
         
-        self.B1_tilde.weight = torch.nn.Parameter(torch.tensor(B1_tilde.value, dtype=dtype))
-        self.B2_tilde.weight = torch.nn.Parameter(torch.tensor(B2_tilde.value, dtype=dtype))
-        self.C1.weight = torch.nn.Parameter(torch.tensor(C1.value, dtype=dtype))
-        self.D11.weight = torch.nn.Parameter(torch.tensor(D11.value, dtype=dtype))
-        self.D12.weight = torch.nn.Parameter(torch.tensor(D12.value, dtype=dtype))
-        self.C2_tilde.weight = torch.nn.Parameter(torch.tensor(C2_tilde.value, dtype=dtype)) 
-        self.D21_tilde.weight = torch.nn.Parameter(torch.tensor(D21_tilde.value, dtype=dtype))
-        self.lambdas = torch.nn.Parameter(torch.tensor(lambdas.value, dtype=dtype))
+        self.B1_tilde.weight.data = torch.tensor(B1_tilde.value, dtype=dtype)
+        self.B2_tilde.weight.data = torch.tensor(B2_tilde.value, dtype=dtype)
+        self.C1.weight.data = torch.tensor(C1.value, dtype=dtype)
+        self.D11.weight.data = torch.tensor(D11.value, dtype=dtype)
+        self.D12.weight.data = torch.tensor(D12.value, dtype=dtype)
+        self.C2_tilde.weight.data = torch.tensor(C2_tilde.value, dtype=dtype)
+        self.D21_tilde.weight.data = torch.tensor(D21_tilde.value, dtype=dtype)
+        self.lambdas.data = torch.tensor(lambdas.value, dtype=dtype)
 
     def forward(self, u_tilde, hx):
             n_batch, n_sample, _ = u_tilde.shape
@@ -268,9 +268,7 @@ class LTIRnn(nn.Module):
     
     def get_barrier(self, t):
         M = self.get_constraints()
-        # print(f'barrier {-t*(-M).logdet()}, \t type of barrier {(-t*(-M).logdet()).requires_grad}')
         barrier = -t*(-M).logdet()
-        # print(f'barrier {-t*(-M).logdet()}')
 
         try:
             torch.linalg.cholesky(-M)
