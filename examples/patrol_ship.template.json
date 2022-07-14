@@ -7,7 +7,7 @@
     "window_size": 60,
     "horizon_size": 900,
     "control_names": [
-      "nr",
+      "n",
       "deltal",
       "deltar",
       "Vw",
