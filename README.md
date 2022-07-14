@@ -142,9 +142,6 @@ Some common arguments for subcommands are listed here:
 - `--disable-stdout`: Optional flag for subcommand `train`. Script will not print logging to stdout, however will still log to `training.log` in the model directory.
 - `--mode={train,validation,test}`: Required argument for `test` and `evaluate`. Choose either `train`, `validation` or `test` to select what dataset to run the test and evaluation on. 
 
-## Note
-For constrained recurrent neural network [MOSEK](https://www.mosek.com) and [CVXPY](https://www.cvxpy.org) are required
-
 ## References
 
 [Baier, A., Boukhers, Z., & Staab, S. (2021). Hybrid Physics and Deep Learning Model for Interpretable Vehicle State Prediction. ArXiv, abs/2103.06727.](https://arxiv.org/abs/2103.06727)
