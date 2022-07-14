@@ -513,6 +513,192 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         )
         return init_count + predictor_count
 
+class LSTMInitModelCombinedConfig(DynamicIdentificationModelConfig):
+    recurrent_dim: int
+    num_recurrent_layers: int
+    dropout: float
+    sequence_length: int
+    learning_rate: float
+    batch_size: int
+    epochs: int
+    loss: Literal['mse', 'msge']
+class LSTMInitModelCombined(base.DynamicIdentificationModel):
+    CONFIG = LSTMInitModelCombinedConfig
+
+    def __init__(self, config: LSTMInitModelCombinedConfig):
+        super().__init__(config)
+
+        self.device_name = config.device_name
+        self.device = torch.device(self.device_name)
+
+        self.control_dim = len(config.control_names)
+        self.state_dim = len(config.state_names)
+
+        self.recurrent_dim = config.recurrent_dim
+        self.num_recurrent_layers = config.num_recurrent_layers
+        self.dropout = config.dropout
+
+        self.sequence_length = config.sequence_length
+        self.learning_rate = config.learning_rate
+        self.batch_size = config.batch_size
+        self.epochs = config.epochs
+
+        if config.loss == 'mse':
+            self.loss: nn.Module = nn.MSELoss().to(self.device)
+        elif config.loss == 'msge':
+            self.loss = loss.MSGELoss().to(self.device)
+        else:
+            raise ValueError('loss can only be "mse" or "msge"')
+
+        self.predictor = rnn.InitLSTM(
+            input_dim=self.control_dim,
+            recurrent_dim=self.recurrent_dim,
+            num_recurrent_layers=self.num_recurrent_layers,
+            output_dim=self.state_dim,
+            dropout=self.dropout,
+        )
+        self.optimizer = optim.Adam(
+            self.predictor.parameters(), lr=self.learning_rate
+        )
+
+        self.state_mean: Optional[np.ndarray] = None
+        self.state_std: Optional[np.ndarray] = None
+        self.control_mean: Optional[np.ndarray] = None
+        self.control_std: Optional[np.ndarray] = None
+
+    def train(self, control_seqs, state_seqs):
+        self.predictor.train()
+
+        self.control_mean, self.control_stddev = utils.mean_stddev(control_seqs)
+        self.state_mean, self.state_stddev = utils.mean_stddev(state_seqs)
+
+        control_seqs = [
+            utils.normalize(control, self.control_mean, self.control_stddev)
+            for control in control_seqs
+        ]
+        state_seqs = [
+            utils.normalize(state, self.state_mean, self.state_stddev)
+            for state in state_seqs
+        ]
+
+        initializer_dataset = _InitializerDataset(
+            control_seqs, state_seqs, self.sequence_length
+        )
+
+        predictor_dataset = _PredictorDataset(
+            control_seqs, state_seqs, self.sequence_length
+        )
+
+        time_start = time.time()
+        for i in range(self.epochs):
+            data_loader_init = data.DataLoader(
+                initializer_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
+            data_loader_pred = data.DataLoader(
+                predictor_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
+            total_loss = 0.0
+            for batch_idx, (batch_init, batch_pred) in enumerate(zip(data_loader_init, data_loader_pred)):
+
+                y, h0 = self.predictor.forward(batch_pred['x'].float().to(self.device), x0=batch_init['x'].float().to(self.device), return_init=True)
+
+                batch_loss_init = self.loss.forward(h0, batch_init['y'].float().to(self.device))
+                batch_loss_pred = self.loss.forward(y, batch_pred['y'].float().to(self.device))
+                batch_loss = batch_loss_init + batch_loss_pred
+                total_loss += batch_loss.item()
+                batch_loss.backward()
+                self.optimizer.step()
+
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs} \t'
+                f'Epoch Loss : {total_loss:1f}\t'
+                f'Init Loss: {batch_loss_init:1f}\t'
+                f'Prediction Loss: {batch_loss_pred:1f}'
+            )
+        time_end = time.time()
+       
+        time_total = time_end - time_start
+        logger.info(
+            f'Training time for predictor {time_total}s '
+        )
+
+    def simulate(
+        self,
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
+    ) -> np.ndarray:
+        self.initializer.eval()
+        self.predictor.eval()
+
+        initial_control = utils.normalize(
+            initial_control, self.control_mean, self.control_stddev
+        )
+        initial_state = utils.normalize(
+            initial_state, self.state_mean, self.state_stddev
+        )
+        control = utils.normalize(control, self.control_mean, self.control_stddev)
+
+        with torch.no_grad():
+            init_x = (
+                torch.from_numpy(np.hstack((initial_control[1:], initial_state[:-1])))
+                .unsqueeze(0)
+                .float()
+                .to(self.device)
+            )
+            pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
+
+            y = self.predictor.forward(pred_x, h0=init_x, return_state=False)
+            y_np = y.cpu().detach().squeeze().numpy()  # type: ignore
+
+        y_np = utils.denormalize(y_np, self.state_mean, self.state_stddev)
+        return y_np
+
+    def save(self, file_path: Tuple[str, ...]):
+        if (
+            self.state_mean is None
+            or self.state_stddev is None
+            or self.control_mean is None
+            or self.control_stddev is None
+        ):
+            raise ValueError('Model has not been trained and cannot be saved.')
+
+        torch.save(self.predictor.state_dict(), file_path[0])
+        with open(file_path[1], mode='w') as f:
+            json.dump(
+                {
+                    'state_mean': self.state_mean.tolist(),
+                    'state_stddev': self.state_stddev.tolist(),
+                    'control_mean': self.control_mean.tolist(),
+                    'control_stddev': self.control_stddev.tolist(),
+                },
+                f,
+            )
+
+    def load(self, file_path: Tuple[str, ...]):
+        self.predictor.load_state_dict(
+            torch.load(file_path[0], map_location=self.device_name)
+        )
+        with open(file_path[1], mode='r') as f:
+            norm = json.load(f)
+        self.state_mean = np.array(norm['state_mean'])
+        self.state_stddev = np.array(norm['state_stddev'])
+        self.control_mean = np.array(norm['control_mean'])
+        self.control_stddev = np.array(norm['control_stddev'])
+
+    def get_file_extension(self) -> Tuple[str, ...]:
+        return 'predictor.pth', 'json'
+
+    def get_parameter_count(self) -> int:
+        # technically parameter counts of both networks are equal
+        init_count = sum(
+            p.numel() for p in self.initializer.parameters() if p.requires_grad
+        )
+        predictor_count = sum(
+            p.numel() for p in self.predictor.parameters() if p.requires_grad
+        )
+        return init_count + predictor_count
+
 
 class _InitializerDataset(data.Dataset):
     # x=[control state], y=[state]
