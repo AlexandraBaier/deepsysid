@@ -1,10 +1,13 @@
+import logging
 from typing import List, Optional, Tuple, Union
 
+import cvxpy as cp
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import cvxpy as cp
-import numpy as np
+
+logger = logging.getLogger()
 
 
 class BasicLSTM(nn.Module):
@@ -117,24 +120,18 @@ class LinearOutputLSTM(nn.Module):
         else:
             return x
 
-class LTIRnn(nn.Module):
 
+class LTIRnn(nn.Module):
     def __init__(
-        self, 
-        nx: int,
-        nu: int,
-        ny: int,
-        nw: int,
-        gamma: int,
-        beta: float
+        self, nx: int, nu: int, ny: int, nw: int, gamma: float, beta: float
     ) -> None:
         super(LTIRnn, self).__init__()
 
-        self.nx = nx # number of states
-        self.nu = nu # number of performance (external) input
-        self.nw = nw # number of disturbance input
-        self.ny = ny # number of performance output
-        self.nz = nw # number of disturbance output, always equal to size of w
+        self.nx = nx  # number of states
+        self.nu = nu  # number of performance (external) input
+        self.nw = nw  # number of disturbance input
+        self.ny = ny  # number of performance output
+        self.nz = nw  # number of disturbance output, always equal to size of w
 
         self.ga = gamma
         self.beta = beta
@@ -149,8 +146,7 @@ class LTIRnn(nn.Module):
         self.D12 = torch.nn.Linear(self.nw, self.ny, bias=False)
         self.C2_tilde = torch.nn.Linear(self.nx, self.nz, bias=False)
         self.D21_tilde = torch.nn.Linear(self.nu, self.nz, bias=False)
-        self.lambdas = torch.nn.Parameter(torch.zeros((self.nw,1)))
-
+        self.lambdas = torch.nn.Parameter(torch.zeros((self.nw, 1)))
 
     def initialize_lmi(self) -> None:
         # storage function
@@ -164,46 +160,76 @@ class LTIRnn(nn.Module):
         D11 = cp.Variable((self.ny, self.nu), 'D11')
         D12 = cp.Variable((self.ny, self.nw), 'D12')
         # disturbance
-        C2 = np.random.normal(0,1/np.sqrt(self.nw), size=(self.nz, self.nx))
-        D21 = np.random.normal(0,1/np.sqrt(self.nw), size=(self.nz, self.nu))
+        C2 = np.random.normal(0, 1 / np.sqrt(self.nw), size=(self.nz, self.nx))
+        D21 = np.random.normal(0, 1 / np.sqrt(self.nw), size=(self.nz, self.nu))
         # multipliers
-        lambdas = cp.Variable((self.nw,1), 'tau', nonneg=True)
+        lambdas = cp.Variable((self.nw, 1), 'tau', nonneg=True)
         T = cp.diag(lambdas)
 
         C2_tilde = T @ C2
         D21_tilde = T @ D21
 
         # lmi that ensures l2 gain
-        M = cp.bmat([ [ -Y,             np.zeros((self.nx,self.nu)),       self.beta*C2_tilde.T,        A_tilde.T,         C1.T],
-            [np.zeros((self.nu,self.nx)),    -self.ga**2*np.eye(self.nu),        self.beta*D21_tilde.T,       B1_tilde.T,        D11.T],
-            [self.beta*C2_tilde,          self.beta * D21_tilde,              -2*T,                   B2_tilde.T,        D12.T],
-            [A_tilde,                B1_tilde,                      B2_tilde,               -Y,                     np.zeros((self.nx, self.ny))],
-            [C1,                    D11,                            D12,                    np.zeros((self.ny, self.nx)),     -np.eye(self.ny)]])
+        M = cp.bmat(
+            [
+                [
+                    -Y,
+                    np.zeros((self.nx, self.nu)),
+                    self.beta * C2_tilde.T,
+                    A_tilde.T,
+                    C1.T,
+                ],
+                [
+                    np.zeros((self.nu, self.nx)),
+                    -self.ga**2 * np.eye(self.nu),
+                    self.beta * D21_tilde.T,
+                    B1_tilde.T,
+                    D11.T,
+                ],
+                [
+                    self.beta * C2_tilde,
+                    self.beta * D21_tilde,
+                    -2 * T,
+                    B2_tilde.T,
+                    D12.T,
+                ],
+                [A_tilde, B1_tilde, B2_tilde, -Y, np.zeros((self.nx, self.ny))],
+                [C1, D11, D12, np.zeros((self.ny, self.nx)), -np.eye(self.ny)],
+            ]
+        )
 
-        # setup optimization problem, objective might change, any feasible solution works as initialization for the parameters
+        # setup optimization problem, objective might change,
+        # any feasible solution works as initialization for the parameters
         nM = M.shape[0]
         tol = 1e-4
         # rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
         # objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
         objective = cp.Minimize(None)
-        problem = cp.Problem(objective, [M << -tol*np.eye(nM)])
-        
-        print(f'Initialize Parameter by values that satisfy LMI constraints, solve SDP ...')
-        problem.solve(solver=cp.MOSEK)
+        problem = cp.Problem(objective, [M << -tol * np.eye(nM)])
+
+        logger.info(
+            'Initialize Parameter by values that satisfy LMI constraints, solve SDP ...'
+        )
+        problem.solve(solver=cp.SCS)
         # check if t is negative
         max_eig_lmi = np.max(np.real(np.linalg.eig(M.value)[0]))
         if max_eig_lmi < 0 and problem.status == 'optimal':
-            # print(f'Found negative semidefinite lmi, problem status: \t {problem.status} \t max eig(LMI)={max_eig_lmi:3f}, \t t={t[0].value:3f}')
-            print(f'Found negative semidefinite LMI, problem status: \t {problem.status} \t max eig(LMI)={max_eig_lmi:3f}')
+            logger.info(
+                f'Found negative semidefinite LMI, problem status: '
+                f'\t {problem.status} \t max eig(LMI)={max_eig_lmi:3f}'
+            )
         else:
-            raise Exception("Neural network could not be initialized since no solution to the SDP problem was found.")
+            raise Exception(
+                "Neural network could not be initialized "
+                "since no solution to the SDP problem was found."
+            )
 
-        print(f'Write back Parameters values ...')
+        logger.info('Write back Parameters values ...')
         dtype = torch.get_default_dtype()
-        
+
         self.Y.data = torch.tensor(Y.value, dtype=dtype)
         self.A_tilde.weight.data = torch.tensor(A_tilde.value, dtype=dtype)
-        
+
         self.B1_tilde.weight.data = torch.tensor(B1_tilde.value, dtype=dtype)
         self.B2_tilde.weight.data = torch.tensor(B2_tilde.value, dtype=dtype)
         self.C1.weight.data = torch.tensor(C1.value, dtype=dtype)
@@ -213,25 +239,28 @@ class LTIRnn(nn.Module):
         self.D21_tilde.weight.data = torch.tensor(D21_tilde.value, dtype=dtype)
         self.lambdas.data = torch.tensor(lambdas.value, dtype=dtype)
 
-    def forward(self, u_tilde, hx):
-            n_batch, n_sample, _ = u_tilde.shape
+    def forward(
+        self, u_tilde: torch.Tensor, hx: Tuple[torch.Tensor, torch.Tensor]
+    ) -> torch.Tensor:
+        n_batch, n_sample, _ = u_tilde.shape
 
-            Y_inv = self.Y.inverse()
-            T_inv = torch.diag(1/torch.squeeze(self.lambdas))
-            # initialize output
-            y = torch.zeros((n_batch, n_sample,self.ny))
+        Y_inv = self.Y.inverse()
+        T_inv = torch.diag(1 / torch.squeeze(self.lambdas))
+        # initialize output
+        y = torch.zeros((n_batch, n_sample, self.ny))
 
-            # print(f'Shape of input u_tilde: {u_tilde.shape} \t shape of hx: {hx[0].shape}')
-            x = hx[0][1]
-            for k in range(n_sample):
-                z = (self.C2_tilde(x) + self.D21_tilde(u_tilde[:,k,:])) @ T_inv
-                w = self.nl(z)
-                y[:, k, :] = self.C1(x) + self.D11(u_tilde[:,k,:]) + self.D12(w)
-                x = (self.A_tilde(x) + self.B1_tilde(u_tilde[:,k,:]) + self.B2_tilde(w)) @ Y_inv
-        
-            return y      
+        x = hx[0][1]
+        for k in range(n_sample):
+            z = (self.C2_tilde(x) + self.D21_tilde(u_tilde[:, k, :])) @ T_inv
+            w = self.nl(z)
+            y[:, k, :] = self.C1(x) + self.D11(u_tilde[:, k, :]) + self.D12(w)
+            x = (
+                self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
+            ) @ Y_inv
 
-    def get_constraints(self):
+        return y
+
+    def get_constraints(self) -> torch.Tensor:
         # state sizes
         nx = self.nx
         nu = self.nu
@@ -249,41 +278,84 @@ class LTIRnn(nn.Module):
         # output
         C1 = self.C1.weight
         D11 = self.D11.weight
-        D12 = self.D12.weight 
+        D12 = self.D12.weight
         # disturbance
         D21_tilde = self.D21_tilde.weight
         C2_tilde = self.C2_tilde.weight
-        
+
         T = torch.diag(torch.squeeze(self.lambdas))
         ga = self.ga
 
         # M << 0
-        M = torch.cat([ torch.cat([-Y,                                      torch.zeros((nx,nu), device=device),   beta * C2_tilde.T,      A_tilde.T,                       C1.T], axis=1),
-                torch.cat([torch.zeros((nu,nx), device=device),        -ga**2*torch.eye(nu, device=device),  beta * D21_tilde.T,     B1_tilde.T,                      D11.T], axis=1),
-                torch.cat([beta * C2_tilde,                                 beta * D21_tilde,                           -2*T,                   B2_tilde.T,                      D12.T], axis=1),
-                torch.cat([A_tilde,                                         B1_tilde,                                   B2_tilde,               -Y,                             torch.zeros((nx, ny), device=device)], axis=1),
-                torch.cat([C1,                                              D11,                                        D12,                    torch.zeros((ny, nx), device=device),     -torch.eye(ny, device=device)], axis=1)])
+        M = torch.cat(
+            [
+                torch.cat(
+                    (
+                        -Y,
+                        torch.zeros((nx, nu), device=device),
+                        beta * C2_tilde.T,
+                        A_tilde.T,
+                        C1.T,
+                    ),
+                    dim=1,
+                ),
+                torch.cat(
+                    (
+                        torch.zeros((nu, nx), device=device),
+                        -(ga**2) * torch.eye(nu, device=device),
+                        beta * D21_tilde.T,
+                        B1_tilde.T,
+                        D11.T,
+                    ),
+                    dim=1,
+                ),
+                torch.cat(
+                    (beta * C2_tilde, beta * D21_tilde, -2 * T, B2_tilde.T, D12.T),
+                    dim=1,
+                ),
+                torch.cat(
+                    (
+                        A_tilde,
+                        B1_tilde,
+                        B2_tilde,
+                        -Y,
+                        torch.zeros((nx, ny), device=device),
+                    ),
+                    dim=1,
+                ),
+                torch.cat(
+                    (
+                        C1,
+                        D11,
+                        D12,
+                        torch.zeros((ny, nx), device=device),
+                        -torch.eye(ny, device=device),
+                    ),
+                    dim=1,
+                ),
+            ]
+        )
 
         return 0.5 * (M + M.T)
-    
-    def get_barrier(self, t):
+
+    def get_barrier(self, t: float) -> torch.Tensor:
         M = self.get_constraints()
-        barrier = -t*(-M).logdet()
+        barrier = -t * (-M).logdet()
 
         try:
             torch.linalg.cholesky(-M)
-        except:
+        except RuntimeError:
             barrier += torch.tensor(float('inf'))
 
         return barrier
 
-    def check_constr(self):
+    def check_constr(self) -> bool:
         with torch.no_grad():
             M = self.get_constraints()
             try:
                 torch.linalg.cholesky(-M)
                 b_satisfied = True
-            except:
+            except RuntimeError:
                 b_satisfied = False
 
         return b_satisfied

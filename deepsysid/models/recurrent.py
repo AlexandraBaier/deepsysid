@@ -16,6 +16,7 @@ from .base import DynamicIdentificationModelConfig
 
 logger = logging.getLogger()
 
+
 class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nx: int
     nw: int
@@ -30,6 +31,7 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     loss: Literal['mse', 'msge']
+
 
 class ConstrainedRnn(base.DynamicIdentificationModel):
     CONFIG = ConstrainedRnnConfig
@@ -46,7 +48,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.nw = config.nw
 
         self.decay_parameter = config.decay_parameter
-        
+
         self.nw = config.nw
         self.num_recurrent_layers = config.num_recurrent_layers
         self.dropout = config.dropout
@@ -70,7 +72,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             ny=self.ny,
             nw=self.nw,
             gamma=config.gamma,
-            beta=config.beta
+            beta=config.beta,
         ).to(self.device)
 
         self.initializer = rnn.BasicLSTM(
@@ -104,18 +106,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.u_mean, self.u_stddev = utils.mean_stddev(us)
         self.y_mean, self.y_stddev = utils.mean_stddev(ys)
 
-        us = [
-            utils.normalize(control, self.u_mean, self.u_stddev)
-            for control in us
-        ]
-        ys = [
-            utils.normalize(state, self.y_mean, self.y_stddev)
-            for state in ys
-        ]
+        us = [utils.normalize(control, self.u_mean, self.u_stddev) for control in us]
+        ys = [utils.normalize(state, self.y_mean, self.y_stddev) for state in ys]
 
-        initializer_dataset = _InitializerDataset(
-            us, ys, self.sequence_length
-        )
+        initializer_dataset = _InitializerDataset(us, ys, self.sequence_length)
 
         time_start_init = time.time()
         for i in range(self.epochs_initializer):
@@ -136,9 +130,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 f'Epoch Loss (Initializer): {total_loss}'
             )
         time_end_init = time.time()
-        predictor_dataset = _PredictorDataset(
-            us, ys, self.sequence_length
-        )
+        predictor_dataset = _PredictorDataset(us, ys, self.sequence_length)
 
         time_start_pred = time.time()
         for i in range(self.epochs_predictor):
@@ -154,14 +146,20 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                     batch['x0'].float().to(self.device), return_state=True
                 )
                 # Predict and optimize
-                y = self.predictor.forward(batch['x'].float().to(self.device), hx=hx).to(self.device)
-                barrier = self.predictor.get_barrier(self.decay_parameter).to(self.device)
+                y = self.predictor.forward(
+                    batch['x'].float().to(self.device), hx=hx
+                ).to(self.device)
+                barrier = self.predictor.get_barrier(self.decay_parameter).to(
+                    self.device
+                )
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 (batch_loss + barrier).backward()
 
                 # gradient infos
-                grads_norm = [torch.linalg.norm(p.grad) for p in self.predictor.parameters()]
+                grads_norm = [
+                    torch.linalg.norm(p.grad) for p in self.predictor.parameters()
+                ]
                 max_grad += max(grads_norm)
 
                 # save old parameter set
@@ -169,31 +167,30 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
                 self.optimizer_pred.step()
 
-
                 # perform backtracking line search if constraints are not satisfied
                 max_iter = 100
                 alpha = 0.5
                 bls_iter = 0
                 while not self.predictor.check_constr():
-                    
                     for old_par, new_par in zip(old_pars, self.predictor.parameters()):
-                        # print(f'||new parameter - old parameter ||: {torch.norm(new_par.data - old_par)}')
-                        new_par.data = alpha * old_par.clone() + (1 - alpha) * new_par.data
+                        new_par.data = (
+                            alpha * old_par.clone() + (1 - alpha) * new_par.data
+                        )
 
-                    if bls_iter > max_iter-1:
+                    if bls_iter > max_iter - 1:
                         M = self.predictor.get_constraints()
                         logger.warning(
                             f'Epoch {i+1}/{self.epochs_predictor}\t'
-                            f'max real eigenvalue of M: {(torch.max(torch.real(torch.linalg.eig(M)[0]))):1f}\t'
-                            f'Backtracking line search algorithm exceeded maximum iteration. Return'
+                            f'max real eigenvalue of M: '
+                            f'{(torch.max(torch.real(torch.linalg.eig(M)[0]))):1f}\t'
+                            f'Backtracking line search exceeded maximum iteration.'
                         )
                         return
-                    bls_iter +=1
-
+                    bls_iter += 1
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
-                f'Total Loss (Predictor): {total_loss:1f} \t' 
+                f'Total Loss (Predictor): {total_loss:1f} \t'
                 f'Barrier: {barrier:1f}\t'
                 f'Backtracking Line Search iteration: {bls_iter}\t'
                 f'Max accumulated gradient norm: {max_grad:1f}'
@@ -220,12 +217,8 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         initial_y = initial_state
         u = control
 
-        initial_u = utils.normalize(
-            initial_u, self.u_mean, self.u_stddev
-        )
-        initial_y = utils.normalize(
-            initial_y, self.y_mean, self.y_stddev
-        )
+        initial_u = utils.normalize(initial_u, self.u_mean, self.u_stddev)
+        initial_y = utils.normalize(initial_y, self.y_mean, self.y_stddev)
         u = utils.normalize(u, self.u_mean, self.u_stddev)
 
         with torch.no_grad():
