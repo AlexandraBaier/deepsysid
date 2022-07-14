@@ -464,6 +464,35 @@
           "msge"
         ]
       }
+    },
+    {
+      "model_base_name": "ConstrainedRnn",
+      "model_class": "deepsysid.models.recurrent.ConstrainedRnn",
+      "static_parameters": {
+        "num_recurrent_layers": 2,
+        "loss": "mse",
+        "beta":1.0,
+        "time_delta": 1.0,
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 128,
+        "epochs_initializer": 5,
+        "epochs_predictor": 5,
+        "decay_parameter":1e-3,
+        "nx":20,
+        "nw":20
+      },
+      "flexible_parameters": {
+        "gamma":[
+          5.0,
+          10.0,
+          15.0
+        ],
+        "learning_rate": [
+          1e-2,
+          0.0025
+        ]
+      }
     }
   ]
 }

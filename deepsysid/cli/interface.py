@@ -95,7 +95,7 @@ class DeepSysIdCommandLineInterface:
         add_parser_arguments(
             self.evaluate_quadcopter_parser, model_argument=True, mode_argument=True
         )
-        self.evaluate_4dof_ship_trajectory_parser.set_defaults(
+        self.evaluate_quadcopter_parser.set_defaults(
             func=self.__evaluate_quadcopter_trajectory
         )
 
