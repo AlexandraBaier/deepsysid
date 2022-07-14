@@ -133,6 +133,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         predictor_dataset = _PredictorDataset(us, ys, self.sequence_length)
 
         time_start_pred = time.time()
+        t = self.decay_parameter
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
@@ -149,7 +150,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 y = self.predictor.forward(
                     batch['x'].float().to(self.device), hx=hx
                 ).to(self.device)
-                barrier = self.predictor.get_barrier(self.decay_parameter).to(
+                barrier = self.predictor.get_barrier(t).to(
                     self.device
                 )
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
@@ -187,6 +188,16 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                         )
                         return
                     bls_iter += 1
+
+            # decay t following the idea of interior point methods
+            num_of_const_decay_par = 100
+            decay_rate = 10
+            if i%num_of_const_decay_par == 0 and i !=0:
+                t = t*1/decay_rate
+                logger.info(
+                    f'Decay t by {decay_rate} \t'
+                    f't: {t:1f}'
+                )
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
