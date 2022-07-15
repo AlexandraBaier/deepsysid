@@ -567,7 +567,7 @@ class LSTMInitModelCombined(base.DynamicIdentificationModel):
             num_recurrent_layers=self.num_recurrent_layers,
             output_dim=self.state_dim,
             dropout=self.dropout,
-        )
+        ).to(self.device)
         self.optimizer = optim.Adam(
             self.predictor.parameters(), lr=self.learning_rate
         )
