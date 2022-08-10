@@ -77,7 +77,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
         self.initializer = rnn.BasicLSTM(
             input_dim=self.nu + self.ny,
-            recurrent_dim=self.nw,
+            recurrent_dim=self.nx,
             num_recurrent_layers=self.num_recurrent_layers,
             output_dim=[self.ny],
             dropout=self.dropout,
