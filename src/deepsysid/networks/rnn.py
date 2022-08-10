@@ -396,14 +396,14 @@ class LTIRnn(nn.Module):
 
     def get_barrier(self, t: float) -> torch.Tensor:
         M = self.get_constraints()
-        barrier = -t*(-M).logdet()
+        barrier = -t * (-M).logdet()
 
         _, info = torch.linalg.cholesky_ex(-M.cpu())
 
         if info >0:
             barrier += torch.tensor(float('inf'))
 
-        return barrier.to(self.device)
+        return barrier
 
     def check_constr(self) -> bool:
         with torch.no_grad():
