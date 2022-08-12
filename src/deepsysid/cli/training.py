@@ -50,6 +50,9 @@ def train_model(
     model = execution.initialize_model(config, model_name, device_name)
     # Train model
     logger.info(f'Training model on {device_name} if implemented.')
-    model.train(control_seqs=controls, state_seqs=states)
+    metadata = model.train(control_seqs=controls, state_seqs=states)
+    # Save model metadata
+    if metadata is not None:
+        execution.save_training_metadata(metadata, model_directory, model_name)
     # Save model
     execution.save_model(model, model_directory, model_name)
