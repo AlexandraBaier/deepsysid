@@ -88,7 +88,9 @@ def test_model(
             whiteboxes.append(whitebox)
             blackboxes.append(blackbox)
         else:
-            simulation_result = model.simulate(initial_control, initial_state, true_control)
+            simulation_result = model.simulate(
+                initial_control, initial_state, true_control
+            )
             if isinstance(simulation_result, np.ndarray):
                 pred_target = simulation_result
             else:
