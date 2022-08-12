@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import List
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -22,13 +22,17 @@ class SemiphysicalComponent(nn.Module, abc.ABC):
         self.state_dim = state_dim
         self.device = device
 
-        self.control_mean = None
-        self.control_std = None
-        self.state_mean = None
-        self.state_std = None
+        self.control_mean: Optional[np.ndarray] = None
+        self.control_std: Optional[np.ndarray] = None
+        self.state_mean: Optional[np.ndarray] = None
+        self.state_std: Optional[np.ndarray] = None
 
     def set_normalization_values(
-        self, control_mean, state_mean, control_std, state_std
+        self,
+        control_mean: np.ndarray,
+        state_mean: np.ndarray,
+        control_std: np.ndarray,
+        state_std: np.ndarray
     ):
         self.control_mean = control_mean
         self.state_mean = state_mean
@@ -211,7 +215,7 @@ class BlankeComponent(LinearComponent):
         train_y = np.vstack(train_y_list)
 
         # Train each dimension as separate equation
-        def train_dimension(dim_mask, dim_name, dim_idx):
+        def train_dimension(dim_mask: Tuple[int, ...], dim_name: str, dim_idx: int):
             regressor = LinearRegression(fit_intercept=False)
             regressor.fit(train_x[:, dim_mask], train_y[:, dim_idx])
             linear_fit = r2_score(
