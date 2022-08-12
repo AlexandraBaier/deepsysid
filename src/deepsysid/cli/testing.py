@@ -61,6 +61,7 @@ def test_model(
     model: DynamicIdentificationModel,
     threshold: Optional[float] = None,
 ) -> ModelTestResult:
+    # TODO: Explicitly handle metadata provided by dynamic identification models.
     # Execute predictions on test data
     control = []
     pred_states = []
@@ -87,7 +88,11 @@ def test_model(
             whiteboxes.append(whitebox)
             blackboxes.append(blackbox)
         else:
-            pred_target = model.simulate(initial_control, initial_state, true_control)
+            simulation_result = model.simulate(initial_control, initial_state, true_control)
+            if isinstance(simulation_result, np.ndarray):
+                pred_target = simulation_result
+            else:
+                pred_target = simulation_result[0]
 
         control.append(true_control)
         pred_states.append(pred_target)
