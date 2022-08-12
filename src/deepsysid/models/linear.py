@@ -13,7 +13,7 @@ class LinearModel(DynamicIdentificationModel):
     def __init__(self, config: DynamicIdentificationModelConfig):
         super().__init__(config)
 
-        self.regressor = LinearRegression(fit_intercept=True, normalize=False)
+        self.regressor = LinearRegression(fit_intercept=True)
 
         self.control_dim = len(config.control_names)
         self.state_dim = len(config.state_names)
