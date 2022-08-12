@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A system identification toolkit for multistep prediction using deep learning and hybrid methods."
 authors = ["Alexandra Baier <alx.baier@gmail.com>", "Daniel Frank "]
 readme = "README.md"
-packages = [{include = "deepsysid"}]
+packages = [{include = "deepsysid", from = "src"}]
 license = "MIT"
 repository = "https://github.com/AlexandraBaier/deepsysid"
 
