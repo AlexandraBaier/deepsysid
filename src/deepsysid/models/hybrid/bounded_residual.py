@@ -1,7 +1,7 @@
 import abc
 import json
 import logging
-from typing import Literal, Optional, Tuple, List, Dict
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -115,7 +115,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.control_mean: Optional[np.ndarray] = None
         self.control_std: Optional[np.ndarray] = None
 
-    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]) -> Dict[str, np.ndarray]:
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> Dict[str, np.ndarray]:
         epoch_losses_initializer = []
         epoch_losses_teacher = []
         epoch_losses_multistep = []
@@ -173,7 +175,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 self.initializer.zero_grad()
                 y = self.initializer.forward(batch['x'].float().to(self.device))
                 # This type error is ignored, since we know that y will not be a tuple.
-                batch_loss = mse_loss(y, batch['y'].float().to(self.device))  # type: ignore
+                batch_loss = mse_loss(
+                    y, batch['y'].float().to(self.device)  # type: ignore
+                )
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_initializer.step()
@@ -310,7 +314,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         return dict(
             epoch_loss_initializer=np.array(epoch_losses_initializer),
             epoch_loss_teacher=np.array(epoch_losses_teacher),
-            epoch_loss_multistep=np.array(epoch_losses_multistep)
+            epoch_loss_multistep=np.array(epoch_losses_multistep),
         )
 
     def simulate(
@@ -318,16 +322,14 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         initial_control: np.ndarray,
         initial_state: np.ndarray,
         control: np.ndarray,
+        threshold: float = np.infty,
     ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
         y, whitebox, blackbox = self.simulate_hybrid(
             initial_control=initial_control,
             initial_state=initial_state,
             control=control,
         )
-        return y, dict(
-            whitebox=whitebox,
-            blackbox=blackbox
-        )
+        return y, dict(whitebox=whitebox, blackbox=blackbox)
 
     def simulate_hybrid(
         self,
