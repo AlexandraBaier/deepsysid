@@ -1,0 +1,45 @@
+repos:
+  - repo: local
+    hooks:
+      - id: poetry-check
+        name: poetry-check
+        entry: poetry check
+        language: system
+        pass_filenames: false
+      - id: poetry-lock
+        name: poetry-lock
+        entry: poetry lock
+        language: system
+        pass_filenames: false
+      - id: poetry-install
+        name: poetry-install
+        entry: poetry install
+        language: system
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: poetry run mypy src
+        language: system
+        pass_filenames: false
+        fail_fast: true
+      - id: pytest
+        name: pytest
+        entry: poetry run pytest
+        language: system
+        pass_filenames: false
+        fail_fast: true
+      - id: black
+        name: black
+        entry: poetry run black src
+        language: system
+        pass_filenames: false
+      - id: isort
+        name: isort
+        entry: poetry run isort src
+        language: system
+        pass_filenames: false
+      - id: flake8
+        name: flake8
+        entry: poetry run flake8 src
+        language: system
+        pass_filenames: false

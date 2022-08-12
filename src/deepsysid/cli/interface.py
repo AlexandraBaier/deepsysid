@@ -5,10 +5,18 @@ from typing import Optional
 
 from .. import execution
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
-from .evaluation import (evaluate_model, save_trajectory_results,
-                         test_4dof_ship_trajectory, test_quadcopter_trajectory)
-from .testing import (build_result_file_name, load_test_simulations,
-                      save_model_tests, test_model)
+from .evaluation import (
+    evaluate_model,
+    save_trajectory_results,
+    test_4dof_ship_trajectory,
+    test_quadcopter_trajectory,
+)
+from .testing import (
+    build_result_file_name,
+    load_test_simulations,
+    save_model_tests,
+    test_model,
+)
 from .training import train_model
 
 

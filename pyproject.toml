@@ -23,11 +23,12 @@ pytest = "^7.1.2"
 torch-cpu = ["torch"]
 
 [tool.poetry.dev-dependencies]
-black = "^22.3.0"
+black = "22.6.0"
 mypy = "^0.961"
-isort = "^5.10.1"
-flake8 = "^4.0.1"
+isort = "5.10.1"
+flake8 = "4.0.1"
 pytest = "^7.1.2"
+pre-commit = "^2.20.0"
 
 [tool.poetry.scripts]
 deepsysid="deepsysid.cli.interface:run_deepsysid_cli"
@@ -41,6 +42,9 @@ build-backend = "poetry.core.masonry.api"
 [tool.black]
 line-length = 88
 skip-string-normalization = 1
+
+[tool.isort]
+profile = "black"
 
 [tool.mypy]
 ignore_missing_imports = true

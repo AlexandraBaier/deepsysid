@@ -13,12 +13,20 @@ from ... import utils
 from ...networks import loss, rnn
 from .. import base
 from ..base import DynamicIdentificationModelConfig
-from .physical import (MinimalManeuveringComponent, MinimalManeuveringConfig,
-                       NoOpPhysicalComponent, PhysicalComponent,
-                       PropulsionManeuveringComponent,
-                       PropulsionManeuveringConfig)
-from .semiphysical import (BlankeComponent, LinearComponent,
-                           NoOpSemiphysicalComponent, SemiphysicalComponent)
+from .physical import (
+    MinimalManeuveringComponent,
+    MinimalManeuveringConfig,
+    NoOpPhysicalComponent,
+    PhysicalComponent,
+    PropulsionManeuveringComponent,
+    PropulsionManeuveringConfig,
+)
+from .semiphysical import (
+    BlankeComponent,
+    LinearComponent,
+    NoOpSemiphysicalComponent,
+    SemiphysicalComponent,
+)
 
 logger = logging.getLogger()
 

@@ -32,7 +32,7 @@ class SemiphysicalComponent(nn.Module, abc.ABC):
         control_mean: np.ndarray,
         state_mean: np.ndarray,
         control_std: np.ndarray,
-        state_std: np.ndarray
+        state_std: np.ndarray,
     ):
         self.control_mean = control_mean
         self.state_mean = state_mean
