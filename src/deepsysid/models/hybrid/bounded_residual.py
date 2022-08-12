@@ -338,9 +338,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         initial_control = utils.normalize(
             initial_control, self.control_mean, self.control_std
         )
-        initial_state = utils.normalize(
-            initial_state, self.state_mean, self.state_std
-        )
+        initial_state = utils.normalize(initial_state, self.state_mean, self.state_std)
         control = utils.normalize(control, self.control_mean, self.control_std)
 
         y = np.zeros((control.shape[0], self.state_dim))
