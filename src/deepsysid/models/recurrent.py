@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -356,7 +356,10 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.control_mean: Optional[np.ndarray] = None
         self.control_std: Optional[np.ndarray] = None
 
-    def train(self, control_seqs, state_seqs):
+    def train(self, control_seqs, state_seqs) -> Dict[str, np.ndarray]:
+        epoch_losses_initializer = []
+        epoch_losses_predictor = []
+
         self.predictor.train()
         self.initializer.train()
 
@@ -394,6 +397,8 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 f'Epoch {i + 1}/{self.epochs_initializer} '
                 f'- Epoch Loss (Initializer): {total_loss}'
             )
+            epoch_losses_initializer.append([i, total_loss])
+
         time_end_init = time.time()
         predictor_dataset = _PredictorDataset(
             control_seqs, state_seqs, self.sequence_length
@@ -422,6 +427,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 f'Epoch {i + 1}/{self.epochs_predictor} '
                 f'- Epoch Loss (Predictor): {total_loss}'
             )
+            epoch_losses_predictor.append([i, total_loss])
 
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
@@ -429,6 +435,13 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         logger.info(
             f'Training time for initializer {time_total_init}s '
             f'and for predictor {time_total_pred}s'
+        )
+
+        return dict(
+            epoch_loss_initializer=np.array(epoch_losses_initializer),
+            epoch_loss_predictor=np.array(epoch_losses_predictor),
+            training_time_initializer=np.array([time_total_init]),
+            training_time_predictor=np.array([time_total_pred]),
         )
 
     def simulate(
@@ -443,9 +456,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         initial_control = utils.normalize(
             initial_control, self.control_mean, self.control_std
         )
-        initial_state = utils.normalize(
-            initial_state, self.state_mean, self.state_std
-        )
+        initial_state = utils.normalize(initial_state, self.state_mean, self.state_std)
         control = utils.normalize(control, self.control_mean, self.control_std)
 
         with torch.no_grad():
