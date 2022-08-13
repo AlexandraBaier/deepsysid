@@ -28,12 +28,17 @@ repos:
         language: system
         pass_filenames: false
         fail_fast: true
-      - id: pytest
-        name: pytest
-        entry: poetry run pytest
+      - id: pytest+cov
+        name: pytest+cov
+        entry: poetry run coverage run --branch -m pytest
         language: system
         pass_filenames: false
         fail_fast: true
+      - id: coverage
+        name: coverage
+        entry: poetry run coverage html
+        language: system
+        pass_filenames: false
       - id: black
         name: black
         entry: poetry run black src

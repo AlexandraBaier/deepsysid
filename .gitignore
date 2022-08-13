@@ -12,3 +12,4 @@ multistep_sysid.egg-info
 dist
 poetry.lock
 .vscode
+.coverage

@@ -29,6 +29,7 @@ isort = "5.10.1"
 flake8 = "4.0.1"
 pytest = "^7.1.2"
 pre-commit = "^2.20.0"
+coverage = "^6.4.3"
 
 [tool.poetry.scripts]
 deepsysid="deepsysid.cli.interface:run_deepsysid_cli"
