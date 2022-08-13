@@ -235,7 +235,7 @@ class BlankeComponent(LinearComponent):
         reg_r = train_dimension(mask_r, 'r', 3)
         reg_phi = train_dimension(mask_phi, 'phi', 4)
 
-        weight = np.zeros((self.state_dim, self.get_semiphysical_in_features()))
+        weight = np.zeros((self.state_dim, self.get_semiphysical_features()))
         weight[0, mask_u] = reg_u.coef_
         weight[1, mask_v] = reg_v.coef_
         weight[3, mask_r] = reg_r.coef_
@@ -245,7 +245,7 @@ class BlankeComponent(LinearComponent):
             torch.from_numpy(weight).float().to(self.device), requires_grad=False
         )
 
-    def get_semiphysical_in_features(self) -> int:
+    def get_semiphysical_features(self) -> int:
         return 20 + self.control_dim
 
     def expand_semiphysical_input(
