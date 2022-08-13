@@ -1,5 +1,6 @@
 import json
 import pathlib
+from typing import Dict, List, Literal
 
 from deepsysid import execution
 from deepsysid.cli.training import train_model
@@ -8,7 +9,9 @@ from deepsysid.cli.testing import (
     test_model as run_model,
     save_model_tests as save_results
 )
+from deepsysid.cli.evaluation import evaluate_model
 from deepsysid.execution import ExperimentConfiguration
+from deepsysid.models.base import DynamicIdentificationModelConfig
 
 
 def _get_data(idx: int) -> str:
@@ -86,20 +89,39 @@ def _get_data(idx: int) -> str:
     return data[idx % len(data)]
 
 
-def test_train_model_cpu(tmp_path: pathlib.Path):
-    model_name = 'LinearModel'
-    model_class = 'deepsysid.models.linear.LinearModel'
-    device = 'cpu'
-    control_names = ['n', 'deltal', 'deltar', 'Vw', 'alpha_x', 'alpha_y']
-    state_names = ['u', 'v', 'p', 'r', 'phi']
-    window_size = 10
-    horizon_size = 20
+def get_state_names() -> List[str]:
+    return ['u', 'v', 'p', 'r', 'phi']
 
-    # Define and create temporary file paths and directories.
-    model_directory = tmp_path.joinpath(model_name)
+
+def get_control_names() -> List[str]:
+    return ['n', 'deltal', 'deltar', 'Vw', 'alpha_x', 'alpha_y']
+
+
+def get_cpu_device_name() -> str:
+    return 'cpu'
+
+
+def get_window_size() -> int:
+    return 3
+
+
+def get_horizon_size() -> int:
+    return 2
+
+
+def get_time_delta() -> float:
+    return 0.5
+
+
+def get_evaluation_mode() -> Literal['train', 'validation', 'test']:
+    return 'test'
+
+
+def _prepare_directories(base_path: pathlib.Path, model_name: str) -> Dict[str, pathlib.Path]:
+    model_directory = base_path.joinpath(model_name)
     model_directory.mkdir(exist_ok=True)
 
-    dataset_directory = tmp_path.joinpath('data')
+    dataset_directory = base_path.joinpath('data')
     train_directory = dataset_directory.joinpath('processed').joinpath('train')
     validation_directory = dataset_directory.joinpath('processed').joinpath('validation')
     test_directory = dataset_directory.joinpath('processed').joinpath('test')
@@ -110,62 +132,80 @@ def test_train_model_cpu(tmp_path: pathlib.Path):
     validation_directory.mkdir(exist_ok=True)
     test_directory.mkdir(exist_ok=True)
 
-    result_directory = tmp_path.joinpath('results')
+    result_directory = base_path.joinpath('results')
     result_directory.mkdir(exist_ok=True)
 
-    configuration_path = tmp_path.joinpath('configuration.json')
+    configuration_path = base_path.joinpath('configuration.json')
+
+    return dict(
+        model=model_directory,
+        data=dataset_directory,
+        train=train_directory,
+        validation=validation_directory,
+        test=test_directory,
+        configuration=configuration_path,
+        result=result_directory
+    )
+
+
+def run_pipeline(
+        base_path: pathlib.Path,
+        model_name: str,
+        model_class: str,
+        config: DynamicIdentificationModelConfig
+):
+    # Define and create temporary file paths and directories.
+    paths = _prepare_directories(base_path, model_name)
 
     # Setup configuration file.
     configuration_dict = dict(
         train_fraction=0.6,
         validation_fraction=0.5,
         time_delta=0.5,
-        window_size=window_size,
-        horizon_size=horizon_size,
-        control_names=control_names,
-        state_names=state_names,
-        models=dict(
-            LinearModel=dict(
+        window_size=get_window_size(),
+        horizon_size=get_horizon_size(),
+        control_names=get_control_names(),
+        state_names=get_state_names(),
+        models={
+            model_name: dict(
                 model_class=model_class,
-                location=str(model_directory),
-                parameters=dict(
-                    control_names=control_names,
-                    state_names=state_names,
-                    time_delta=0.5
-                )
+                location=str(paths['model']),
+                parameters=config.dict()
             )
-        )
+        }
     )
-    configuration_path.write_text(json.dumps(configuration_dict))
+    paths['configuration'].write_text(json.dumps(configuration_dict))
 
     # Setup dataset directory.
-    train_directory.joinpath('train-0.csv').write_text(
+    paths['train'].joinpath('train-0.csv').write_text(
         data=_get_data(0)
     )
-    validation_directory.joinpath('validation-0.csv').write_text(
+    paths['validation'].joinpath('validation-0.csv').write_text(
         data=_get_data(1)
     )
-    test_directory.joinpath('test-0.csv').write_text(
+    paths['test'].joinpath('test-0.csv').write_text(
         data=_get_data(2)
     )
 
+    # Run model training.
     train_model(
         model_name=model_name,
-        device_name=device,
-        configuration_path=str(configuration_path),
-        dataset_directory=str(dataset_directory),
+        device_name=get_cpu_device_name(),
+        configuration_path=str(paths['configuration']),
+        dataset_directory=str(paths['data']),
         disable_stdout=True
     )
 
+    # Run model testing.
     config = ExperimentConfiguration.parse_obj(configuration_dict)
-    model = execution.initialize_model(config, model_name, device)
-    execution.load_model(model, str(model_directory), model_name)
+    model = execution.initialize_model(config, model_name, get_cpu_device_name())
+    execution.load_model(model, str(paths['model']), model_name)
     simulations = load_simulations(
         configuration=config,
         model_name=model_name,
-        device_name=device,
-        mode='test',
-        dataset_directory=str(dataset_directory)
+        device_name=get_cpu_device_name(),
+        mode=get_evaluation_mode(),
+        dataset_directory=str(paths['data'])
     )
     result = run_model(
         simulations=simulations,
@@ -175,7 +215,17 @@ def test_train_model_cpu(tmp_path: pathlib.Path):
     save_results(
         test_result=result,
         config=config,
-        result_directory=str(result_directory),
+        result_directory=str(paths['result']),
         model_name=model_name,
         mode='test'
     )
+
+    # Run model evaluation.
+    evaluate_model(
+        config=config,
+        model_name=model_name,
+        mode=get_evaluation_mode(),
+        result_directory=str(paths['result']),
+        threshold=None
+    )
+
