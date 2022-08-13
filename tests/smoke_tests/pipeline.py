@@ -2,10 +2,9 @@ import json
 import pathlib
 from typing import Dict, List, Literal
 
-from deepsysid import execution
-from deepsysid.cli.training import train_model
-from deepsysid.cli.testing import test_model as run_model
 from deepsysid.cli.evaluation import evaluate_model
+from deepsysid.cli.testing import test_model as run_model
+from deepsysid.cli.training import train_model
 from deepsysid.execution import ExperimentConfiguration
 from deepsysid.models.base import DynamicIdentificationModelConfig
 
@@ -80,7 +79,7 @@ def _get_data(idx: int) -> str:
 60,964.270018721296,0.0489632410466911,-0.0489243541187817,1.7367185229698,0.7162282044941529,0.697866146970235,4.188045906921779,-0.0360388584879017,8.421782012194941e-05,-0.000873922589953951,0.00554811659663379
 61,966.892211478738,0.0477650626918437,-0.0482912296371558,1.9353854458714,0.715659673741693,0.698449161628772,4.411354720173151,0.116142908929917,5.4867469118364504e-05,-0.00225475301015267,0.0073422420355471205
 62,980.6345171475509,0.0477078453856838,-0.046800667435083,1.95440414881116,0.723079128462368,0.690765209012514,4.469737071132231,0.10033878805219,-0.0023162647254260397,-0.00151016889420793,0.00513054948608715
-"""
+""",
     ]
     return data[idx % len(data)]
 
@@ -113,13 +112,17 @@ def get_evaluation_mode() -> Literal['train', 'validation', 'test']:
     return 'test'
 
 
-def _prepare_directories(base_path: pathlib.Path, model_name: str) -> Dict[str, pathlib.Path]:
+def _prepare_directories(
+    base_path: pathlib.Path, model_name: str
+) -> Dict[str, pathlib.Path]:
     model_directory = base_path.joinpath(model_name)
     model_directory.mkdir(exist_ok=True)
 
     dataset_directory = base_path.joinpath('data')
     train_directory = dataset_directory.joinpath('processed').joinpath('train')
-    validation_directory = dataset_directory.joinpath('processed').joinpath('validation')
+    validation_directory = dataset_directory.joinpath('processed').joinpath(
+        'validation'
+    )
     test_directory = dataset_directory.joinpath('processed').joinpath('test')
 
     dataset_directory.mkdir(exist_ok=True)
@@ -140,15 +143,15 @@ def _prepare_directories(base_path: pathlib.Path, model_name: str) -> Dict[str, 
         validation=validation_directory,
         test=test_directory,
         configuration=configuration_path,
-        result=result_directory
+        result=result_directory,
     )
 
 
 def run_pipeline(
-        base_path: pathlib.Path,
-        model_name: str,
-        model_class: str,
-        config: DynamicIdentificationModelConfig
+    base_path: pathlib.Path,
+    model_name: str,
+    model_class: str,
+    config: DynamicIdentificationModelConfig,
 ):
     # Define and create temporary file paths and directories.
     paths = _prepare_directories(base_path, model_name)
@@ -166,22 +169,16 @@ def run_pipeline(
             model_name: dict(
                 model_class=model_class,
                 location=str(paths['model']),
-                parameters=config.dict()
+                parameters=config.dict(),
             )
-        }
+        },
     )
     paths['configuration'].write_text(json.dumps(configuration_dict))
 
     # Setup dataset directory.
-    paths['train'].joinpath('train-0.csv').write_text(
-        data=_get_data(0)
-    )
-    paths['validation'].joinpath('validation-0.csv').write_text(
-        data=_get_data(1)
-    )
-    paths['test'].joinpath('test-0.csv').write_text(
-        data=_get_data(2)
-    )
+    paths['train'].joinpath('train-0.csv').write_text(data=_get_data(0))
+    paths['validation'].joinpath('validation-0.csv').write_text(data=_get_data(1))
+    paths['test'].joinpath('test-0.csv').write_text(data=_get_data(2))
 
     # Run model training.
     train_model(
@@ -189,7 +186,7 @@ def run_pipeline(
         device_name=get_cpu_device_name(),
         configuration_path=str(paths['configuration']),
         dataset_directory=str(paths['data']),
-        disable_stdout=True
+        disable_stdout=True,
     )
 
     # Run model testing.
@@ -199,7 +196,7 @@ def run_pipeline(
         mode=get_evaluation_mode(),
         configuration_path=str(paths['configuration']),
         dataset_directory=str(paths['data']),
-        result_directory=str(paths['result'])
+        result_directory=str(paths['result']),
     )
 
     # Run model evaluation.
@@ -210,6 +207,5 @@ def run_pipeline(
         model_name=model_name,
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
-        threshold=None
+        threshold=None,
     )
-

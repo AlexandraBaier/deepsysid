@@ -1,8 +1,9 @@
 import pathlib
 
-from deepsysid.models.linear import LinearModel, LinearLag, QuadraticControlLag
+from deepsysid.models.linear import LinearLag, LinearModel, QuadraticControlLag
 from deepsysid.models.narx import NARXDenseNetwork
-from deepsysid.models.recurrent import LSTMInitModel, ConstrainedRnn
+from deepsysid.models.recurrent import ConstrainedRnn, LSTMInitModel
+
 from . import pipeline
 
 
@@ -13,11 +14,9 @@ def test_linear_model_cpu(tmp_path: pathlib.Path):
         control_names=pipeline.get_control_names(),
         state_names=pipeline.get_state_names(),
         device_name=pipeline.get_cpu_device_name(),
-        time_delta=pipeline.get_time_delta()
+        time_delta=pipeline.get_time_delta(),
     )
-    pipeline.run_pipeline(
-        tmp_path, model_name, model_class, config=config
-    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
 
 
 def test_linear_lag(tmp_path: pathlib.Path):
@@ -28,11 +27,9 @@ def test_linear_lag(tmp_path: pathlib.Path):
         state_names=pipeline.get_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
-        window_size=pipeline.get_window_size()
+        window_size=pipeline.get_window_size(),
     )
-    pipeline.run_pipeline(
-        tmp_path, model_name, model_class, config=config
-    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
 
 
 def test_quadratic_control_lag(tmp_path: pathlib.Path):
@@ -43,11 +40,9 @@ def test_quadratic_control_lag(tmp_path: pathlib.Path):
         state_names=pipeline.get_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
-        window_size=pipeline.get_window_size()
+        window_size=pipeline.get_window_size(),
     )
-    pipeline.run_pipeline(
-        tmp_path, model_name, model_class, config=config
-    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
 
 
 def test_narx(tmp_path: pathlib.Path):
@@ -63,11 +58,9 @@ def test_narx(tmp_path: pathlib.Path):
         batch_size=3,
         epochs=2,
         layers=[5, 10, 5],
-        dropout=0.25
+        dropout=0.25,
     )
-    pipeline.run_pipeline(
-        tmp_path, model_name, model_class, config=config
-    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
 
 
 def test_lstm_init_model(tmp_path: pathlib.Path):
@@ -86,11 +79,9 @@ def test_lstm_init_model(tmp_path: pathlib.Path):
         batch_size=3,
         epochs_initializer=2,
         epochs_predictor=2,
-        loss='mse'
+        loss='mse',
     )
-    pipeline.run_pipeline(
-        tmp_path, model_name, model_class, config=config
-    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
 
 
 def test_constrained_rnn(tmp_path: pathlib.Path):
@@ -115,8 +106,6 @@ def test_constrained_rnn(tmp_path: pathlib.Path):
         batch_size=3,
         epochs_initializer=2,
         epochs_predictor=2,
-        loss='mse'
+        loss='mse',
     )
-    pipeline.run_pipeline(
-        tmp_path, model_name, model_class, config=config
-    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
