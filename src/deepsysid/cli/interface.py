@@ -11,12 +11,7 @@ from .evaluation import (
     test_4dof_ship_trajectory,
     test_quadcopter_trajectory,
 )
-from .testing import (
-    build_result_file_name,
-    load_test_simulations,
-    save_model_tests,
-    test_model,
-)
+from .testing import build_result_file_name, test_model
 from .training import train_model
 
 
@@ -154,51 +149,14 @@ class DeepSysIdCommandLineInterface:
         else:
             device_name = build_device_name(args.enable_cuda, None)
 
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
-            configuration = json.load(f)
-        configuration = execution.ExperimentConfiguration.parse_obj(configuration)
-
-        model_directory = os.path.expanduser(
-            os.path.normpath(configuration.models[args.model].location)
-        )
-        model = execution.initialize_model(configuration, args.model, device_name)
-        execution.load_model(model, model_directory, args.model)
-
-        simulations = load_test_simulations(
-            configuration=configuration,
+        test_model(
             model_name=args.model,
             device_name=device_name,
             mode=args.mode,
+            configuration_path=os.environ['CONFIGURATION'],
             dataset_directory=os.environ['DATASET_DIRECTORY'],
-        )
-
-        test_result = test_model(
-            simulations=simulations, config=configuration, model=model
-        )
-        save_model_tests(
-            test_result=test_result,
-            config=configuration,
             result_directory=os.environ['RESULT_DIRECTORY'],
-            model_name=args.model,
-            mode=args.mode,
         )
-
-        if configuration.thresholds and isinstance(model, HybridResidualLSTMModel):
-            for threshold in configuration.thresholds:
-                test_result = test_model(
-                    simulations=simulations,
-                    config=configuration,
-                    model=model,
-                    threshold=threshold,
-                )
-                save_model_tests(
-                    test_result=test_result,
-                    config=configuration,
-                    result_directory=os.environ['RESULT_DIRECTORY'],
-                    model_name=args.model,
-                    mode=args.mode,
-                    threshold=threshold,
-                )
 
     def __evaluate_model(self, args):
         with open(os.environ['CONFIGURATION'], mode='r') as f:

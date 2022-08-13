@@ -4,11 +4,7 @@ from typing import Dict, List, Literal
 
 from deepsysid import execution
 from deepsysid.cli.training import train_model
-from deepsysid.cli.testing import (
-    load_test_simulations as load_simulations,
-    test_model as run_model,
-    save_model_tests as save_results
-)
+from deepsysid.cli.testing import test_model as run_model
 from deepsysid.cli.evaluation import evaluate_model
 from deepsysid.execution import ExperimentConfiguration
 from deepsysid.models.base import DynamicIdentificationModelConfig
@@ -197,30 +193,18 @@ def run_pipeline(
     )
 
     # Run model testing.
-    config = ExperimentConfiguration.parse_obj(configuration_dict)
-    model = execution.initialize_model(config, model_name, get_cpu_device_name())
-    execution.load_model(model, str(paths['model']), model_name)
-    simulations = load_simulations(
-        configuration=config,
+    run_model(
         model_name=model_name,
         device_name=get_cpu_device_name(),
         mode=get_evaluation_mode(),
-        dataset_directory=str(paths['data'])
-    )
-    result = run_model(
-        simulations=simulations,
-        config=config,
-        model=model
-    )
-    save_results(
-        test_result=result,
-        config=config,
-        result_directory=str(paths['result']),
-        model_name=model_name,
-        mode='test'
+        configuration_path=str(paths['configuration']),
+        dataset_directory=str(paths['data']),
+        result_directory=str(paths['result'])
     )
 
     # Run model evaluation.
+    config = ExperimentConfiguration.parse_obj(configuration_dict)
+
     evaluate_model(
         config=config,
         model_name=model_name,

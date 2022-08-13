@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import os
 from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 
@@ -17,6 +18,62 @@ class ModelTestResult:
     pred_state: List[np.ndarray]
     file_names: List[str]
     metadata: List[Dict[str, np.ndarray]]
+
+
+def test_model(
+    model_name: str,
+    device_name: str,
+    mode: Literal['train', 'validation', 'test'],
+    configuration_path: str,
+    dataset_directory: str,
+    result_directory: str,
+):
+    with open(configuration_path, mode='r') as f:
+        configuration = json.load(f)
+    configuration = execution.ExperimentConfiguration.parse_obj(configuration)
+
+    model_directory = os.path.expanduser(
+        os.path.normpath(configuration.models[model_name].location)
+    )
+    model = execution.initialize_model(configuration, model_name, device_name)
+    execution.load_model(model, model_directory, model_name)
+
+    simulations = load_test_simulations(
+        configuration=configuration,
+        model_name=model_name,
+        device_name=device_name,
+        mode=mode,
+        dataset_directory=dataset_directory,
+    )
+
+    test_result = simulate_model(
+        simulations=simulations, config=configuration, model=model
+    )
+
+    save_model_tests(
+        test_result=test_result,
+        config=configuration,
+        result_directory=result_directory,
+        model_name=model_name,
+        mode=mode,
+    )
+
+    if configuration.thresholds and isinstance(model, HybridResidualLSTMModel):
+        for threshold in configuration.thresholds:
+            test_result = simulate_model(
+                simulations=simulations,
+                config=configuration,
+                model=model,
+                threshold=threshold,
+            )
+            save_model_tests(
+                test_result=test_result,
+                config=configuration,
+                result_directory=os.environ['RESULT_DIRECTORY'],
+                model_name=model_name,
+                mode=mode,
+                threshold=threshold,
+            )
 
 
 def load_test_simulations(
@@ -54,13 +111,12 @@ def load_test_simulations(
     return simulations
 
 
-def test_model(
+def simulate_model(
     simulations: List[Tuple[np.ndarray, np.ndarray, str]],
     config: execution.ExperimentConfiguration,
     model: DynamicIdentificationModel,
     threshold: Optional[float] = None,
 ) -> ModelTestResult:
-    # TODO: Explicitly handle metadata provided by dynamic identification models.
     # Execute predictions on test data
     control = []
     pred_states = []
