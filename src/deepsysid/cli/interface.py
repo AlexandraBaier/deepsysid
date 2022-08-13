@@ -6,12 +6,11 @@ from typing import Optional
 from .. import execution
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
 from .evaluation import (
+    evaluate_4dof_ship_trajectory,
     evaluate_model,
-    save_trajectory_results,
-    test_4dof_ship_trajectory,
-    test_quadcopter_trajectory,
+    evaluate_quadcopter_trajectory,
 )
-from .testing import build_result_file_name, test_model
+from .testing import test_model
 from .training import train_model
 
 
@@ -184,59 +183,17 @@ class DeepSysIdCommandLineInterface:
                 )
 
     def __evaluate_4dof_ship_trajectory(self, args):
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
-            config = json.load(f)
-        config = execution.ExperimentConfiguration.parse_obj(config)
-
-        result_directory = os.environ['RESULT_DIRECTORY']
-        result_file_path = os.path.join(
-            result_directory,
-            args.model,
-            build_result_file_name(
-                mode=args.mode,
-                window_size=config.window_size,
-                horizon_size=config.horizon_size,
-                extension='hdf5',
-            ),
-        )
-
-        result = test_4dof_ship_trajectory(
-            config=config, result_file_path=result_file_path
-        )
-
-        save_trajectory_results(
-            result=result,
-            config=config,
-            result_directory=result_directory,
+        evaluate_4dof_ship_trajectory(
+            configuration_path=os.environ['CONFIGURATION'],
+            result_directory=os.environ['RESULT_DIRECTORY'],
             model_name=args.model,
             mode=args.mode,
         )
 
     def __evaluate_quadcopter_trajectory(self, args):
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
-            config = json.load(f)
-        config = execution.ExperimentConfiguration.parse_obj(config)
-
-        test_directory = os.environ['RESULT_DIRECTORY']
-        test_file_path = os.path.join(
-            test_directory,
-            args.model,
-            build_result_file_name(
-                mode=args.mode,
-                window_size=config.window_size,
-                horizon_size=config.horizon_size,
-                extension='hdf5',
-            ),
-        )
-
-        result = test_quadcopter_trajectory(
-            config=config, result_file_path=test_file_path
-        )
-
-        save_trajectory_results(
-            result=result,
-            config=config,
-            result_directory=test_directory,
+        evaluate_quadcopter_trajectory(
+            configuration_path=os.environ['CONFIGURATION'],
+            result_directory=os.environ['RESULT_DIRECTORY'],
             model_name=args.model,
             mode=args.mode,
         )

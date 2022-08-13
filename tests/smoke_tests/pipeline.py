@@ -2,7 +2,7 @@ import json
 import pathlib
 from typing import Dict, List, Literal
 
-from deepsysid.cli.evaluation import evaluate_model
+from deepsysid.cli.evaluation import evaluate_4dof_ship_trajectory, evaluate_model
 from deepsysid.cli.testing import test_model as run_model
 from deepsysid.cli.training import train_model
 from deepsysid.execution import ExperimentConfiguration
@@ -208,4 +208,11 @@ def run_pipeline(
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
         threshold=None,
+    )
+
+    evaluate_4dof_ship_trajectory(
+        configuration_path=str(paths['configuration']),
+        result_directory=str(paths['result']),
+        model_name=model_name,
+        mode=get_evaluation_mode(),
     )

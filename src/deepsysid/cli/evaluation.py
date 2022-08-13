@@ -27,6 +27,26 @@ def evaluate_model(
     result_directory: str,
     threshold: Optional[float] = None,
 ):
+    for horizon_size in range(1, config.horizon_size + 1):
+        evaluate_model_specific_horizon(
+            config=config,
+            model_name=model_name,
+            mode=mode,
+            result_directory=result_directory,
+            horizon_size=horizon_size,
+            threshold=threshold,
+        )
+
+
+def evaluate_model_specific_horizon(
+    config: execution.ExperimentConfiguration,
+    model_name: str,
+    mode: Literal['train', 'validation', 'test'],
+    result_directory: str,
+    horizon_size: int,
+    threshold: Optional[float] = None,
+):
+    # Load from the maximum horizon file.
     test_file_path = os.path.join(
         result_directory,
         model_name,
@@ -39,13 +59,14 @@ def evaluate_model(
         ),
     )
 
+    # But write to the specified horizon_size file.
     scores_file_path = os.path.join(
         result_directory,
         model_name,
         build_score_file_name(
             mode=mode,
             window_size=config.window_size,
-            horizon_size=config.horizon_size,
+            horizon_size=horizon_size,
             extension='hdf5',
             threshold=threshold,
         ),
@@ -56,7 +77,7 @@ def evaluate_model(
         build_score_file_name(
             mode=mode,
             window_size=config.window_size,
-            horizon_size=config.horizon_size,
+            horizon_size=horizon_size,
             extension='json',
             threshold=threshold,
         ),
@@ -70,9 +91,10 @@ def evaluate_model(
     with h5py.File(test_file_path, 'r') as f:
         file_names = [fn.decode('UTF-8') for fn in f['file_names'][:].tolist()]
         for i in range(len(file_names)):
-            pred.append(f['predicted'][str(i)][:])
-            true.append(f['true'][str(i)][:])
-            steps.append(f['predicted'][str(i)][:].shape[0])
+            # Only grab the first "horizon_size" predictions for evaluation.
+            pred.append(f['predicted'][str(i)][:horizon_size])
+            true.append(f['true'][str(i)][:horizon_size])
+            steps.append(f['predicted'][str(i)][:horizon_size].shape[0])
 
     def mse(t: np.ndarray, p: np.ndarray) -> np.ndarray:
         return mean_squared_error(t, p, multioutput='raw_values')
@@ -123,8 +145,46 @@ def evaluate_model(
         json.dump(obj, f)
 
 
+def evaluate_4dof_ship_trajectory(
+    configuration_path: str,
+    result_directory: str,
+    model_name: str,
+    mode: Literal['train', 'validation', 'test'],
+):
+    with open(configuration_path, mode='r') as f:
+        config = json.load(f)
+    config = execution.ExperimentConfiguration.parse_obj(config)
+
+    result_file_path = os.path.join(
+        result_directory,
+        model_name,
+        build_result_file_name(
+            mode=mode,
+            window_size=config.window_size,
+            horizon_size=config.horizon_size,
+            extension='hdf5',
+        ),
+    )
+
+    for horizon_size in range(1, config.horizon_size + 1):
+        result = test_4dof_ship_trajectory(
+            config=config,
+            result_file_path=result_file_path,
+            horizon_size=horizon_size,
+        )
+
+        save_trajectory_results(
+            result=result,
+            config=config,
+            result_directory=result_directory,
+            model_name=model_name,
+            mode=mode,
+            horizon_size=horizon_size,
+        )
+
+
 def test_4dof_ship_trajectory(
-    config: execution.ExperimentConfiguration, result_file_path: str
+    config: execution.ExperimentConfiguration, result_file_path: str, horizon_size: int
 ) -> TrajectoryResult:
     pred = []
     true = []
@@ -134,9 +194,10 @@ def test_4dof_ship_trajectory(
     with h5py.File(result_file_path, 'r') as f:
         file_names = [fn.decode('UTF-8') for fn in f['file_names'][:].tolist()]
         for i in range(len(file_names)):
-            pred.append(f['predicted'][str(i)][:])
-            true.append(f['true'][str(i)][:])
-            steps.append(f['predicted'][str(i)][:].shape[0])
+            # Only load first horizon_size predictions.
+            pred.append(f['predicted'][str(i)][:horizon_size])
+            true.append(f['true'][str(i)][:horizon_size])
+            steps.append(f['predicted'][str(i)][:horizon_size].shape[0])
 
     traj_rmse_per_step_seq = []
 
@@ -165,8 +226,46 @@ def test_4dof_ship_trajectory(
     )
 
 
+def evaluate_quadcopter_trajectory(
+    configuration_path: str,
+    result_directory: str,
+    model_name: str,
+    mode: Literal['train', 'validation', 'test'],
+):
+    with open(configuration_path, mode='r') as f:
+        config = json.load(f)
+    config = execution.ExperimentConfiguration.parse_obj(config)
+
+    result_file_path = os.path.join(
+        result_directory,
+        model_name,
+        build_result_file_name(
+            mode=mode,
+            window_size=config.window_size,
+            horizon_size=config.horizon_size,
+            extension='hdf5',
+        ),
+    )
+
+    for horizon_size in range(1, config.horizon_size + 1):
+        result = test_quadcopter_trajectory(
+            config=config,
+            result_file_path=result_file_path,
+            horizon_size=horizon_size,
+        )
+
+        save_trajectory_results(
+            result=result,
+            config=config,
+            result_directory=result_directory,
+            model_name=model_name,
+            mode=mode,
+            horizon_size=horizon_size,
+        )
+
+
 def test_quadcopter_trajectory(
-    config: execution.ExperimentConfiguration, result_file_path: str
+    config: execution.ExperimentConfiguration, result_file_path: str, horizon_size: int
 ) -> TrajectoryResult:
     pred = []
     true = []
@@ -176,9 +275,9 @@ def test_quadcopter_trajectory(
     with h5py.File(result_file_path, 'r') as f:
         file_names = [fn.decode('UTF-8') for fn in f['file_names'][:].tolist()]
         for i in range(len(file_names)):
-            pred.append(f['predicted'][str(i)][:])
-            true.append(f['true'][str(i)][:])
-            steps.append(f['predicted'][str(i)][:].shape[0])
+            pred.append(f['predicted'][str(i)][:horizon_size])
+            true.append(f['true'][str(i)][:horizon_size])
+            steps.append(f['predicted'][str(i)][:horizon_size].shape[0])
 
     traj_rmse_per_step_seq = []
 
@@ -221,6 +320,7 @@ def save_trajectory_results(
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
+    horizon_size: int,
 ):
     scores_file_path = os.path.join(
         result_directory,
@@ -228,7 +328,7 @@ def save_trajectory_results(
         build_trajectory_file_name(
             mode=mode,
             window_size=config.window_size,
-            horizon_size=config.horizon_size,
+            horizon_size=horizon_size,
             extension='hdf5',
         ),
     )
@@ -238,7 +338,7 @@ def save_trajectory_results(
         build_trajectory_file_name(
             mode=mode,
             window_size=config.window_size,
-            horizon_size=config.horizon_size,
+            horizon_size=horizon_size,
             extension='json',
         ),
     )
