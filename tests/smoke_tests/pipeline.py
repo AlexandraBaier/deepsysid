@@ -165,6 +165,7 @@ def run_pipeline(
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
         state_names=get_state_names(),
+        thresholds=[1.0, 0.5, 0.1],
         models={
             model_name: dict(
                 model_class=model_class,

@@ -69,7 +69,7 @@ def test_model(
             save_model_tests(
                 test_result=test_result,
                 config=configuration,
-                result_directory=os.environ['RESULT_DIRECTORY'],
+                result_directory=result_directory,
                 model_name=model_name,
                 mode=mode,
                 threshold=threshold,
@@ -255,7 +255,7 @@ def build_result_file_name(
     if threshold is None:
         return f'{mode}-w_{window_size}-h_{horizon_size}.{extension}'
 
-    threshold_str = f'{threshold:.f}'.replace('.', '')
+    threshold_str = f'{threshold:f}'.replace('.', '')
     return (
         f'threshold_hybrid_{mode}-w_{window_size}'
         f'-h_{horizon_size}-t_{threshold_str}.{extension}'
