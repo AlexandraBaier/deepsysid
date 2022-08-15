@@ -8,7 +8,11 @@ from deepsysid.models.hybrid.bounded_residual import (
 )
 from deepsysid.models.linear import LinearLag, LinearModel, QuadraticControlLag
 from deepsysid.models.narx import NARXDenseNetwork
-from deepsysid.models.recurrent import ConstrainedRnn, LSTMInitModel
+from deepsysid.models.recurrent import (
+    ConstrainedRnn,
+    LSTMCombinedInitModel,
+    LSTMInitModel,
+)
 
 from . import pipeline
 
@@ -249,5 +253,25 @@ def test_hybrid_blanke_model(tmp_path: pathlib.Path):
         epochs_parallel=3,
         epochs_feedback=3,
         loss='mse',
+    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+
+
+def test_lstm_combined_init_model(tmp_path: pathlib.Path):
+    model_name = 'LSTMCombinedInitModel'
+    model_class = 'deepsysid.models.recurrent.LSTMCombinedInitModel'
+    config = LSTMCombinedInitModel.CONFIG(
+        control_names=pipeline.get_control_names(),
+        state_names=pipeline.get_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=10,
+        num_recurrent_layers=2,
+        dropout=0.25,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs=2,
+        loss='msge',
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)

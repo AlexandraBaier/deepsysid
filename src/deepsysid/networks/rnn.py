@@ -376,7 +376,7 @@ class InitLSTM(nn.Module):
         self.recurrent_dim = recurrent_dim
 
         self.init_lstm = nn.LSTM(
-            input_size=input_dim+output_dim,
+            input_size=input_dim + output_dim,
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
             dropout=dropout,
@@ -391,8 +391,12 @@ class InitLSTM(nn.Module):
             batch_first=True,
         )
 
-        self.output_layer = torch.nn.Linear(in_features=recurrent_dim, out_features=output_dim, bias=False)
-        self.init_layer = torch.nn.Linear(in_features=recurrent_dim, out_features=output_dim, bias=False)
+        self.output_layer = torch.nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=False
+        )
+        self.init_layer = torch.nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=False
+        )
 
         for name, param in self.named_parameters():
             if 'weight' in name:
@@ -403,13 +407,10 @@ class InitLSTM(nn.Module):
                 nn.init.xavier_normal_(param)
 
     def forward(
-        self, 
-        input, 
-        x0=None, 
-        return_init=False
+        self, input, x0=None, return_init=False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
         h_init, (h0_init, c0_init) = self.init_lstm(x0)
-        h, (_,_) = self.predictor_lstm(input, (h0_init, c0_init))
+        h, (_, _) = self.predictor_lstm(input, (h0_init, c0_init))
         if return_init:
             return self.output_layer(h), self.init_layer(h_init)
         else:
