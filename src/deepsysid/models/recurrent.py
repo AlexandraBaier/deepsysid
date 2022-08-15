@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -356,19 +356,22 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.control_mean: Optional[np.ndarray] = None
         self.control_std: Optional[np.ndarray] = None
 
-    def train(self, control_seqs, state_seqs):
+    def train(self, control_seqs, state_seqs) -> Dict[str, np.ndarray]:
+        epoch_losses_initializer = []
+        epoch_losses_predictor = []
+
         self.predictor.train()
         self.initializer.train()
 
-        self.control_mean, self.control_stddev = utils.mean_stddev(control_seqs)
-        self.state_mean, self.state_stddev = utils.mean_stddev(state_seqs)
+        self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
+        self.state_mean, self.state_std = utils.mean_stddev(state_seqs)
 
         control_seqs = [
-            utils.normalize(control, self.control_mean, self.control_stddev)
+            utils.normalize(control, self.control_mean, self.control_std)
             for control in control_seqs
         ]
         state_seqs = [
-            utils.normalize(state, self.state_mean, self.state_stddev)
+            utils.normalize(state, self.state_mean, self.state_std)
             for state in state_seqs
         ]
 
@@ -394,6 +397,8 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 f'Epoch {i + 1}/{self.epochs_initializer} '
                 f'- Epoch Loss (Initializer): {total_loss}'
             )
+            epoch_losses_initializer.append([i, total_loss])
+
         time_end_init = time.time()
         predictor_dataset = _PredictorDataset(
             control_seqs, state_seqs, self.sequence_length
@@ -422,6 +427,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 f'Epoch {i + 1}/{self.epochs_predictor} '
                 f'- Epoch Loss (Predictor): {total_loss}'
             )
+            epoch_losses_predictor.append([i, total_loss])
 
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
@@ -429,6 +435,13 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         logger.info(
             f'Training time for initializer {time_total_init}s '
             f'and for predictor {time_total_pred}s'
+        )
+
+        return dict(
+            epoch_loss_initializer=np.array(epoch_losses_initializer),
+            epoch_loss_predictor=np.array(epoch_losses_predictor),
+            training_time_initializer=np.array([time_total_init]),
+            training_time_predictor=np.array([time_total_pred]),
         )
 
     def simulate(
@@ -441,12 +454,10 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.predictor.eval()
 
         initial_control = utils.normalize(
-            initial_control, self.control_mean, self.control_stddev
+            initial_control, self.control_mean, self.control_std
         )
-        initial_state = utils.normalize(
-            initial_state, self.state_mean, self.state_stddev
-        )
-        control = utils.normalize(control, self.control_mean, self.control_stddev)
+        initial_state = utils.normalize(initial_state, self.state_mean, self.state_std)
+        control = utils.normalize(control, self.control_mean, self.control_std)
 
         with torch.no_grad():
             init_x = (
@@ -461,15 +472,15 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             y = self.predictor.forward(pred_x, hx=hx, return_state=False)
             y_np = y.cpu().detach().squeeze().numpy()  # type: ignore
 
-        y_np = utils.denormalize(y_np, self.state_mean, self.state_stddev)
+        y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
     def save(self, file_path: Tuple[str, ...]):
         if (
             self.state_mean is None
-            or self.state_stddev is None
+            or self.state_std is None
             or self.control_mean is None
-            or self.control_stddev is None
+            or self.control_std is None
         ):
             raise ValueError('Model has not been trained and cannot be saved.')
 
@@ -479,9 +490,9 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             json.dump(
                 {
                     'state_mean': self.state_mean.tolist(),
-                    'state_stddev': self.state_stddev.tolist(),
+                    'state_std': self.state_std.tolist(),
                     'control_mean': self.control_mean.tolist(),
-                    'control_stddev': self.control_stddev.tolist(),
+                    'control_std': self.control_std.tolist(),
                 },
                 f,
             )
@@ -496,9 +507,9 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
         self.state_mean = np.array(norm['state_mean'])
-        self.state_stddev = np.array(norm['state_stddev'])
+        self.state_std = np.array(norm['state_std'])
         self.control_mean = np.array(norm['control_mean'])
-        self.control_stddev = np.array(norm['control_stddev'])
+        self.control_std = np.array(norm['control_std'])
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return 'initializer.pth', 'predictor.pth', 'json'

@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -62,7 +62,11 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         self.control_mean: Optional[np.ndarray] = None
         self.control_std: Optional[np.ndarray] = None
 
-    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> Dict[str, np.ndarray]:
+        epoch_losses = []
+
         self.model.train()
 
         self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
@@ -95,6 +99,9 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
                 self.optimizer.step()
 
             logger.info(f'Epoch {i + 1}/{self.epochs} - Epoch Loss: {total_loss}')
+            epoch_losses.append([i, total_loss])
+
+        return dict(epoch_loss=np.array(epoch_losses))
 
     def simulate(
         self,

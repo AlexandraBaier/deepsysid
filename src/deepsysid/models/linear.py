@@ -5,15 +5,18 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 
 from .. import utils
-from .base import (DynamicIdentificationModel,
-                   DynamicIdentificationModelConfig, FixedWindowModel)
+from .base import (
+    DynamicIdentificationModel,
+    DynamicIdentificationModelConfig,
+    FixedWindowModel,
+)
 
 
 class LinearModel(DynamicIdentificationModel):
     def __init__(self, config: DynamicIdentificationModelConfig):
         super().__init__(config)
 
-        self.regressor = LinearRegression(fit_intercept=True, normalize=False)
+        self.regressor = LinearRegression(fit_intercept=True)
 
         self.control_dim = len(config.control_names)
         self.state_dim = len(config.state_names)
@@ -23,7 +26,9 @@ class LinearModel(DynamicIdentificationModel):
         self.state_mean: Optional[np.ndarray] = None
         self.state_stddev: Optional[np.ndarray] = None
 
-    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> None:
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]
         assert control_seqs[0].shape[1] == self.control_dim
@@ -179,17 +184,24 @@ class QuadraticControlLag(LinearLag):
         self.control_dim = 0
         self.state_dim = 0
 
-    def train(self, control_seqs, state_seqs, validator=None):
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> None:
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
         super().train(control_seqs, state_seqs)
 
-    def simulate(self, initial_control, initial_state, control):
+    def simulate(
+        self,
+        initial_control: np.ndarray,
+        initial_state: np.ndarray,
+        control: np.ndarray,
+    ) -> np.ndarray:
         self.control_dim = initial_control.shape[1]
         self.state_dim = initial_state.shape[1]
         return super().simulate(initial_control, initial_state, control)
 
-    def _map_regressor_input(self, x):
+    def _map_regressor_input(self, x: np.ndarray) -> np.ndarray:
         # Apply square to control inputs
         cmask = np.ones(self.control_dim, dtype=bool)
         tmask = np.zeros(self.state_dim, dtype=bool)

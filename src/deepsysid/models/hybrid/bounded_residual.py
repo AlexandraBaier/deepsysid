@@ -1,7 +1,7 @@
 import abc
 import json
 import logging
-from typing import Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -13,12 +13,20 @@ from ... import utils
 from ...networks import loss, rnn
 from .. import base
 from ..base import DynamicIdentificationModelConfig
-from .physical import (MinimalManeuveringComponent, MinimalManeuveringConfig,
-                       NoOpPhysicalComponent, PhysicalComponent,
-                       PropulsionManeuveringComponent,
-                       PropulsionManeuveringConfig)
-from .semiphysical import (BlankeComponent, LinearComponent,
-                           NoOpSemiphysicalComponent, SemiphysicalComponent)
+from .physical import (
+    MinimalManeuveringComponent,
+    MinimalManeuveringConfig,
+    NoOpPhysicalComponent,
+    PhysicalComponent,
+    PropulsionManeuveringComponent,
+    PropulsionManeuveringConfig,
+)
+from .semiphysical import (
+    BlankeComponent,
+    LinearComponent,
+    NoOpSemiphysicalComponent,
+    SemiphysicalComponent,
+)
 
 logger = logging.getLogger()
 
@@ -115,7 +123,13 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.control_mean: Optional[np.ndarray] = None
         self.control_std: Optional[np.ndarray] = None
 
-    def train(self, control_seqs, state_seqs):
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> Dict[str, np.ndarray]:
+        epoch_losses_initializer = []
+        epoch_losses_teacher = []
+        epoch_losses_multistep = []
+
         self.blackbox.train()
         self.initializer.train()
         self.physical.train()
@@ -168,7 +182,10 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
                 y = self.initializer.forward(batch['x'].float().to(self.device))
-                batch_loss = mse_loss(y, batch['y'].float().to(self.device))
+                # This type error is ignored, since we know that y will not be a tuple.
+                batch_loss = mse_loss(
+                    y, batch['y'].float().to(self.device)  # type: ignore
+                )
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_initializer.step()
@@ -177,6 +194,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 f'Epoch {i + 1}/{self.epochs_initializer} '
                 f'- Epoch Loss (Initializer): {total_loss}'
             )
+            epoch_losses_initializer.append([i, total_loss])
 
         dataset = End2EndDataset(
             control_seqs=control_seqs,
@@ -238,6 +256,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 f'Epoch {i + 1}/{self.epochs_parallel} '
                 f'- Epoch Loss (Parallel): {total_epoch_loss}'
             )
+            epoch_losses_teacher.append([i, total_epoch_loss])
 
         for i in range(self.epochs_feedback):
             data_loader = data.DataLoader(
@@ -298,19 +317,27 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 f'Epoch {i + 1}/{self.epochs_feedback} '
                 f'- Epoch Loss (Feedback): {total_epoch_loss}'
             )
+            epoch_losses_multistep.append([i, total_epoch_loss])
+
+        return dict(
+            epoch_loss_initializer=np.array(epoch_losses_initializer),
+            epoch_loss_teacher=np.array(epoch_losses_teacher),
+            epoch_loss_multistep=np.array(epoch_losses_multistep),
+        )
 
     def simulate(
         self,
         initial_control: np.ndarray,
         initial_state: np.ndarray,
         control: np.ndarray,
-    ) -> np.ndarray:
-        y, _, _ = self.simulate_hybrid(
+        threshold: float = np.infty,
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        y, whitebox, blackbox = self.simulate_hybrid(
             initial_control=initial_control,
             initial_state=initial_state,
             control=control,
         )
-        return y
+        return y, dict(whitebox=whitebox, blackbox=blackbox)
 
     def simulate_hybrid(
         self,
@@ -338,9 +365,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         initial_control = utils.normalize(
             initial_control, self.control_mean, self.control_std
         )
-        initial_state = utils.normalize(
-            initial_state, self.state_mean, self.state_std
-        )
+        initial_state = utils.normalize(initial_state, self.state_mean, self.state_std)
         control = utils.normalize(control, self.control_mean, self.control_std)
 
         y = np.zeros((control.shape[0], self.state_dim))

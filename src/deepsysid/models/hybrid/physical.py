@@ -143,7 +143,7 @@ class MinimalManeuveringEquations(nn.Module):
             grav_acc=config.g,
         )
 
-    def forward(self, control, state):
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         velocity = state[:, :4]
         position = torch.zeros(
             (state.shape[0], 4), device=state.device, dtype=state.dtype
@@ -199,7 +199,7 @@ class PropulsionManeuveringEquations(nn.Module):
             propeller_location=np.array([config.lx, config.ly, config.lz]),
         )
 
-    def forward(self, control, state):
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         velocity = state[:, :4]
         position = torch.zeros(
             (state.shape[0], 4), device=state.device, dtype=state.dtype
@@ -222,7 +222,9 @@ class PropulsionManeuveringEquations(nn.Module):
         return acceleration
 
 
-def build_rigid_body_matrix(dof, mass, inertia_matrix, center_of_gravity):
+def build_rigid_body_matrix(
+    dof: int, mass: float, inertia_matrix: np.ndarray, center_of_gravity: np.ndarray
+) -> torch.Tensor:
     if dof not in {3, 4, 6}:
         raise ValueError('Only degrees of freedom are 3, 4, and 6')
     if inertia_matrix.shape != (3, 3):
@@ -265,16 +267,16 @@ def build_rigid_body_matrix(dof, mass, inertia_matrix, center_of_gravity):
     if dof == 6:
         mrb = mrb
     elif dof == 4:
-        mask = (0, 1, 3, 5)  # surge, sway, roll, yaw
-        mrb = mrb[mask, :][:, mask]
+        # surge, sway, roll, yaw
+        mrb = mrb[(0, 1, 3, 5), :][:, (0, 1, 3, 5)]
     else:
-        mask = (0, 1, 5)  # surge, sway, yaw
-        mrb = mrb[mask, :][:, mask]
+        # surge, sway, yaw
+        mrb = mrb[(0, 1, 5), :][:, (0, 1, 5)]
 
     return mrb
 
 
-def build_4dof_added_mass_matrix(config: AddedMass4DOFConfig):
+def build_4dof_added_mass_matrix(config: AddedMass4DOFConfig) -> torch.Tensor:
     xud = config.Xud
     yvd = config.Yvd
     ypd = config.Ypd
@@ -299,7 +301,7 @@ def build_4dof_added_mass_matrix(config: AddedMass4DOFConfig):
 
 
 class RigidBodyCoriolis4DOF(nn.Module):
-    def __init__(self, mass, cog):
+    def __init__(self, mass: float, cog: np.ndarray):
         super().__init__()
 
         if cog.size != 3:
@@ -326,14 +328,20 @@ class RigidBodyCoriolis4DOF(nn.Module):
         )
         self.crb.requires_grad = False
 
-    def forward(self, velocity):
+    def forward(self, velocity: torch.Tensor) -> torch.Tensor:
         r = velocity[:, 3].unsqueeze(1)
         tau_crb = torch.mm(r * velocity, self.crb)
         return tau_crb
 
 
 class Buoyancy(nn.Module):
-    def __init__(self, rho_water, grav_acc, displacement, metacentric_height):
+    def __init__(
+        self,
+        rho_water: float,
+        grav_acc: float,
+        displacement: float,
+        metacentric_height: float,
+    ):
         super().__init__()
 
         self.G = nn.Parameter(
@@ -353,7 +361,7 @@ class Buoyancy(nn.Module):
         )
         self.G.requires_grad = False
 
-    def forward(self, position):
+    def forward(self, position: torch.Tensor) -> torch.Tensor:
         tau_hs = torch.mm(position, self.G)
 
         return tau_hs
@@ -361,7 +369,12 @@ class Buoyancy(nn.Module):
 
 class SymmetricRudderPropellerPair(nn.Module):
     def __init__(
-        self, wake_factor, diameter, rho_water, thrust_coefficient, propeller_location
+        self,
+        wake_factor: float,
+        diameter: float,
+        rho_water: float,
+        thrust_coefficient: np.ndarray,
+        propeller_location: np.ndarray,
     ):
         super().__init__()
 
@@ -385,7 +398,7 @@ class SymmetricRudderPropellerPair(nn.Module):
         self.lz = nn.Parameter(torch.tensor(propeller_location[2]).float())
         self.lz.requires_grad = False
 
-    def forward(self, control, velocity):
+    def forward(self, control: torch.Tensor, velocity: torch.Tensor) -> torch.Tensor:
         """
         :param control: (n [1/min], delta_left [rad], delta_right [rad])
         :param velocity:
@@ -458,7 +471,7 @@ class BasicPelicanMotionEquations(nn.Module):
 
         self.dt = time_delta
 
-    def forward(self, control, state):
+    def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         phi = state[:, 0]
         theta = state[:, 1]
 

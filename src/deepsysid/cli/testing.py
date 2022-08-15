@@ -1,6 +1,6 @@
 import dataclasses
 import os
-from typing import Iterator, List, Literal, Optional, Tuple
+from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 
 import h5py
 import numpy as np
@@ -16,25 +16,65 @@ class ModelTestResult:
     true_state: List[np.ndarray]
     pred_state: List[np.ndarray]
     file_names: List[str]
-    whitebox: List[np.ndarray]
-    blackbox: List[np.ndarray]
+    metadata: List[Dict[str, np.ndarray]]
 
 
-def load_test_simulations(
+def test_model(
     configuration: execution.ExperimentConfiguration,
     model_name: str,
     device_name: str,
     mode: Literal['train', 'validation', 'test'],
     dataset_directory: str,
-) -> List[Tuple[np.ndarray, np.ndarray, str]]:
-    # Initialize and load model
+    result_directory: str,
+    models_directory: str,
+):
     model_directory = os.path.expanduser(
-        os.path.normpath(configuration.models[model_name].location)
+        os.path.normpath(os.path.join(models_directory, model_name))
     )
-
     model = execution.initialize_model(configuration, model_name, device_name)
     execution.load_model(model, model_directory, model_name)
 
+    simulations = load_test_simulations(
+        configuration=configuration,
+        mode=mode,
+        dataset_directory=dataset_directory,
+    )
+
+    test_result = simulate_model(
+        simulations=simulations, config=configuration, model=model
+    )
+
+    save_model_tests(
+        test_result=test_result,
+        config=configuration,
+        result_directory=result_directory,
+        model_name=model_name,
+        mode=mode,
+    )
+
+    if configuration.thresholds and isinstance(model, HybridResidualLSTMModel):
+        for threshold in configuration.thresholds:
+            test_result = simulate_model(
+                simulations=simulations,
+                config=configuration,
+                model=model,
+                threshold=threshold,
+            )
+            save_model_tests(
+                test_result=test_result,
+                config=configuration,
+                result_directory=result_directory,
+                model_name=model_name,
+                mode=mode,
+                threshold=threshold,
+            )
+
+
+def load_test_simulations(
+    configuration: execution.ExperimentConfiguration,
+    mode: Literal['train', 'validation', 'test'],
+    dataset_directory: str,
+) -> List[Tuple[np.ndarray, np.ndarray, str]]:
     # Prepare test data
     dataset_directory = os.path.join(dataset_directory, 'processed', mode)
 
@@ -55,7 +95,7 @@ def load_test_simulations(
     return simulations
 
 
-def test_model(
+def simulate_model(
     simulations: List[Tuple[np.ndarray, np.ndarray, str]],
     config: execution.ExperimentConfiguration,
     model: DynamicIdentificationModel,
@@ -66,8 +106,7 @@ def test_model(
     pred_states = []
     true_states = []
     file_names = []
-    whiteboxes = []
-    blackboxes = []
+    metadata = []
     for (
         initial_control,
         initial_state,
@@ -76,18 +115,22 @@ def test_model(
         file_name,
     ) in split_simulations(config.window_size, config.horizon_size, simulations):
         if isinstance(model, HybridResidualLSTMModel):
-            # Hybrid residual models can return physical and LSTM output separately
-            # and also support clipping.
-            pred_target, whitebox, blackbox = model.simulate_hybrid(
+            simulation_result = model.simulate(
                 initial_control,
                 initial_state,
                 true_control,
-                threshold=threshold if threshold is not None else np.inf,
-            )
-            whiteboxes.append(whitebox)
-            blackboxes.append(blackbox)
+                threshold=threshold if threshold is not None else np.infty,
+            )  # type: Union[np.ndarray, Tuple[np.ndarray, Dict[str, np.ndarray]]]
         else:
-            pred_target = model.simulate(initial_control, initial_state, true_control)
+            simulation_result = model.simulate(
+                initial_control, initial_state, true_control
+            )
+
+        if isinstance(simulation_result, np.ndarray):
+            pred_target = simulation_result
+        else:
+            pred_target = simulation_result[0]
+            metadata.append(simulation_result[1])
 
         control.append(true_control)
         pred_states.append(pred_target)
@@ -99,8 +142,7 @@ def test_model(
         true_state=true_states,
         pred_state=pred_states,
         file_names=file_names,
-        whitebox=whiteboxes,
-        blackbox=blackboxes,
+        metadata=metadata,
     )
 
 
@@ -134,8 +176,7 @@ def save_model_tests(
             control=test_result.control,
             pred_states=test_result.pred_state,
             true_states=test_result.true_state,
-            whiteboxes=test_result.whitebox,
-            blackboxes=test_result.blackbox,
+            metadata=test_result.metadata,
         )
 
 
@@ -163,8 +204,7 @@ def write_test_results_to_hdf5(
     control: List[np.ndarray],
     pred_states: List[np.ndarray],
     true_states: List[np.ndarray],
-    whiteboxes: List[np.ndarray],
-    blackboxes: List[np.ndarray],
+    metadata: List[Dict[str, np.ndarray]],
 ):
     f.attrs['control_names'] = np.array([np.string_(name) for name in control_names])
     f.attrs['state_names'] = np.array([np.string_(name) for name in state_names])
@@ -174,25 +214,19 @@ def write_test_results_to_hdf5(
     control_grp = f.create_group('control')
     pred_grp = f.create_group('predicted')
     true_grp = f.create_group('true')
-    if (len(whiteboxes) > 0) and (len(blackboxes) > 0):
-        whitebox_grp = f.create_group('whitebox')
-        blackbox_grp = f.create_group('blackbox')
 
-        for i, (true_control, pred_state, true_state, whitebox, blackbox) in enumerate(
-            zip(control, pred_states, true_states, whiteboxes, blackboxes)
-        ):
-            control_grp.create_dataset(str(i), data=true_control)
-            pred_grp.create_dataset(str(i), data=pred_state)
-            true_grp.create_dataset(str(i), data=true_state)
-            whitebox_grp.create_dataset(str(i), data=whitebox)
-            blackbox_grp.create_dataset(str(i), data=blackbox)
-    else:
-        for i, (true_control, pred_state, true_state) in enumerate(
-            zip(control, pred_states, true_states)
-        ):
-            control_grp.create_dataset(str(i), data=true_control)
-            pred_grp.create_dataset(str(i), data=pred_state)
-            true_grp.create_dataset(str(i), data=true_state)
+    for i, (true_control, pred_state, true_state) in enumerate(
+        zip(control, pred_states, true_states)
+    ):
+        control_grp.create_dataset(str(i), data=true_control)
+        pred_grp.create_dataset(str(i), data=pred_state)
+        true_grp.create_dataset(str(i), data=true_state)
+
+    if len(metadata) > 0:
+        for name in metadata[0]:
+            metadata_grp = f.create_group(name)
+            for i, data in enumerate(md[name] for md in metadata):
+                metadata_grp.create_dataset(str(i), data=data)
 
 
 def build_result_file_name(
@@ -205,7 +239,7 @@ def build_result_file_name(
     if threshold is None:
         return f'{mode}-w_{window_size}-h_{horizon_size}.{extension}'
 
-    threshold_str = f'{threshold:.f}'.replace('.', '')
+    threshold_str = f'{threshold:f}'.replace('.', '')
     return (
         f'threshold_hybrid_{mode}-w_{window_size}'
         f'-h_{horizon_size}-t_{threshold_str}.{extension}'

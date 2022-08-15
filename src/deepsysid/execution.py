@@ -2,6 +2,7 @@ import itertools
 import os
 from typing import Any, Dict, List, Optional, Tuple, Type
 
+import h5py
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
@@ -11,7 +12,6 @@ from .models.base import DynamicIdentificationModel
 
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
-    location: str
     parameters: Dict[str, Any]
 
 
@@ -34,7 +34,6 @@ class ModelGridSearchTemplate(BaseModel):
 
 
 class ExperimentGridSearchTemplate(BaseModel):
-    base_path: str
     settings: ExperimentGridSearchSettings
     models: List[ModelGridSearchTemplate]
 
@@ -88,7 +87,6 @@ class ExperimentConfiguration(BaseModel):
                 model_config = ExperimentModelConfiguration.parse_obj(
                     dict(
                         model_class=model_class_str,
-                        location=os.path.join(template.base_path, model_name),
                         parameters=model_class.CONFIG.parse_obj(
                             # Merge dictionaries
                             {
@@ -177,6 +175,14 @@ def save_model(model: DynamicIdentificationModel, directory: str, model_name: st
     model.save(
         tuple(os.path.join(directory, f'{model_name}.{ext}') for ext in extension)
     )
+
+
+def save_training_metadata(
+    metadata: Dict[str, np.ndarray], directory: str, model_name: str
+):
+    with h5py.File(os.path.join(directory, f'{model_name}-metadata.hdf5'), 'w') as f:
+        for name, data in metadata.items():
+            f.create_dataset(name, data=data)
 
 
 def retrieve_model_class(model_class_string: str) -> Type[DynamicIdentificationModel]:

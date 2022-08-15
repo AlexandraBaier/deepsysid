@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import List, Optional, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 from pydantic import BaseModel
@@ -26,7 +26,9 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> Optional[Dict[str, np.ndarray]]:
         pass
 
     @abc.abstractmethod
@@ -35,7 +37,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         initial_control: np.ndarray,
         initial_state: np.ndarray,
         control: np.ndarray,
-    ) -> np.ndarray:
+    ) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, np.ndarray]]]:
         pass
 
     @abc.abstractmethod

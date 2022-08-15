@@ -131,6 +131,15 @@ def velocity2speed(state: np.ndarray, state_names: List[str]) -> np.ndarray:
 
 
 def index_of_agreement(true: np.ndarray, pred: np.ndarray, j: int = 1) -> np.ndarray:
+    if true.shape != pred.shape:
+        raise ValueError('true and pred need to have the same shape.')
+
+    if true.size == 0:
+        raise ValueError('true and pred cannot be empty.')
+
+    if j < 1:
+        raise ValueError('exponent j must be equal or greater than 1.')
+
     error_sum = np.sum(np.power(np.abs(true - pred), j), axis=0)
     partial_diff_true = np.abs(true - np.mean(true, axis=0))
     partial_diff_pred = np.abs(pred - np.mean(true, axis=0))
