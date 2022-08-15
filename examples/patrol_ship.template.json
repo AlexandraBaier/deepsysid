@@ -1,5 +1,4 @@
 {
-  "base_path": "~/models/patrolship",
   "settings": {
     "train_fraction": 0.6,
     "validation_fraction": 0.1,

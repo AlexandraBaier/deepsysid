@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import sys
@@ -7,21 +6,16 @@ from deepsysid import execution
 
 
 def train_model(
+    configuration: execution.ExperimentConfiguration,
     model_name: str,
     device_name: str,
-    configuration_path: str,
     dataset_directory: str,
+    models_directory: str,
     disable_stdout: bool,
 ):
-    # Load configuration
-    with open(configuration_path, mode='r') as f:
-        config = json.load(f)
-
-    config = execution.ExperimentConfiguration.parse_obj(config)
-
     dataset_directory = os.path.join(dataset_directory, 'processed', 'train')
     model_directory = os.path.expanduser(
-        os.path.normpath(config.models[model_name].location)
+        os.path.normpath(os.path.join(models_directory, model_name))
     )
     try:
         os.mkdir(model_directory)
@@ -42,12 +36,12 @@ def train_model(
     # Load dataset
     controls, states = execution.load_simulation_data(
         directory=dataset_directory,
-        control_names=config.control_names,
-        state_names=config.state_names,
+        control_names=configuration.control_names,
+        state_names=configuration.state_names,
     )
 
     # Initialize model
-    model = execution.initialize_model(config, model_name, device_name)
+    model = execution.initialize_model(configuration, model_name, device_name)
     # Train model
     logger.info(f'Training model on {device_name} if implemented.')
     metadata = model.train(control_seqs=controls, state_seqs=states)

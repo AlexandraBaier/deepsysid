@@ -1,5 +1,4 @@
 import dataclasses
-import json
 import os
 from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 
@@ -21,27 +20,22 @@ class ModelTestResult:
 
 
 def test_model(
+    configuration: execution.ExperimentConfiguration,
     model_name: str,
     device_name: str,
     mode: Literal['train', 'validation', 'test'],
-    configuration_path: str,
     dataset_directory: str,
     result_directory: str,
+    models_directory: str,
 ):
-    with open(configuration_path, mode='r') as f:
-        configuration = json.load(f)
-    configuration = execution.ExperimentConfiguration.parse_obj(configuration)
-
     model_directory = os.path.expanduser(
-        os.path.normpath(configuration.models[model_name].location)
+        os.path.normpath(os.path.join(models_directory, model_name))
     )
     model = execution.initialize_model(configuration, model_name, device_name)
     execution.load_model(model, model_directory, model_name)
 
     simulations = load_test_simulations(
         configuration=configuration,
-        model_name=model_name,
-        device_name=device_name,
         mode=mode,
         dataset_directory=dataset_directory,
     )
@@ -78,19 +72,9 @@ def test_model(
 
 def load_test_simulations(
     configuration: execution.ExperimentConfiguration,
-    model_name: str,
-    device_name: str,
     mode: Literal['train', 'validation', 'test'],
     dataset_directory: str,
 ) -> List[Tuple[np.ndarray, np.ndarray, str]]:
-    # Initialize and load model
-    model_directory = os.path.expanduser(
-        os.path.normpath(configuration.models[model_name].location)
-    )
-
-    model = execution.initialize_model(configuration, model_name, device_name)
-    execution.load_model(model, model_directory, model_name)
-
     # Prepare test data
     dataset_directory = os.path.join(dataset_directory, 'processed', mode)
 

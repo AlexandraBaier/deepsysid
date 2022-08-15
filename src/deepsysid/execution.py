@@ -12,7 +12,6 @@ from .models.base import DynamicIdentificationModel
 
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
-    location: str
     parameters: Dict[str, Any]
 
 
@@ -35,7 +34,6 @@ class ModelGridSearchTemplate(BaseModel):
 
 
 class ExperimentGridSearchTemplate(BaseModel):
-    base_path: str
     settings: ExperimentGridSearchSettings
     models: List[ModelGridSearchTemplate]
 
@@ -89,7 +87,6 @@ class ExperimentConfiguration(BaseModel):
                 model_config = ExperimentModelConfiguration.parse_obj(
                     dict(
                         model_class=model_class_str,
-                        location=os.path.join(template.base_path, model_name),
                         parameters=model_class.CONFIG.parse_obj(
                             # Merge dictionaries
                             {

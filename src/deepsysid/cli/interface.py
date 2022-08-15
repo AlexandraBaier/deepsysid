@@ -134,12 +134,17 @@ class DeepSysIdCommandLineInterface:
         else:
             device_name = build_device_name(args.enable_cuda, None)
 
+        with open(os.environ['CONFIGURATION'], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
+
         train_model(
             model_name=args.model,
             device_name=device_name,
-            configuration_path=os.environ['CONFIGURATION'],
+            configuration=config,
             dataset_directory=os.environ['DATASET_DIRECTORY'],
             disable_stdout=args.disable_stdout,
+            models_directory=os.environ['MODELS'],
         )
 
     def __test_model(self, args):
@@ -148,13 +153,18 @@ class DeepSysIdCommandLineInterface:
         else:
             device_name = build_device_name(args.enable_cuda, None)
 
+        with open(os.environ['CONFIGURATION'], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
+
         test_model(
             model_name=args.model,
             device_name=device_name,
             mode=args.mode,
-            configuration_path=os.environ['CONFIGURATION'],
+            configuration=config,
             dataset_directory=os.environ['DATASET_DIRECTORY'],
             result_directory=os.environ['RESULT_DIRECTORY'],
+            models_directory=os.environ['MODELS'],
         )
 
     def __evaluate_model(self, args):
@@ -183,16 +193,24 @@ class DeepSysIdCommandLineInterface:
                 )
 
     def __evaluate_4dof_ship_trajectory(self, args):
+        with open(os.environ['CONFIGURATION'], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
+
         evaluate_4dof_ship_trajectory(
-            configuration_path=os.environ['CONFIGURATION'],
+            configuration=config,
             result_directory=os.environ['RESULT_DIRECTORY'],
             model_name=args.model,
             mode=args.mode,
         )
 
     def __evaluate_quadcopter_trajectory(self, args):
+        with open(os.environ['CONFIGURATION'], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
+
         evaluate_quadcopter_trajectory(
-            configuration_path=os.environ['CONFIGURATION'],
+            configuration=config,
             result_directory=os.environ['RESULT_DIRECTORY'],
             model_name=args.model,
             mode=args.mode,

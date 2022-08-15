@@ -1,4 +1,3 @@
-import json
 import pathlib
 from typing import Dict, List, Literal
 
@@ -112,11 +111,15 @@ def get_evaluation_mode() -> Literal['train', 'validation', 'test']:
     return 'test'
 
 
+def get_thresholds() -> List[float]:
+    return [1.0, 0.5, 0.1]
+
+
 def _prepare_directories(
-    base_path: pathlib.Path, model_name: str
+    base_path: pathlib.Path,
 ) -> Dict[str, pathlib.Path]:
-    model_directory = base_path.joinpath(model_name)
-    model_directory.mkdir(exist_ok=True)
+    models_directory = base_path.joinpath('models')
+    models_directory.mkdir(exist_ok=True)
 
     dataset_directory = base_path.joinpath('data')
     train_directory = dataset_directory.joinpath('processed').joinpath('train')
@@ -137,7 +140,7 @@ def _prepare_directories(
     configuration_path = base_path.joinpath('configuration.json')
 
     return dict(
-        model=model_directory,
+        models=models_directory,
         data=dataset_directory,
         train=train_directory,
         validation=validation_directory,
@@ -154,7 +157,7 @@ def run_pipeline(
     config: DynamicIdentificationModelConfig,
 ):
     # Define and create temporary file paths and directories.
-    paths = _prepare_directories(base_path, model_name)
+    paths = _prepare_directories(base_path)
 
     # Setup configuration file.
     configuration_dict = dict(
@@ -165,16 +168,15 @@ def run_pipeline(
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
         state_names=get_state_names(),
-        thresholds=[1.0, 0.5, 0.1],
+        thresholds=get_thresholds(),
         models={
             model_name: dict(
                 model_class=model_class,
-                location=str(paths['model']),
                 parameters=config.dict(),
             )
         },
     )
-    paths['configuration'].write_text(json.dumps(configuration_dict))
+    config = ExperimentConfiguration.parse_obj(configuration_dict)
 
     # Setup dataset directory.
     paths['train'].joinpath('train-0.csv').write_text(data=_get_data(0))
@@ -185,8 +187,9 @@ def run_pipeline(
     train_model(
         model_name=model_name,
         device_name=get_cpu_device_name(),
-        configuration_path=str(paths['configuration']),
+        configuration=config,
         dataset_directory=str(paths['data']),
+        models_directory=str(paths['models']),
         disable_stdout=True,
     )
 
@@ -195,14 +198,13 @@ def run_pipeline(
         model_name=model_name,
         device_name=get_cpu_device_name(),
         mode=get_evaluation_mode(),
-        configuration_path=str(paths['configuration']),
+        configuration=config,
         dataset_directory=str(paths['data']),
         result_directory=str(paths['result']),
+        models_directory=str(paths['models']),
     )
 
     # Run model evaluation.
-    config = ExperimentConfiguration.parse_obj(configuration_dict)
-
     evaluate_model(
         config=config,
         model_name=model_name,
@@ -212,7 +214,7 @@ def run_pipeline(
     )
 
     evaluate_4dof_ship_trajectory(
-        configuration_path=str(paths['configuration']),
+        configuration=config,
         result_directory=str(paths['result']),
         model_name=model_name,
         mode=get_evaluation_mode(),

@@ -146,36 +146,32 @@ def evaluate_model_specific_horizon(
 
 
 def evaluate_4dof_ship_trajectory(
-    configuration_path: str,
+    configuration: execution.ExperimentConfiguration,
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
 ):
-    with open(configuration_path, mode='r') as f:
-        config = json.load(f)
-    config = execution.ExperimentConfiguration.parse_obj(config)
-
     result_file_path = os.path.join(
         result_directory,
         model_name,
         build_result_file_name(
             mode=mode,
-            window_size=config.window_size,
-            horizon_size=config.horizon_size,
+            window_size=configuration.window_size,
+            horizon_size=configuration.horizon_size,
             extension='hdf5',
         ),
     )
 
-    for horizon_size in range(1, config.horizon_size + 1):
+    for horizon_size in range(1, configuration.horizon_size + 1):
         result = test_4dof_ship_trajectory(
-            config=config,
+            config=configuration,
             result_file_path=result_file_path,
             horizon_size=horizon_size,
         )
 
         save_trajectory_results(
             result=result,
-            config=config,
+            config=configuration,
             result_directory=result_directory,
             model_name=model_name,
             mode=mode,
@@ -227,36 +223,32 @@ def test_4dof_ship_trajectory(
 
 
 def evaluate_quadcopter_trajectory(
-    configuration_path: str,
+    configuration: execution.ExperimentConfiguration,
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
 ):
-    with open(configuration_path, mode='r') as f:
-        config = json.load(f)
-    config = execution.ExperimentConfiguration.parse_obj(config)
-
     result_file_path = os.path.join(
         result_directory,
         model_name,
         build_result_file_name(
             mode=mode,
-            window_size=config.window_size,
-            horizon_size=config.horizon_size,
+            window_size=configuration.window_size,
+            horizon_size=configuration.horizon_size,
             extension='hdf5',
         ),
     )
 
-    for horizon_size in range(1, config.horizon_size + 1):
+    for horizon_size in range(1, configuration.horizon_size + 1):
         result = test_quadcopter_trajectory(
-            config=config,
+            config=configuration,
             result_file_path=result_file_path,
             horizon_size=horizon_size,
         )
 
         save_trajectory_results(
             result=result,
-            config=config,
+            config=configuration,
             result_directory=result_directory,
             model_name=model_name,
             mode=mode,
@@ -374,7 +366,7 @@ def build_score_file_name(
     if threshold is None:
         return f'scores-{mode}-w_{window_size}-h_{horizon_size}.{extension}'
 
-    threshold_str = f'{threshold:.f}'.replace('.', '')
+    threshold_str = f'{threshold:f}'.replace('.', '')
     return (
         f'scores-{mode}-w_{window_size}-h_{horizon_size}-t_{threshold_str}.{extension}'
     )
