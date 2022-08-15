@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Dict, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -356,7 +356,9 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         self.control_mean: Optional[np.ndarray] = None
         self.control_std: Optional[np.ndarray] = None
 
-    def train(self, control_seqs, state_seqs) -> Dict[str, np.ndarray]:
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> Dict[str, np.ndarray]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
 
@@ -578,7 +580,12 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         self.control_mean: Optional[np.ndarray] = None
         self.control_std: Optional[np.ndarray] = None
 
-    def train(self, control_seqs, state_seqs):
+    def train(
+        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
+    ) -> Dict[str, np.ndarray]:
+        epoch_losses_initializer = []
+        epoch_losses_predictor = []
+
         self.predictor.train()
 
         self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
@@ -641,10 +648,19 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
                 f'Init Loss: {total_init_loss:.4f}\t'
                 f'Prediction Loss: {total_pred_loss:.4f}'
             )
+            epoch_losses_initializer.append([i, total_init_loss])
+            epoch_losses_predictor.append([i, total_pred_loss])
+
         time_end = time.time()
 
         time_total = time_end - time_start
         logger.info(f'Training time for predictor {time_total}s ')
+
+        return dict(
+            epoch_loss_initializer=np.array(epoch_losses_initializer),
+            epoch_loss_predictor=np.array(epoch_losses_predictor),
+            training_time=np.array([time_total]),
+        )
 
     def simulate(
         self,
