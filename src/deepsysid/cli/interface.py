@@ -144,7 +144,7 @@ class DeepSysIdCommandLineInterface:
             configuration=config,
             dataset_directory=os.environ['DATASET_DIRECTORY'],
             disable_stdout=args.disable_stdout,
-            models_directory=os.environ['MODELS'],
+            models_directory=os.environ['MODELS_DIRECTORY'],
         )
 
     def __test_model(self, args):
@@ -164,7 +164,7 @@ class DeepSysIdCommandLineInterface:
             configuration=config,
             dataset_directory=os.environ['DATASET_DIRECTORY'],
             result_directory=os.environ['RESULT_DIRECTORY'],
-            models_directory=os.environ['MODELS'],
+            models_directory=os.environ['MODELS_DIRECTORY'],
         )
 
     def __evaluate_model(self, args):
