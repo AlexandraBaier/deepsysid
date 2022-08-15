@@ -13,6 +13,7 @@ from deepsysid.models.recurrent import (
     LSTMCombinedInitModel,
     LSTMInitModel,
 )
+from deepsysid.models.switching import StableSwitchingLSTMModel
 
 from . import pipeline
 
@@ -273,5 +274,26 @@ def test_lstm_combined_init_model(tmp_path: pathlib.Path):
         batch_size=2,
         epochs=2,
         loss='msge',
+    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+
+
+def test_stable_switching_lstm_model(tmp_path: pathlib.Path):
+    model_name = 'StableSwitchingLSTMModel'
+    model_class = 'deepsysid.models.switching.StableSwitchingLSTMModel'
+    config = StableSwitchingLSTMModel.CONFIG(
+        control_names=pipeline.get_control_names(),
+        state_names=pipeline.get_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=10,
+        num_recurrent_layers=2,
+        dropout=0.25,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
