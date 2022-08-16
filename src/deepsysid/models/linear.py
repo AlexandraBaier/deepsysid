@@ -111,6 +111,14 @@ class LinearModel(DynamicIdentificationModel):
         return ('hdf5',)
 
     def get_parameter_count(self) -> int:
+        if (
+            self.state_mean is None
+            or self.state_stddev is None
+            or self.control_mean is None
+            or self.control_stddev is None
+        ):
+            return (self.control_dim + self.state_dim) * self.state_dim + self.state_dim
+
         count = 0
         if len(self.regressor.coef_.shape) == 2:
             count += np.product(self.regressor.coef_.shape)
@@ -143,6 +151,9 @@ class LinearLag(FixedWindowModel):
             regressor=LinearRegression(fit_intercept=True),
         )
 
+        self.control_dim = len(config.control_names)
+        self.state_dim = len(config.state_names)
+
     def save(self, file_path: Tuple[str, ...]):
         with h5py.File(file_path[0], 'w') as f:
             f.attrs['window_size'] = self.window_size
@@ -169,6 +180,21 @@ class LinearLag(FixedWindowModel):
         return ('hdf5',)
 
     def get_parameter_count(self) -> int:
+        if (
+            self.state_mean is None
+            or self.state_stddev is None
+            or self.control_mean is None
+            or self.control_stddev is None
+        ):
+            return (
+                self.state_dim
+                * (
+                    self.control_dim
+                    + self.window_size * (self.control_dim + self.state_dim)
+                )
+                + self.state_dim
+            )
+
         count = 0
         if len(self.regressor.coef_.shape) == 2:
             count += np.product(self.regressor.coef_.shape)
@@ -179,28 +205,6 @@ class LinearLag(FixedWindowModel):
 
 
 class QuadraticControlLag(LinearLag):
-    def __init__(self, config: LinearLagConfig):
-        super().__init__(config)
-        self.control_dim = 0
-        self.state_dim = 0
-
-    def train(
-        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
-    ) -> None:
-        self.control_dim = control_seqs[0].shape[1]
-        self.state_dim = state_seqs[0].shape[1]
-        super().train(control_seqs, state_seqs)
-
-    def simulate(
-        self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
-    ) -> np.ndarray:
-        self.control_dim = initial_control.shape[1]
-        self.state_dim = initial_state.shape[1]
-        return super().simulate(initial_control, initial_state, control)
-
     def _map_regressor_input(self, x: np.ndarray) -> np.ndarray:
         # Apply square to control inputs
         cmask = np.ones(self.control_dim, dtype=bool)
@@ -211,3 +215,21 @@ class QuadraticControlLag(LinearLag):
         squared_control = np.square(x[:, mask])
         x = np.hstack((x, squared_control))
         return x
+
+    def get_parameter_count(self) -> int:
+        if (
+            self.state_mean is None
+            or self.state_stddev is None
+            or self.control_mean is None
+            or self.control_stddev is None
+        ):
+            return (
+                self.state_dim
+                * (
+                    2 * self.control_dim
+                    + self.window_size * (2 * self.control_dim + self.state_dim)
+                )
+                + self.state_dim
+            )
+
+        return super().get_parameter_count()
