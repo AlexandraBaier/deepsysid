@@ -477,7 +477,9 @@
         "batch_size": 128,
         "epochs_initializer": 5,
         "epochs_predictor": 5,
-        "decay_parameter":1e-3,
+        "initial_decay_parameter":1e-3,
+        "decay_rate": 10,
+        "epochs_with_const_decay": 100,
         "nx":20,
         "nw":20
       },

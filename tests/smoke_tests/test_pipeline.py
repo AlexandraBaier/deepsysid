@@ -103,13 +103,40 @@ def test_constrained_rnn(tmp_path: pathlib.Path):
         state_names=pipeline.get_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
-        # TODO: nx and nw need to be the same value?
-        #  Why are the separate?
-        nx=2,
+        nx=3,
         nw=2,
         gamma=0.1,
         beta=0.05,
-        decay_parameter=0.01,
+        initial_decay_parameter=1e-3,
+        decay_rate=10,
+        epochs_with_const_decay=1,
+        num_recurrent_layers=3,
+        dropout=0.25,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+
+
+def test_constrained_rnn_stable(tmp_path: pathlib.Path):
+    model_name = 'ConstrainedRnn'
+    model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
+    config = ConstrainedRnn.CONFIG(
+        control_names=pipeline.get_control_names(),
+        state_names=pipeline.get_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        nx=2,
+        nw=3,
+        gamma=0.0,
+        beta=0.05,
+        initial_decay_parameter=1e-3,
+        decay_rate=10,
+        epochs_with_const_decay=1,
         num_recurrent_layers=3,
         dropout=0.25,
         sequence_length=3,
