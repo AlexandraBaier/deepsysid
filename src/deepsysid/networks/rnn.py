@@ -173,21 +173,9 @@ class LTIRnn(nn.Module):
             # lmi that ensures finite l2 gain
             M = cp.bmat(
                 [
-                    [
-                        -Y,
-                        self.beta * C2_tilde.T,
-                        A_tilde.T
-                    ],
-                    [
-                        self.beta * C2_tilde,
-                        -2*T,
-                        B2_tilde.T
-                    ],
-                    [
-                        A_tilde,
-                        B2_tilde,
-                        -Y
-                    ]
+                    [-Y, self.beta * C2_tilde.T, A_tilde.T],
+                    [self.beta * C2_tilde, -2 * T, B2_tilde.T],
+                    [A_tilde, B2_tilde, -Y],
                 ]
             )
         else:
@@ -253,7 +241,6 @@ class LTIRnn(nn.Module):
         self.Y.data = torch.tensor(Y.value, dtype=dtype)
         self.A_tilde.weight.data = torch.tensor(A_tilde.value, dtype=dtype)
 
-        
         self.B2_tilde.weight.data = torch.tensor(B2_tilde.value, dtype=dtype)
         if not self.ga == 0:
             self.C1.weight.data = torch.tensor(C1.value, dtype=dtype)
@@ -316,27 +303,15 @@ class LTIRnn(nn.Module):
             M = torch.cat(
                 [
                     torch.cat(
-                        [
-                            -Y,
-                            beta * C2_tilde.T,
-                            A_tilde.T
-                        ],
+                        [-Y, beta * C2_tilde.T, A_tilde.T],
                         dim=1,
                     ),
                     torch.cat(
-                        [
-                            beta * C2_tilde,
-                            -2*T,
-                            B2_tilde.T
-                        ],
+                        [beta * C2_tilde, -2 * T, B2_tilde.T],
                         dim=1,
                     ),
                     torch.cat(
-                        [
-                            A_tilde,
-                            B2_tilde,
-                            -Y
-                        ],
+                        [A_tilde, B2_tilde, -Y],
                         dim=1,
                     ),
                 ]
@@ -400,7 +375,7 @@ class LTIRnn(nn.Module):
 
         _, info = torch.linalg.cholesky_ex(-M.cpu())
 
-        if info >0:
+        if info > 0:
             barrier += torch.tensor(float('inf'))
 
         return barrier
@@ -408,13 +383,13 @@ class LTIRnn(nn.Module):
     def check_constr(self) -> bool:
         with torch.no_grad():
             M = self.get_constraints()
-            
+
             _, info = torch.linalg.cholesky_ex(-M.cpu())
 
             if info > 0:
                 b_satisfied = False
             else:
-                b_satisfied = True                
+                b_satisfied = True
 
         return b_satisfied
 
