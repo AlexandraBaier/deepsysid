@@ -5,11 +5,18 @@ from typing import Optional
 
 from .. import execution
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
-from .evaluation import (evaluate_model, save_trajectory_results,
-                         test_4dof_ship_trajectory, test_quadcopter_trajectory)
-from .testing import (build_result_file_name, load_test_simulations,
-                      save_model_tests, test_model)
+from .evaluation import (
+    evaluate_4dof_ship_trajectory,
+    evaluate_model,
+    evaluate_quadcopter_trajectory,
+)
+from .testing import test_model
 from .training import train_model
+
+CONFIGURATION_ENV_VAR = 'CONFIGURATION'
+DATASET_DIR_ENV_VAR = 'DATASET_DIRECTORY'
+MODELS_DIR_ENV_VAR = 'MODELS_DIRECTORY'
+RESULT_DIR_ENV_VAR = 'RESULT_DIRECTORY'
 
 
 def run_deepsysid_cli():
@@ -123,7 +130,7 @@ class DeepSysIdCommandLineInterface:
             grid_search_template, 'cpu'
         )
 
-        with open(os.environ['CONFIGURATION'], mode='w') as f:
+        with open(os.environ[CONFIGURATION_ENV_VAR], mode='w') as f:
             json.dump(configuration.dict(), f)
 
     def __train_model(self, args):
@@ -132,12 +139,17 @@ class DeepSysIdCommandLineInterface:
         else:
             device_name = build_device_name(args.enable_cuda, None)
 
+        with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
+
         train_model(
             model_name=args.model,
             device_name=device_name,
-            configuration_path=os.environ['CONFIGURATION'],
-            dataset_directory=os.environ['DATASET_DIRECTORY'],
+            configuration=config,
+            dataset_directory=os.environ[DATASET_DIR_ENV_VAR],
             disable_stdout=args.disable_stdout,
+            models_directory=os.environ[MODELS_DIR_ENV_VAR],
         )
 
     def __test_model(self, args):
@@ -146,54 +158,22 @@ class DeepSysIdCommandLineInterface:
         else:
             device_name = build_device_name(args.enable_cuda, None)
 
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
-            configuration = json.load(f)
-        configuration = execution.ExperimentConfiguration.parse_obj(configuration)
+        with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+            config = json.load(f)
+        config = execution.ExperimentConfiguration.parse_obj(config)
 
-        model_directory = os.path.expanduser(
-            os.path.normpath(configuration.models[args.model].location)
-        )
-        model = execution.initialize_model(configuration, args.model, device_name)
-        execution.load_model(model, model_directory, args.model)
-
-        simulations = load_test_simulations(
-            configuration=configuration,
+        test_model(
             model_name=args.model,
             device_name=device_name,
             mode=args.mode,
-            dataset_directory=os.environ['DATASET_DIRECTORY'],
+            configuration=config,
+            dataset_directory=os.environ[DATASET_DIR_ENV_VAR],
+            result_directory=os.environ[RESULT_DIR_ENV_VAR],
+            models_directory=os.environ[MODELS_DIR_ENV_VAR],
         )
-
-        test_result = test_model(
-            simulations=simulations, config=configuration, model=model
-        )
-        save_model_tests(
-            test_result=test_result,
-            config=configuration,
-            result_directory=os.environ['RESULT_DIRECTORY'],
-            model_name=args.model,
-            mode=args.mode,
-        )
-
-        if configuration.thresholds and isinstance(model, HybridResidualLSTMModel):
-            for threshold in configuration.thresholds:
-                test_result = test_model(
-                    simulations=simulations,
-                    config=configuration,
-                    model=model,
-                    threshold=threshold,
-                )
-                save_model_tests(
-                    test_result=test_result,
-                    config=configuration,
-                    result_directory=os.environ['RESULT_DIRECTORY'],
-                    model_name=args.model,
-                    mode=args.mode,
-                    threshold=threshold,
-                )
 
     def __evaluate_model(self, args):
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
+        with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
         config = execution.ExperimentConfiguration.parse_obj(config)
 
@@ -201,7 +181,7 @@ class DeepSysIdCommandLineInterface:
             config=config,
             model_name=args.model,
             mode=args.mode,
-            result_directory=os.environ['RESULT_DIRECTORY'],
+            result_directory=os.environ[RESULT_DIR_ENV_VAR],
         )
 
         model = execution.initialize_model(
@@ -213,70 +193,36 @@ class DeepSysIdCommandLineInterface:
                     config=config,
                     model_name=args.model,
                     mode=args.mode,
-                    result_directory=os.environ['RESULT_DIRECTORY'],
+                    result_directory=os.environ[RESULT_DIR_ENV_VAR],
                     threshold=threshold,
                 )
 
     def __evaluate_4dof_ship_trajectory(self, args):
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
+        with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
         config = execution.ExperimentConfiguration.parse_obj(config)
 
-        result_directory = os.environ['RESULT_DIRECTORY']
-        result_file_path = os.path.join(
-            result_directory,
-            args.model,
-            build_result_file_name(
-                mode=args.mode,
-                window_size=config.window_size,
-                horizon_size=config.horizon_size,
-                extension='hdf5',
-            ),
-        )
-
-        result = test_4dof_ship_trajectory(
-            config=config, result_file_path=result_file_path
-        )
-
-        save_trajectory_results(
-            result=result,
-            config=config,
-            result_directory=result_directory,
+        evaluate_4dof_ship_trajectory(
+            configuration=config,
+            result_directory=os.environ[RESULT_DIR_ENV_VAR],
             model_name=args.model,
             mode=args.mode,
         )
 
     def __evaluate_quadcopter_trajectory(self, args):
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
+        with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
         config = execution.ExperimentConfiguration.parse_obj(config)
 
-        test_directory = os.environ['RESULT_DIRECTORY']
-        test_file_path = os.path.join(
-            test_directory,
-            args.model,
-            build_result_file_name(
-                mode=args.mode,
-                window_size=config.window_size,
-                horizon_size=config.horizon_size,
-                extension='hdf5',
-            ),
-        )
-
-        result = test_quadcopter_trajectory(
-            config=config, result_file_path=test_file_path
-        )
-
-        save_trajectory_results(
-            result=result,
-            config=config,
-            result_directory=test_directory,
+        evaluate_quadcopter_trajectory(
+            configuration=config,
+            result_directory=os.environ[RESULT_DIR_ENV_VAR],
             model_name=args.model,
             mode=args.mode,
         )
 
     def __write_model_names(self, args):
-        with open(os.environ['CONFIGURATION'], mode='r') as f:
+        with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
 
         config = execution.ExperimentConfiguration.parse_obj(config)
@@ -312,6 +258,7 @@ def add_parser_arguments(
             action='store',
             help='Either "train" or "validation" or "test".',
             choices=('train', 'validation', 'test'),
+            required=True,
         )
 
 

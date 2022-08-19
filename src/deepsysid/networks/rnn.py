@@ -417,3 +417,59 @@ class LTIRnn(nn.Module):
                 b_satisfied = True                
 
         return b_satisfied
+
+
+class InitLSTM(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: int,
+        dropout: float,
+    ):
+        super().__init__()
+
+        self.num_recurrent_layers = num_recurrent_layers
+        self.recurrent_dim = recurrent_dim
+
+        self.init_lstm = nn.LSTM(
+            input_size=input_dim + output_dim,
+            hidden_size=recurrent_dim,
+            num_layers=num_recurrent_layers,
+            dropout=dropout,
+            batch_first=True,
+        )
+
+        self.predictor_lstm = nn.LSTM(
+            input_size=input_dim,
+            hidden_size=recurrent_dim,
+            num_layers=num_recurrent_layers,
+            dropout=dropout,
+            batch_first=True,
+        )
+
+        self.output_layer = torch.nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=False
+        )
+        self.init_layer = torch.nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=False
+        )
+
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+        for name, param in self.init_lstm.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+    def forward(
+        self, input, x0=None, return_init=False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
+        h_init, (h0_init, c0_init) = self.init_lstm(x0)
+        h, (_, _) = self.predictor_lstm(input, (h0_init, c0_init))
+        if return_init:
+            return self.output_layer(h), self.init_layer(h_init)
+        else:
+            return self.output_layer(h)

@@ -2,9 +2,9 @@
 name = "deepsysid"
 version = "0.1.0"
 description = "A system identification toolkit for multistep prediction using deep learning and hybrid methods."
-authors = ["Alexandra Baier <alx.baier@gmail.com>"]
+authors = ["Alexandra Baier <alx.baier@gmail.com>", "Daniel Frank "]
 readme = "README.md"
-packages = [{include = "deepsysid"}]
+packages = [{include = "deepsysid", from = "src"}]
 license = "MIT"
 repository = "https://github.com/AlexandraBaier/deepsysid"
 
@@ -17,20 +17,22 @@ h5py = "^3.7.0"
 pandas = "^1.4.2"
 torch = { version="^1.11.0", optional = true }
 cvxpy = "^1.2.1"
+pytest = "^7.1.2"
 
 [tool.poetry.extras]
 torch-cpu = ["torch"]
 
 [tool.poetry.dev-dependencies]
-black = "^22.3.0"
+black = "22.6.0"
 mypy = "^0.961"
-isort = "^5.10.1"
-flake8 = "^4.0.1"
+isort = "5.10.1"
+flake8 = "4.0.1"
+pytest = "^7.1.2"
+pre-commit = "^2.20.0"
+coverage = "^6.4.3"
 
 [tool.poetry.scripts]
 deepsysid="deepsysid.cli.interface:run_deepsysid_cli"
-deepsysid-evaluate-quadcopter-trajectory = "deepsysid.cli.evaluate_quadcopter_trajectory:main"
-deepsysid-evaluate-4dofship-trajectory = "deepsysid.cli.evaluate_4dof_ship_trajectory:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -40,5 +42,11 @@ build-backend = "poetry.core.masonry.api"
 line-length = 88
 skip-string-normalization = 1
 
+[tool.isort]
+profile = "black"
+
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = "tests"

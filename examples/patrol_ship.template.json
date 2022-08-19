@@ -1,5 +1,4 @@
 {
-  "base_path": "~/models/patrolship",
   "settings": {
     "train_fraction": 0.6,
     "validation_fraction": 0.1,
@@ -491,6 +490,63 @@
         "learning_rate": [
           1e-2,
           0.0025
+        ]
+      }
+    },
+    {
+      "model_base_name": "LSTM+CombinedInit",
+      "model_class": "deepsysid.models.recurrent.LSTMCombinedInitModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs": 5
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ]
+      }
+    },
+    {
+      "model_base_name": "LSTM+StableSwitch",
+      "model_class": "deepsysid.models.switching.StableSwitchingLSTMModel",
+      "static_parameters": {
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 256,
+        "learning_rate": 0.0025,
+        "epochs_initializer": 400,
+        "epochs_predictor": 800
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ],
+        "loss": [
+          "mse",
+          "msge"
         ]
       }
     }
