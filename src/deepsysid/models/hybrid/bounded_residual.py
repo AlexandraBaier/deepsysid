@@ -66,6 +66,30 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
     ):
         super().__init__(config)
 
+        if physical.STATES is not None and any(
+            sn not in config.state_names for sn in physical.STATES
+        ):
+            raise ValueError(f'physical expects states: {str(physical.STATES)}.')
+
+        if physical.CONTROLS is not None and any(
+            cn not in config.control_names for cn in physical.CONTROLS
+        ):
+            raise ValueError(f'physical expects controls: {str(physical.CONTROLS)}.')
+
+        if semiphysical.STATES is not None and any(
+            sn not in config.state_names for sn in semiphysical.STATES
+        ):
+            raise ValueError(
+                f'semiphysical expects states: {str(semiphysical.STATES)}.'
+            )
+
+        if semiphysical.CONTROLS is not None and any(
+            cn not in config.control_names for cn in semiphysical.CONTROLS
+        ):
+            raise ValueError(
+                f'semiphysical expects controls: {str(semiphysical.CONTROLS)}.'
+            )
+
         self.device_name = device_name
         self.device = torch.device(device_name)
 
@@ -93,6 +117,44 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         self.physical = physical
         self.semiphysical = semiphysical
+
+        if physical.STATES is None:
+            self.physical_state_mask: np.ndarray = np.array(
+                list(range(len(config.state_names))), dtype=np.int32
+            )
+        else:
+            self.physical_state_mask = np.array(
+                list(config.state_names.index(sn) for sn in physical.STATES),
+                dtype=np.int32,
+            )
+        if physical.CONTROLS is None:
+            self.physical_control_mask: np.ndarray = np.array(
+                list(range(len(config.control_names))), dtype=np.int32
+            )
+        else:
+            self.physical_control_mask = np.array(
+                list(config.control_names.index(cn) for cn in physical.CONTROLS),
+                dtype=np.int32,
+            )
+
+        if semiphysical.STATES is None:
+            self.semiphysical_state_mask: np.ndarray = np.array(
+                list(range(len(config.state_names))), dtype=np.int32
+            )
+        else:
+            self.semiphysical_state_mask = np.array(
+                list(config.state_names.index(sn) for sn in semiphysical.STATES),
+                dtype=np.int32,
+            )
+        if semiphysical.CONTROLS is None:
+            self.semiphysical_control_mask: np.ndarray = np.array(
+                list(range(len(config.control_names))), dtype=np.int32
+            )
+        else:
+            self.semiphysical_control_mask = np.array(
+                list(config.control_names.index(cn) for cn in semiphysical.CONTROLS),
+                dtype=np.int32,
+            )
 
         self.blackbox = rnn.LinearOutputLSTM(
             input_dim=self.control_dim
@@ -137,12 +199,6 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
         self.state_mean, self.state_std = utils.mean_stddev(state_seqs)
-        self.semiphysical.set_normalization_values(
-            control_mean=self.control_mean,
-            control_std=self.control_std,
-            state_mean=self.state_mean,
-            state_std=self.state_std,
-        )
 
         un_control_seqs = control_seqs
         un_state_seqs = state_seqs
@@ -158,18 +214,48 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
         state_std = torch.from_numpy(self.state_std).float().to(self.device)
 
-        def denormalize_state(x):
+        def denormalize_state(x: torch.Tensor) -> torch.Tensor:
             return (x * state_std) + state_mean
 
-        def scale_acc(x):
-            return x / state_std
+        def scale_acc_physical(x: torch.Tensor) -> torch.Tensor:
+            return x / state_std[self.physical_state_mask]  # type: ignore
+
+        def scale_acc_physical_np(x: np.ndarray) -> np.ndarray:
+            return x / self.state_std[self.physical_state_mask]  # type: ignore
 
         # Train linear model
+        targets_seqs = []
+        # Prepare target values for training of semiphysical model.
+        for un_control, un_state in zip(un_control_seqs, un_state_seqs):
+            target = utils.normalize(un_state[1:], self.state_mean, self.state_std)
+
+            target[:, self.physical_state_mask] = target[
+                :, self.physical_state_mask
+            ] - scale_acc_physical_np(
+                self.physical.time_delta
+                * self.physical.forward(
+                    torch.from_numpy(un_control[1:, self.physical_control_mask])
+                    .float()
+                    .to(self.device),
+                    torch.from_numpy(un_state[:-1]).float().to(self.device),
+                )
+                .cpu()
+                .detach()
+                .numpy()
+            )
+            targets_seqs.append(target[:, self.semiphysical_state_mask])
+
         self.semiphysical.train_semiphysical(
-            control_seqs=un_control_seqs,
-            state_seqs=un_state_seqs,
-            physical=self.physical,
+            control_seqs=[
+                cseq[:, self.semiphysical_control_mask] for cseq in un_control_seqs
+            ],
+            state_seqs=[
+                sseq[:, self.semiphysical_state_mask] for sseq in un_state_seqs
+            ],
+            target_seqs=targets_seqs,
         )
+        # Do not let the semiphysical model train together with the LSTM.
+        self.semiphysical.eval()
 
         initializer_dataset = InitializerDataset(
             control_seqs, state_seqs, self.sequence_length
@@ -214,8 +300,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             for batch in data_loader:
                 self.blackbox.zero_grad()
 
-                x_physical_control = batch['x_control_unnormed'].float().to(self.device)
-                x_physical_state = batch['x_state_unnormed'].float().to(self.device)
+                x_control_unnormed = batch['x_control_unnormed'].float().to(self.device)
+                x_state_unnormed = batch['x_state_unnormed'].float().to(self.device)
                 y_whitebox = (
                     torch.zeros((self.batch_size, self.sequence_length, self.state_dim))
                     .float()
@@ -224,17 +310,27 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
                 for time in range(self.sequence_length):
                     y_semiphysical = self.semiphysical.forward(
-                        control=x_physical_control[:, time, :],
-                        state=x_physical_state[:, time, :],
+                        control=x_control_unnormed[
+                            :, time, self.semiphysical_control_mask
+                        ],
+                        state=x_state_unnormed[:, time, self.semiphysical_state_mask],
                     )
-                    ydot_physical = scale_acc(
+                    ydot_physical = scale_acc_physical(
                         self.physical.forward(
-                            control=x_physical_control[:, time, :],
-                            state=x_physical_state[:, time, :],
+                            control=x_control_unnormed[
+                                :, time, self.physical_control_mask
+                            ],
+                            state=x_state_unnormed[:, time, self.physical_state_mask],
                         )
                     )
-                    y_whitebox[:, time, :] = (
-                        y_semiphysical + self.physical.time_delta * ydot_physical
+
+                    y_whitebox[:, time, self.physical_state_mask] = (
+                        y_whitebox[:, time, self.physical_state_mask]
+                        + self.physical.time_delta * ydot_physical
+                    )
+                    y_whitebox[:, time, self.semiphysical_state_mask] = (
+                        y_whitebox[:, time, self.semiphysical_state_mask]
+                        + y_semiphysical
                     )
 
                 x_init = batch['x_init'].float().to(self.device)
@@ -258,6 +354,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             )
             epoch_losses_teacher.append([i, total_epoch_loss])
 
+        self.optimizer_end2end = optim.Adam(
+            params=self.blackbox.parameters(), lr=self.learning_rate
+        )
         for i in range(self.epochs_feedback):
             data_loader = data.DataLoader(
                 dataset=dataset,
@@ -282,16 +381,29 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 _, hx_init = self.initializer.forward(x_init, return_state=True)
 
                 for time in range(self.sequence_length):
+                    y_whitebox = (
+                        torch.zeros((self.batch_size, self.state_dim))
+                        .float()
+                        .to(self.device)
+                    )
                     y_semiphysical = self.semiphysical.forward(
-                        x_control_unnormed[:, time, :], current_state
+                        x_control_unnormed[:, time, self.semiphysical_control_mask],
+                        current_state[:, self.semiphysical_state_mask],
                     )
 
-                    ydot_physical = scale_acc(
+                    ydot_physical = scale_acc_physical(
                         self.physical.forward(
-                            x_control_unnormed[:, time, :], current_state
+                            x_control_unnormed[:, time, self.physical_control_mask],
+                            current_state[:, self.physical_state_mask],
                         )
                     )
-                    y_whitebox = y_semiphysical + self.time_delta * ydot_physical
+                    y_whitebox[:, self.physical_state_mask] = (
+                        y_whitebox[:, self.physical_state_mask]
+                        + self.time_delta * ydot_physical
+                    )
+                    y_whitebox[:, self.semiphysical_state_mask] = (
+                        y_whitebox[:, self.semiphysical_state_mask] + y_semiphysical
+                    )
 
                     y_blackbox, hx_init = self.blackbox_forward(
                         torch.cat(
@@ -305,7 +417,6 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     current_state = y_blackbox.squeeze(1) + y_whitebox
                     y_est[:, time, :] = current_state
                     current_state = denormalize_state(current_state)
-
                 batch_loss = self.loss.forward(
                     y_est, batch['y'].float().to(self.device)
                 )
@@ -354,11 +465,11 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         state_mean = torch.from_numpy(self.state_mean).float().to(self.device)
         state_std = torch.from_numpy(self.state_std).float().to(self.device)
 
-        def denormalize_state(x):
+        def denormalize_state(x: torch.Tensor) -> torch.Tensor:
             return (x * state_std) + state_mean
 
-        def scale_acc(x):
-            return x / state_std
+        def scale_acc_physical(x: torch.Tensor) -> torch.Tensor:
+            return x / state_std[self.physical_state_mask]  # type: ignore
 
         un_control = control
         current_state_np = initial_state[-1, :]
@@ -391,13 +502,28 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             )
             x_pred = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
             for time in range(control.shape[0]):
+                y_whitebox = (
+                    torch.zeros((current_state.shape[0], self.state_dim))
+                    .float()
+                    .to(self.device)
+                )
                 y_semiphysical = self.semiphysical.forward(
-                    control=x_control_un[:, time, :], state=current_state
+                    control=x_control_un[:, time, self.semiphysical_control_mask],
+                    state=current_state[:, self.semiphysical_state_mask],
                 )
-                ydot_physical = scale_acc(
-                    self.physical.forward(x_control_un[:, time, :], current_state)
+                ydot_physical = scale_acc_physical(
+                    self.physical.forward(
+                        x_control_un[:, time, self.physical_control_mask],
+                        current_state[:, self.physical_state_mask],
+                    )
                 )
-                y_whitebox = y_semiphysical + self.time_delta * ydot_physical
+                y_whitebox[:, self.physical_state_mask] = (
+                    y_whitebox[:, self.physical_state_mask]
+                    + self.time_delta * ydot_physical
+                )
+                y_whitebox[:, self.semiphysical_state_mask] = (
+                    y_whitebox[:, self.semiphysical_state_mask] + y_semiphysical
+                )
 
                 x_blackbox = torch.cat(
                     (x_pred[:, time, :], y_whitebox), dim=1
@@ -426,6 +552,11 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         torch.save(self.semiphysical.state_dict(), file_path[0])
         torch.save(self.blackbox.state_dict(), file_path[1])
         torch.save(self.initializer.state_dict(), file_path[2])
+
+        semiphysical_params = [
+            param.tolist() for param in self.semiphysical.get_parameters_to_save()
+        ]
+
         with open(file_path[3], mode='w') as f:
             json.dump(
                 {
@@ -433,6 +564,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     'state_std': self.state_std.tolist(),
                     'control_mean': self.control_mean.tolist(),
                     'control_std': self.control_std.tolist(),
+                    'semiphysical': semiphysical_params,
                 },
                 f,
             )
@@ -453,11 +585,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.state_std = np.array(norm['state_std'])
         self.control_mean = np.array(norm['control_mean'])
         self.control_std = np.array(norm['control_std'])
-        self.semiphysical.set_normalization_values(
-            control_mean=self.control_mean,
-            control_std=self.control_std,
-            state_mean=self.state_mean,
-            state_std=self.state_std,
+        self.semiphysical.load_parameters(
+            [np.array(param) for param in norm['semiphysical']]
         )
 
     def get_file_extension(self) -> Tuple[str, ...]:

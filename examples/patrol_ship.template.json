@@ -9,16 +9,16 @@
       "n",
       "deltal",
       "deltar",
-      "Vw",
-      "alpha_x",
-      "alpha_y"
+      "Vw"
     ],
     "state_names": [
       "u",
       "v",
       "p",
       "r",
-      "phi"
+      "phi",
+      "alpha_x",
+      "alpha_y"
     ],
     "thresholds": [
       10.0,
@@ -59,8 +59,8 @@
         "sequence_length": 50,
         "batch_size": 256,
         "learning_rate": 0.0025,
-        "epochs_initializer": 5,
-        "epochs_predictor": 5
+        "epochs_initializer": 400,
+        "epochs_predictor": 800
       },
       "flexible_parameters": {
         "recurrent_dim": [

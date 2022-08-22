@@ -1,5 +1,5 @@
 import abc
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -53,6 +53,9 @@ class BasicPelicanMotionConfig(BaseModel):
 
 
 class PhysicalComponent(nn.Module, abc.ABC):
+    STATES: Optional[List[str]] = None
+    CONTROLS: Optional[List[str]] = None
+
     def __init__(self, time_delta: float, device: torch.device):
         super().__init__()
 
@@ -75,6 +78,8 @@ class NoOpPhysicalComponent(PhysicalComponent):
 
 
 class MinimalManeuveringComponent(PhysicalComponent):
+    STATES = ['u', 'v', 'p', 'r', 'phi']
+
     def __init__(
         self, time_delta: float, device: torch.device, config: MinimalManeuveringConfig
     ):
@@ -88,6 +93,9 @@ class MinimalManeuveringComponent(PhysicalComponent):
 
 
 class PropulsionManeuveringComponent(PhysicalComponent):
+    STATES = ['u', 'v', 'p', 'r', 'phi']
+    CONTROLS = ['n', 'deltal', 'deltar']
+
     def __init__(
         self,
         time_delta: float,
@@ -104,6 +112,8 @@ class PropulsionManeuveringComponent(PhysicalComponent):
 
 
 class BasicPelicanMotionComponent(PhysicalComponent):
+    STATES = ['phi', 'theta', 'xdot', 'ydot', 'zdot', 'p', 'q', 'r']
+
     def __init__(
         self, time_delta: float, device: torch.device, config: BasicPelicanMotionConfig
     ):

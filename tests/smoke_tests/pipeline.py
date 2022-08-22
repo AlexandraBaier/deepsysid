@@ -84,11 +84,11 @@ def _get_data(idx: int) -> str:
 
 
 def get_state_names() -> List[str]:
-    return ['u', 'v', 'p', 'r', 'phi']
+    return ['u', 'v', 'p', 'r', 'phi', 'alpha_x', 'alpha_y']
 
 
 def get_control_names() -> List[str]:
-    return ['n', 'deltal', 'deltar', 'Vw', 'alpha_x', 'alpha_y']
+    return ['n', 'deltal', 'deltar', 'Vw']
 
 
 def get_cpu_device_name() -> str:
