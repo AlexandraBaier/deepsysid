@@ -50,3 +50,8 @@ def train_model(
         execution.save_training_metadata(metadata, model_directory, model_name)
     # Save model
     execution.save_model(model, model_directory, model_name)
+    # Save model configuration
+    with open(
+        os.path.join(model_directory, f'config-{model_name}.json'), mode='w'
+    ) as f:
+        f.write(configuration.models[model_name].json())
