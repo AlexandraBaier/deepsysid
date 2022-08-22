@@ -11,17 +11,21 @@ import torch.utils.data as data
 
 from .. import utils
 from ..networks import loss, rnn
-from ..networks.switching import StableSwitchingLSTM
+from ..networks.switching import (
+    StableSwitchingLSTM,
+    SwitchingBaseLSTM,
+    UnconstrainedSwitchingLSTM,
+)
 from . import base
 from .recurrent import LSTMInitModelConfig
 
 logger = logging.getLogger()
 
 
-class StableSwitchingLSTMModel(base.DynamicIdentificationModel):
+class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
     CONFIG = LSTMInitModelConfig
 
-    def __init__(self, config: LSTMInitModelConfig):
+    def __init__(self, config: LSTMInitModelConfig, predictor: SwitchingBaseLSTM):
         super().__init__(config)
 
         self.device_name = config.device_name
@@ -47,13 +51,7 @@ class StableSwitchingLSTMModel(base.DynamicIdentificationModel):
         else:
             raise ValueError('loss can only be "mse" or "msge"')
 
-        self.predictor = StableSwitchingLSTM(
-            control_dim=self.control_dim,
-            state_dim=self.state_dim,
-            recurrent_dim=self.recurrent_dim,
-            num_recurrent_layers=self.num_recurrent_layers,
-            dropout=self.dropout,
-        ).to(self.device)
+        self.predictor = predictor.to(self.device)
 
         self.initializer = rnn.BasicLSTM(
             input_dim=self.control_dim + self.state_dim,
@@ -259,6 +257,30 @@ class StableSwitchingLSTMModel(base.DynamicIdentificationModel):
             p.numel() for p in self.predictor.parameters() if p.requires_grad
         )
         return init_count + predictor_count
+
+
+class UnconstrainedSwitchingLSTMModel(SwitchingLSTMBaseModel):
+    def __init__(self, config: LSTMInitModelConfig):
+        predictor = UnconstrainedSwitchingLSTM(
+            control_dim=len(config.control_names),
+            state_dim=len(config.state_names),
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            dropout=config.dropout,
+        )
+        super().__init__(config=config, predictor=predictor)
+
+
+class StableSwitchingLSTMModel(SwitchingLSTMBaseModel):
+    def __init__(self, config: LSTMInitModelConfig):
+        predictor = StableSwitchingLSTM(
+            control_dim=len(config.control_names),
+            state_dim=len(config.state_names),
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            dropout=config.dropout,
+        )
+        super().__init__(config=config, predictor=predictor)
 
 
 class _InitializerDataset(data.Dataset):
