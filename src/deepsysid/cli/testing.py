@@ -222,11 +222,12 @@ def write_test_results_to_hdf5(
         pred_grp.create_dataset(str(i), data=pred_state)
         true_grp.create_dataset(str(i), data=true_state)
 
+    metadata_grp = f.create_group('metadata')
     if len(metadata) > 0:
         for name in metadata[0]:
-            metadata_grp = f.create_group(name)
+            metadata_sub_grp = metadata_grp.create_group(name)
             for i, data in enumerate(md[name] for md in metadata):
-                metadata_grp.create_dataset(str(i), data=data)
+                metadata_sub_grp.create_dataset(str(i), data=data)
 
 
 def build_result_file_name(
