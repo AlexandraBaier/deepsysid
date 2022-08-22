@@ -8,7 +8,7 @@ from sklearn.metrics import r2_score
 
 from .. import utils
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class DynamicIdentificationModelConfig(BaseModel):

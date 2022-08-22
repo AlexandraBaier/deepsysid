@@ -28,7 +28,7 @@ from .semiphysical import (
     SemiphysicalComponent,
 )
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class HybridResidualLSTMModelConfig(DynamicIdentificationModelConfig):

@@ -13,7 +13,7 @@ from ..networks.fnn import DenseReLUNetwork
 from . import base
 from .base import DynamicIdentificationModelConfig
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class NARXDenseNetworkConfig(DynamicIdentificationModelConfig):

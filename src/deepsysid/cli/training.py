@@ -23,6 +23,7 @@ def train_model(
         pass
 
     # Configure logging
+    # This is the "root" logger, so we do not initializer it with a name.
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logger.addHandler(

@@ -10,7 +10,7 @@ from torch import nn
 
 from ... import utils
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class SemiphysicalComponent(nn.Module, abc.ABC):

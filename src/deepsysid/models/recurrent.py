@@ -14,7 +14,7 @@ from ..networks import loss, rnn
 from . import base
 from .base import DynamicIdentificationModelConfig
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class ConstrainedRnnConfig(DynamicIdentificationModelConfig):

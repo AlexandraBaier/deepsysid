@@ -19,7 +19,7 @@ from ..networks.switching import (
 from . import base
 from .recurrent import LSTMInitModelConfig
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
