@@ -22,7 +22,9 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nw: int
     gamma: float
     beta: float
-    decay_parameter: float
+    initial_decay_parameter: float
+    decay_rate: float
+    epochs_with_const_decay: int
     num_recurrent_layers: int
     dropout: float
     sequence_length: int
@@ -47,7 +49,9 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.ny = len(config.state_names)
         self.nw = config.nw
 
-        self.decay_parameter = config.decay_parameter
+        self.initial_decay_parameter = config.initial_decay_parameter
+        self.decay_rate = config.decay_rate
+        self.epochs_with_const_decay = config.epochs_with_const_decay
 
         self.nw = config.nw
         self.num_recurrent_layers = config.num_recurrent_layers
@@ -77,7 +81,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
         self.initializer = rnn.BasicLSTM(
             input_dim=self.nu + self.ny,
-            recurrent_dim=self.nw,
+            recurrent_dim=self.nx,
             num_recurrent_layers=self.num_recurrent_layers,
             output_dim=[self.ny],
             dropout=self.dropout,
@@ -133,6 +137,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         predictor_dataset = _PredictorDataset(us, ys, self.sequence_length)
 
         time_start_pred = time.time()
+        t = self.initial_decay_parameter
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
@@ -149,9 +154,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 y = self.predictor.forward(
                     batch['x'].float().to(self.device), hx=hx
                 ).to(self.device)
-                barrier = self.predictor.get_barrier(self.decay_parameter).to(
-                    self.device
-                )
+                barrier = self.predictor.get_barrier(t).to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 (batch_loss + barrier).backward()
@@ -187,6 +190,11 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                         )
                         return
                     bls_iter += 1
+
+            # decay t following the idea of interior point methods
+            if i % self.epochs_with_const_decay == 0 and i != 0:
+                t = t * 1 / self.decay_rate
+                logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'

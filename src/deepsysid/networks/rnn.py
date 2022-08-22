@@ -169,34 +169,44 @@ class LTIRnn(nn.Module):
         C2_tilde = T @ C2
         D21_tilde = T @ D21
 
-        # lmi that ensures l2 gain
-        M = cp.bmat(
-            [
+        if self.ga == 0:
+            # lmi that ensures finite l2 gain
+            M = cp.bmat(
                 [
-                    -Y,
-                    np.zeros((self.nx, self.nu)),
-                    self.beta * C2_tilde.T,
-                    A_tilde.T,
-                    C1.T,
-                ],
+                    [-Y, self.beta * C2_tilde.T, A_tilde.T],
+                    [self.beta * C2_tilde, -2 * T, B2_tilde.T],
+                    [A_tilde, B2_tilde, -Y],
+                ]
+            )
+        else:
+            # lmi that ensures l2 gain gamma
+            M = cp.bmat(
                 [
-                    np.zeros((self.nu, self.nx)),
-                    -self.ga**2 * np.eye(self.nu),
-                    self.beta * D21_tilde.T,
-                    B1_tilde.T,
-                    D11.T,
-                ],
-                [
-                    self.beta * C2_tilde,
-                    self.beta * D21_tilde,
-                    -2 * T,
-                    B2_tilde.T,
-                    D12.T,
-                ],
-                [A_tilde, B1_tilde, B2_tilde, -Y, np.zeros((self.nx, self.ny))],
-                [C1, D11, D12, np.zeros((self.ny, self.nx)), -np.eye(self.ny)],
-            ]
-        )
+                    [
+                        -Y,
+                        np.zeros((self.nx, self.nu)),
+                        self.beta * C2_tilde.T,
+                        A_tilde.T,
+                        C1.T,
+                    ],
+                    [
+                        np.zeros((self.nu, self.nx)),
+                        -self.ga**2 * np.eye(self.nu),
+                        self.beta * D21_tilde.T,
+                        B1_tilde.T,
+                        D11.T,
+                    ],
+                    [
+                        self.beta * C2_tilde,
+                        self.beta * D21_tilde,
+                        -2 * T,
+                        B2_tilde.T,
+                        D12.T,
+                    ],
+                    [A_tilde, B1_tilde, B2_tilde, -Y, np.zeros((self.nx, self.ny))],
+                    [C1, D11, D12, np.zeros((self.ny, self.nx)), -np.eye(self.ny)],
+                ]
+            )
 
         # setup optimization problem, objective might change,
         # any feasible solution works as initialization for the parameters
@@ -212,11 +222,12 @@ class LTIRnn(nn.Module):
         )
         problem.solve(solver=cp.SCS)
         # check if t is negative
-        max_eig_lmi = np.max(np.real(np.linalg.eig(M.value)[0]))
-        if max_eig_lmi < 0 and problem.status == 'optimal':
+        # max_eig_lmi = np.max(np.real(np.linalg.eig(M.value)[0]))
+
+        if problem.status == 'optimal':
             logger.info(
                 f'Found negative semidefinite LMI, problem status: '
-                f'\t {problem.status} \t max eig(LMI)={max_eig_lmi:3f}'
+                f'\t {problem.status}'
             )
         else:
             raise Exception(
@@ -230,13 +241,14 @@ class LTIRnn(nn.Module):
         self.Y.data = torch.tensor(Y.value, dtype=dtype)
         self.A_tilde.weight.data = torch.tensor(A_tilde.value, dtype=dtype)
 
-        self.B1_tilde.weight.data = torch.tensor(B1_tilde.value, dtype=dtype)
         self.B2_tilde.weight.data = torch.tensor(B2_tilde.value, dtype=dtype)
-        self.C1.weight.data = torch.tensor(C1.value, dtype=dtype)
-        self.D11.weight.data = torch.tensor(D11.value, dtype=dtype)
-        self.D12.weight.data = torch.tensor(D12.value, dtype=dtype)
+        if not self.ga == 0:
+            self.C1.weight.data = torch.tensor(C1.value, dtype=dtype)
+            self.D11.weight.data = torch.tensor(D11.value, dtype=dtype)
+            self.D12.weight.data = torch.tensor(D12.value, dtype=dtype)
+            self.B1_tilde.weight.data = torch.tensor(B1_tilde.value, dtype=dtype)
+            self.D21_tilde.weight.data = torch.tensor(D21_tilde.value, dtype=dtype)
         self.C2_tilde.weight.data = torch.tensor(C2_tilde.value, dtype=dtype)
-        self.D21_tilde.weight.data = torch.tensor(D21_tilde.value, dtype=dtype)
         self.lambdas.data = torch.tensor(lambdas.value, dtype=dtype)
 
     def forward(
@@ -287,54 +299,73 @@ class LTIRnn(nn.Module):
         ga = self.ga
 
         # M << 0
-        M = torch.cat(
-            [
-                torch.cat(
-                    (
-                        -Y,
-                        torch.zeros((nx, nu), device=device),
-                        beta * C2_tilde.T,
-                        A_tilde.T,
-                        C1.T,
+        if self.ga == 0:
+            M = torch.cat(
+                [
+                    torch.cat(
+                        [-Y, beta * C2_tilde.T, A_tilde.T],
+                        dim=1,
                     ),
-                    dim=1,
-                ),
-                torch.cat(
-                    (
-                        torch.zeros((nu, nx), device=device),
-                        -(ga**2) * torch.eye(nu, device=device),
-                        beta * D21_tilde.T,
-                        B1_tilde.T,
-                        D11.T,
+                    torch.cat(
+                        [beta * C2_tilde, -2 * T, B2_tilde.T],
+                        dim=1,
                     ),
-                    dim=1,
-                ),
-                torch.cat(
-                    (beta * C2_tilde, beta * D21_tilde, -2 * T, B2_tilde.T, D12.T),
-                    dim=1,
-                ),
-                torch.cat(
-                    (
-                        A_tilde,
-                        B1_tilde,
-                        B2_tilde,
-                        -Y,
-                        torch.zeros((nx, ny), device=device),
+                    torch.cat(
+                        [A_tilde, B2_tilde, -Y],
+                        dim=1,
                     ),
-                    dim=1,
-                ),
-                torch.cat(
-                    (
-                        C1,
-                        D11,
-                        D12,
-                        torch.zeros((ny, nx), device=device),
-                        -torch.eye(ny, device=device),
+                ]
+            )
+        else:
+
+            M = torch.cat(
+                [
+                    torch.cat(
+                        (
+                            -Y,
+                            torch.zeros((nx, nu), device=device),
+                            beta * C2_tilde.T,
+                            A_tilde.T,
+                            C1.T,
+                        ),
+                        dim=1,
                     ),
-                    dim=1,
-                ),
-            ]
-        )
+                    torch.cat(
+                        (
+                            torch.zeros((nu, nx), device=device),
+                            -(ga**2) * torch.eye(nu, device=device),
+                            beta * D21_tilde.T,
+                            B1_tilde.T,
+                            D11.T,
+                        ),
+                        dim=1,
+                    ),
+                    torch.cat(
+                        (beta * C2_tilde, beta * D21_tilde, -2 * T, B2_tilde.T, D12.T),
+                        dim=1,
+                    ),
+                    torch.cat(
+                        (
+                            A_tilde,
+                            B1_tilde,
+                            B2_tilde,
+                            -Y,
+                            torch.zeros((nx, ny), device=device),
+                        ),
+                        dim=1,
+                    ),
+                    torch.cat(
+                        (
+                            C1,
+                            D11,
+                            D12,
+                            torch.zeros((ny, nx), device=device),
+                            -torch.eye(ny, device=device),
+                        ),
+                        dim=1,
+                    ),
+                ]
+            )
 
         return 0.5 * (M + M.T)
 
@@ -342,9 +373,9 @@ class LTIRnn(nn.Module):
         M = self.get_constraints()
         barrier = -t * (-M).logdet()
 
-        try:
-            torch.linalg.cholesky(-M)
-        except RuntimeError:
+        _, info = torch.linalg.cholesky_ex(-M.cpu())
+
+        if info > 0:
             barrier += torch.tensor(float('inf'))
 
         return barrier
@@ -352,11 +383,13 @@ class LTIRnn(nn.Module):
     def check_constr(self) -> bool:
         with torch.no_grad():
             M = self.get_constraints()
-            try:
-                torch.linalg.cholesky(-M)
-                b_satisfied = True
-            except RuntimeError:
+
+            _, info = torch.linalg.cholesky_ex(-M.cpu())
+
+            if info > 0:
                 b_satisfied = False
+            else:
+                b_satisfied = True
 
         return b_satisfied
 
