@@ -5,13 +5,13 @@ from typing import Optional
 
 from .. import execution
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
-from .evaluation import (
+from ..pipeline.evaluation import (
     evaluate_4dof_ship_trajectory,
     evaluate_model,
     evaluate_quadcopter_trajectory,
 )
-from .testing import test_model
-from .training import train_model
+from ..pipeline.testing import test_model
+from ..pipeline.training import train_model
 
 CONFIGURATION_ENV_VAR = 'CONFIGURATION'
 DATASET_DIR_ENV_VAR = 'DATASET_DIRECTORY'

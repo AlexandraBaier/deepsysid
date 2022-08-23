@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from deepsysid import execution, utils
-from deepsysid.cli.testing import build_result_file_name
+from deepsysid.pipeline.testing import build_result_file_name
 
 
 @dataclasses.dataclass

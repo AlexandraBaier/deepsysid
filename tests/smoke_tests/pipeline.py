@@ -1,11 +1,11 @@
 import pathlib
 from typing import Dict, List, Literal
 
-from deepsysid.cli.evaluation import evaluate_4dof_ship_trajectory, evaluate_model
-from deepsysid.cli.testing import test_model as run_model
-from deepsysid.cli.training import train_model
 from deepsysid.execution import ExperimentConfiguration
 from deepsysid.models.base import DynamicIdentificationModelConfig
+from deepsysid.pipeline.evaluation import evaluate_4dof_ship_trajectory, evaluate_model
+from deepsysid.pipeline.testing import test_model as run_model
+from deepsysid.pipeline.training import train_model
 
 
 def _get_data(idx: int) -> str:
