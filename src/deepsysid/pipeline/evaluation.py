@@ -7,8 +7,8 @@ import h5py
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-from deepsysid import execution
-from deepsysid.pipeline.testing import build_result_file_name
+from ..pipeline.testing import build_result_file_name
+from .configuration import ExperimentConfiguration
 
 
 @dataclasses.dataclass
@@ -31,7 +31,7 @@ class TrajectoryResult:
 
 
 def evaluate_model(
-    config: execution.ExperimentConfiguration,
+    config: ExperimentConfiguration,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
     result_directory: str,
@@ -96,7 +96,7 @@ def evaluate_model(
 
 
 def evaluate_model_specific_horizon(
-    config: execution.ExperimentConfiguration,
+    config: ExperimentConfiguration,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
     result_directory: str,
@@ -173,7 +173,7 @@ def evaluate_model_specific_horizon(
 
 
 def evaluate_4dof_ship_trajectory(
-    configuration: execution.ExperimentConfiguration,
+    configuration: ExperimentConfiguration,
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
@@ -204,7 +204,8 @@ def evaluate_4dof_ship_trajectory(
 
 
 def test_4dof_ship_trajectory(
-    config: execution.ExperimentConfiguration, result_file_path: str
+    config: ExperimentConfiguration,
+    result_file_path: str,
 ) -> List[TrajectoryResult]:
     pred = []
     true = []
@@ -251,7 +252,7 @@ def test_4dof_ship_trajectory(
 
 
 def evaluate_quadcopter_trajectory(
-    configuration: execution.ExperimentConfiguration,
+    configuration: ExperimentConfiguration,
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
@@ -286,7 +287,9 @@ def evaluate_quadcopter_trajectory(
 
 
 def test_quadcopter_trajectory(
-    config: execution.ExperimentConfiguration, result_file_path: str, horizon_size: int
+    config: ExperimentConfiguration,
+    result_file_path: str,
+    horizon_size: int,
 ) -> TrajectoryResult:
     pred = []
     true = []
@@ -329,7 +332,7 @@ def test_quadcopter_trajectory(
 
 def save_trajectory_results(
     results: List[TrajectoryResult],
-    config: execution.ExperimentConfiguration,
+    config: ExperimentConfiguration,
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],

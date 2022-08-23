@@ -1,12 +1,18 @@
 import logging
 import os
 import sys
+from typing import Dict
 
-from deepsysid import execution
+import h5py
+import numpy as np
+
+from ..pipeline.configuration import ExperimentConfiguration, initialize_model
+from .data_io import load_simulation_data
+from .model_io import save_model
 
 
 def train_model(
-    configuration: execution.ExperimentConfiguration,
+    configuration: ExperimentConfiguration,
     model_name: str,
     device_name: str,
     dataset_directory: str,
@@ -35,24 +41,32 @@ def train_model(
         logger.addHandler(logging.StreamHandler(sys.stdout))
 
     # Load dataset
-    controls, states = execution.load_simulation_data(
+    controls, states = load_simulation_data(
         directory=dataset_directory,
         control_names=configuration.control_names,
         state_names=configuration.state_names,
     )
 
     # Initialize model
-    model = execution.initialize_model(configuration, model_name, device_name)
+    model = initialize_model(configuration, model_name, device_name)
     # Train model
     logger.info(f'Training model on {device_name} if implemented.')
     metadata = model.train(control_seqs=controls, state_seqs=states)
     # Save model metadata
     if metadata is not None:
-        execution.save_training_metadata(metadata, model_directory, model_name)
+        save_training_metadata(metadata, model_directory, model_name)
     # Save model
-    execution.save_model(model, model_directory, model_name)
+    save_model(model, model_directory, model_name)
     # Save model configuration
     with open(
         os.path.join(model_directory, f'config-{model_name}.json'), mode='w'
     ) as f:
         f.write(configuration.models[model_name].json())
+
+
+def save_training_metadata(
+    metadata: Dict[str, np.ndarray], directory: str, model_name: str
+):
+    with h5py.File(os.path.join(directory, f'{model_name}-metadata.hdf5'), 'w') as f:
+        for name, data in metadata.items():
+            f.create_dataset(name, data=data)

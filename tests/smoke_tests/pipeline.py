@@ -1,8 +1,8 @@
 import pathlib
 from typing import Dict, List, Literal
 
-from deepsysid.execution import ExperimentConfiguration
 from deepsysid.models.base import DynamicIdentificationModelConfig
+from deepsysid.pipeline.configuration import ExperimentConfiguration
 from deepsysid.pipeline.evaluation import evaluate_4dof_ship_trajectory, evaluate_model
 from deepsysid.pipeline.testing import test_model as run_model
 from deepsysid.pipeline.training import train_model

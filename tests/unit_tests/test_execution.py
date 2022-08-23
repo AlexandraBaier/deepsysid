@@ -1,14 +1,14 @@
 import pytest
 
-from deepsysid.execution import (
+from deepsysid.models.base import DynamicIdentificationModel
+from deepsysid.models.linear import LinearModel
+from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
     ExperimentGridSearchSettings,
     ExperimentGridSearchTemplate,
     ModelGridSearchTemplate,
     retrieve_model_class,
 )
-from deepsysid.models.base import DynamicIdentificationModel
-from deepsysid.models.linear import LinearModel
 
 
 def test_retrieve_model_class_module_does_not_exist():

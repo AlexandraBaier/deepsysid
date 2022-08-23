@@ -3,8 +3,12 @@ import json
 import os
 from typing import Optional
 
-from .. import execution
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
+from ..pipeline.configuration import (
+    ExperimentConfiguration,
+    ExperimentGridSearchTemplate,
+    initialize_model,
+)
 from ..pipeline.evaluation import (
     evaluate_4dof_ship_trajectory,
     evaluate_model,
@@ -123,10 +127,8 @@ class DeepSysIdCommandLineInterface:
         with open(os.path.expanduser(args.template), mode='r') as f:
             template = json.load(f)
 
-        grid_search_template = execution.ExperimentGridSearchTemplate.parse_obj(
-            template
-        )
-        configuration = execution.ExperimentConfiguration.from_grid_search_template(
+        grid_search_template = ExperimentGridSearchTemplate.parse_obj(template)
+        configuration = ExperimentConfiguration.from_grid_search_template(
             grid_search_template, 'cpu'
         )
 
@@ -141,7 +143,7 @@ class DeepSysIdCommandLineInterface:
 
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
-        config = execution.ExperimentConfiguration.parse_obj(config)
+        config = ExperimentConfiguration.parse_obj(config)
 
         train_model(
             model_name=args.model,
@@ -160,7 +162,7 @@ class DeepSysIdCommandLineInterface:
 
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
-        config = execution.ExperimentConfiguration.parse_obj(config)
+        config = ExperimentConfiguration.parse_obj(config)
 
         test_model(
             model_name=args.model,
@@ -175,7 +177,7 @@ class DeepSysIdCommandLineInterface:
     def __evaluate_model(self, args):
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
-        config = execution.ExperimentConfiguration.parse_obj(config)
+        config = ExperimentConfiguration.parse_obj(config)
 
         evaluate_model(
             config=config,
@@ -184,7 +186,7 @@ class DeepSysIdCommandLineInterface:
             result_directory=os.environ[RESULT_DIR_ENV_VAR],
         )
 
-        model = execution.initialize_model(
+        model = initialize_model(
             config, args.model, device_name=build_device_name(False)
         )
         if config.thresholds and isinstance(model, HybridResidualLSTMModel):
@@ -200,7 +202,7 @@ class DeepSysIdCommandLineInterface:
     def __evaluate_4dof_ship_trajectory(self, args):
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
-        config = execution.ExperimentConfiguration.parse_obj(config)
+        config = ExperimentConfiguration.parse_obj(config)
 
         evaluate_4dof_ship_trajectory(
             configuration=config,
@@ -212,7 +214,7 @@ class DeepSysIdCommandLineInterface:
     def __evaluate_quadcopter_trajectory(self, args):
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
-        config = execution.ExperimentConfiguration.parse_obj(config)
+        config = ExperimentConfiguration.parse_obj(config)
 
         evaluate_quadcopter_trajectory(
             configuration=config,
@@ -225,7 +227,7 @@ class DeepSysIdCommandLineInterface:
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
 
-        config = execution.ExperimentConfiguration.parse_obj(config)
+        config = ExperimentConfiguration.parse_obj(config)
         model_names = list(config.models.keys())
 
         with open(args.output, mode='w') as f:

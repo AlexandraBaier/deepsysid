@@ -5,9 +5,11 @@ from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 import h5py
 import numpy as np
 
-from deepsysid import execution
-from deepsysid.models.base import DynamicIdentificationModel
-from deepsysid.models.hybrid.bounded_residual import HybridResidualLSTMModel
+from ..models.base import DynamicIdentificationModel
+from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
+from ..pipeline.configuration import ExperimentConfiguration, initialize_model
+from .data_io import load_file_names, load_simulation_data
+from .model_io import load_model
 
 
 @dataclasses.dataclass
@@ -20,7 +22,7 @@ class ModelTestResult:
 
 
 def test_model(
-    configuration: execution.ExperimentConfiguration,
+    configuration: ExperimentConfiguration,
     model_name: str,
     device_name: str,
     mode: Literal['train', 'validation', 'test'],
@@ -31,8 +33,8 @@ def test_model(
     model_directory = os.path.expanduser(
         os.path.normpath(os.path.join(models_directory, model_name))
     )
-    model = execution.initialize_model(configuration, model_name, device_name)
-    execution.load_model(model, model_directory, model_name)
+    model = initialize_model(configuration, model_name, device_name)
+    load_model(model, model_directory, model_name)
 
     simulations = load_test_simulations(
         configuration=configuration,
@@ -71,7 +73,7 @@ def test_model(
 
 
 def load_test_simulations(
-    configuration: execution.ExperimentConfiguration,
+    configuration: ExperimentConfiguration,
     mode: Literal['train', 'validation', 'test'],
     dataset_directory: str,
 ) -> List[Tuple[np.ndarray, np.ndarray, str]]:
@@ -81,10 +83,10 @@ def load_test_simulations(
     file_names = list(
         map(
             lambda fn: os.path.basename(fn).split('.')[0],
-            execution.load_file_names(dataset_directory),
+            load_file_names(dataset_directory),
         )
     )
-    controls, states = execution.load_simulation_data(
+    controls, states = load_simulation_data(
         directory=dataset_directory,
         control_names=configuration.control_names,
         state_names=configuration.state_names,
@@ -97,7 +99,7 @@ def load_test_simulations(
 
 def simulate_model(
     simulations: List[Tuple[np.ndarray, np.ndarray, str]],
-    config: execution.ExperimentConfiguration,
+    config: ExperimentConfiguration,
     model: DynamicIdentificationModel,
     threshold: Optional[float] = None,
 ) -> ModelTestResult:
@@ -148,7 +150,7 @@ def simulate_model(
 
 def save_model_tests(
     test_result: ModelTestResult,
-    config: execution.ExperimentConfiguration,
+    config: ExperimentConfiguration,
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
