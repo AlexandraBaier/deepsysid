@@ -4,6 +4,7 @@ from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 
 import h5py
 import numpy as np
+from numpy.typing import NDArray
 
 from ..models.base import DynamicIdentificationModel
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
@@ -14,11 +15,11 @@ from .model_io import load_model
 
 @dataclasses.dataclass
 class ModelTestResult:
-    control: List[np.ndarray]
-    true_state: List[np.ndarray]
-    pred_state: List[np.ndarray]
+    control: List[NDArray[np.float64]]
+    true_state: List[NDArray[np.float64]]
+    pred_state: List[NDArray[np.float64]]
     file_names: List[str]
-    metadata: List[Dict[str, np.ndarray]]
+    metadata: List[Dict[str, NDArray[np.float64]]]
 
 
 def test_model(
@@ -29,7 +30,7 @@ def test_model(
     dataset_directory: str,
     result_directory: str,
     models_directory: str,
-):
+) -> None:
     model_directory = os.path.expanduser(
         os.path.normpath(os.path.join(models_directory, model_name))
     )
@@ -76,7 +77,7 @@ def load_test_simulations(
     configuration: ExperimentConfiguration,
     mode: Literal['train', 'validation', 'test'],
     dataset_directory: str,
-) -> List[Tuple[np.ndarray, np.ndarray, str]]:
+) -> List[Tuple[NDArray[np.float64], NDArray[np.float64], str]]:
     # Prepare test data
     dataset_directory = os.path.join(dataset_directory, 'processed', mode)
 
@@ -98,7 +99,7 @@ def load_test_simulations(
 
 
 def simulate_model(
-    simulations: List[Tuple[np.ndarray, np.ndarray, str]],
+    simulations: List[Tuple[NDArray[np.float64], NDArray[np.float64], str]],
     config: ExperimentConfiguration,
     model: DynamicIdentificationModel,
     threshold: Optional[float] = None,
@@ -116,13 +117,17 @@ def simulate_model(
         true_state,
         file_name,
     ) in split_simulations(config.window_size, config.horizon_size, simulations):
+        result_type = Union[
+            NDArray[np.float64],
+            Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]],
+        ]
         if isinstance(model, HybridResidualLSTMModel):
-            simulation_result = model.simulate(
+            simulation_result: result_type = model.simulate(
                 initial_control,
                 initial_state,
                 true_control,
                 threshold=threshold if threshold is not None else np.infty,
-            )  # type: Union[np.ndarray, Tuple[np.ndarray, Dict[str, np.ndarray]]]
+            )
         else:
             simulation_result = model.simulate(
                 initial_control, initial_state, true_control
@@ -155,7 +160,7 @@ def save_model_tests(
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
     threshold: Optional[float] = None,
-):
+) -> None:
     # Save true and predicted time series
     result_directory = os.path.join(result_directory, model_name)
     try:
@@ -185,8 +190,16 @@ def save_model_tests(
 def split_simulations(
     window_size: int,
     horizon_size: int,
-    simulations: List[Tuple[np.ndarray, np.ndarray, str]],
-) -> Iterator[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]:
+    simulations: List[Tuple[NDArray[np.float64], NDArray[np.float64], str]],
+) -> Iterator[
+    Tuple[
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        str,
+    ]
+]:
     total_length = window_size + horizon_size
     for control, state, file_name in simulations:
         for i in range(total_length, control.shape[0], total_length):
@@ -203,11 +216,11 @@ def write_test_results_to_hdf5(
     control_names: List[str],
     state_names: List[str],
     file_names: List[str],
-    control: List[np.ndarray],
-    pred_states: List[np.ndarray],
-    true_states: List[np.ndarray],
-    metadata: List[Dict[str, np.ndarray]],
-):
+    control: List[NDArray[np.float64]],
+    pred_states: List[NDArray[np.float64]],
+    true_states: List[NDArray[np.float64]],
+    metadata: List[Dict[str, NDArray[np.float64]]],
+) -> None:
     f.attrs['control_names'] = np.array([np.string_(name) for name in control_names])
     f.attrs['state_names'] = np.array([np.string_(name) for name in state_names])
 

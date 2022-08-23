@@ -5,6 +5,7 @@ from typing import Dict
 
 import h5py
 import numpy as np
+from numpy.typing import NDArray
 
 from ..pipeline.configuration import ExperimentConfiguration, initialize_model
 from .data_io import load_simulation_data
@@ -18,7 +19,7 @@ def train_model(
     dataset_directory: str,
     models_directory: str,
     disable_stdout: bool,
-):
+) -> None:
     dataset_directory = os.path.join(dataset_directory, 'processed', 'train')
     model_directory = os.path.expanduser(
         os.path.normpath(os.path.join(models_directory, model_name))
@@ -65,8 +66,8 @@ def train_model(
 
 
 def save_training_metadata(
-    metadata: Dict[str, np.ndarray], directory: str, model_name: str
-):
+    metadata: Dict[str, NDArray[np.float64]], directory: str, model_name: str
+) -> None:
     with h5py.File(os.path.join(directory, f'{model_name}-metadata.hdf5'), 'w') as f:
         for name, data in metadata.items():
             f.create_dataset(name, data=data)

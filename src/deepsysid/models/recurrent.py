@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
+from numpy.typing import NDArray
 
 from ..networks import loss, rnn
 from . import base, utils
@@ -93,12 +94,16 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             self.initializer.parameters(), lr=self.learning_rate
         )
 
-        self.state_mean: Optional[np.ndarray] = None
-        self.state_std: Optional[np.ndarray] = None
-        self.control_mean: Optional[np.ndarray] = None
-        self.control_std: Optional[np.ndarray] = None
+        self.y_mean: Optional[NDArray[np.float64]] = None
+        self.y_stddev: Optional[NDArray[np.float64]] = None
+        self.u_mean: Optional[NDArray[np.float64]] = None
+        self.u_stddev: Optional[NDArray[np.float64]] = None
 
-    def train(self, control_seqs, state_seqs):
+    def train(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> None:
         us = control_seqs
         ys = state_seqs
         self.predictor.initialize_lmi()
@@ -213,10 +218,18 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
     def simulate(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
-    ) -> np.ndarray:
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        if (
+            self.u_mean is None
+            or self.u_stddev is None
+            or self.y_mean is None
+            or self.y_stddev is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
         self.initializer.eval()
         self.predictor.eval()
 
@@ -239,17 +252,24 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
             _, hx = self.initializer.forward(init_x, return_state=True)
             y = self.predictor.forward(pred_x, hx=hx)
-            y_np = y.cpu().detach().squeeze().numpy()  # type: ignore
+            # We do this just to get proper type hints.
+            # Option 1 should always execute until we change the signature.
+            if isinstance(y, torch.Tensor):
+                y_np: NDArray[np.float64] = (
+                    y.cpu().detach().squeeze().numpy().astype(np.float64)
+                )
+            else:
+                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
 
         y_np = utils.denormalize(y_np, self.y_mean, self.y_stddev)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]):
+    def save(self, file_path: Tuple[str, ...]) -> None:
         if (
             self.y_mean is None
-            or self.y_mean is None
+            or self.y_stddev is None
             or self.u_mean is None
-            or self.u_mean is None
+            or self.u_stddev is None
         ):
             raise ValueError('Model has not been trained and cannot be saved.')
 
@@ -266,19 +286,19 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 f,
             )
 
-    def load(self, file_path: Tuple[str, ...]):
+    def load(self, file_path: Tuple[str, ...]) -> None:
         self.initializer.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)
+            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
         )
         self.predictor.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)
+            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
-        self.y_mean = np.array(norm['y_mean'])
-        self.y_stddev = np.array(norm['y_stddev'])
-        self.u_mean = np.array(norm['u_mean'])
-        self.u_stddev = np.array(norm['u_stddev'])
+        self.y_mean = np.array(norm['y_mean'], dtype=np.float64)
+        self.y_stddev = np.array(norm['y_stddev'], dtype=np.float64)
+        self.u_mean = np.array(norm['u_mean'], dtype=np.float64)
+        self.u_stddev = np.array(norm['u_stddev'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return 'initializer.pth', 'predictor.pth', 'json'
@@ -358,14 +378,16 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             self.initializer.parameters(), lr=self.learning_rate
         )
 
-        self.state_mean: Optional[np.ndarray] = None
-        self.state_std: Optional[np.ndarray] = None
-        self.control_mean: Optional[np.ndarray] = None
-        self.control_std: Optional[np.ndarray] = None
+        self.state_mean: Optional[NDArray[np.float64]] = None
+        self.state_std: Optional[NDArray[np.float64]] = None
+        self.control_mean: Optional[NDArray[np.float64]] = None
+        self.control_std: Optional[NDArray[np.float64]] = None
 
     def train(
-        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
-    ) -> Dict[str, np.ndarray]:
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
 
@@ -447,18 +469,18 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         )
 
         return dict(
-            epoch_loss_initializer=np.array(epoch_losses_initializer),
-            epoch_loss_predictor=np.array(epoch_losses_predictor),
-            training_time_initializer=np.array([time_total_init]),
-            training_time_predictor=np.array([time_total_pred]),
+            epoch_loss_initializer=np.array(epoch_losses_initializer, dtype=np.float64),
+            epoch_loss_predictor=np.array(epoch_losses_predictor, dtype=np.float64),
+            training_time_initializer=np.array([time_total_init], dtype=np.float64),
+            training_time_predictor=np.array([time_total_pred], dtype=np.float64),
         )
 
     def simulate(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
-    ) -> np.ndarray:
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -487,12 +509,19 @@ class LSTMInitModel(base.DynamicIdentificationModel):
 
             _, hx = self.initializer.forward(init_x, return_state=True)
             y = self.predictor.forward(pred_x, hx=hx, return_state=False)
-            y_np = y.cpu().detach().squeeze().numpy()  # type: ignore
+            # We do this just to get proper type hints.
+            # Option 1 should always execute until we change the signature.
+            if isinstance(y, torch.Tensor):
+                y_np: NDArray[np.float64] = (
+                    y.cpu().detach().squeeze().numpy().astype(np.float64)
+                )
+            else:
+                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]):
+    def save(self, file_path: Tuple[str, ...]) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -514,19 +543,19 @@ class LSTMInitModel(base.DynamicIdentificationModel):
                 f,
             )
 
-    def load(self, file_path: Tuple[str, ...]):
+    def load(self, file_path: Tuple[str, ...]) -> None:
         self.initializer.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)
+            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
         )
         self.predictor.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)
+            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
-        self.state_mean = np.array(norm['state_mean'])
-        self.state_std = np.array(norm['state_std'])
-        self.control_mean = np.array(norm['control_mean'])
-        self.control_std = np.array(norm['control_std'])
+        self.state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self.state_std = np.array(norm['state_std'], dtype=np.float64)
+        self.control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self.control_std = np.array(norm['control_std'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return 'initializer.pth', 'predictor.pth', 'json'
@@ -590,14 +619,16 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         ).to(self.device)
         self.optimizer = optim.Adam(self.predictor.parameters(), lr=self.learning_rate)
 
-        self.state_mean: Optional[np.ndarray] = None
-        self.state_std: Optional[np.ndarray] = None
-        self.control_mean: Optional[np.ndarray] = None
-        self.control_std: Optional[np.ndarray] = None
+        self.state_mean: Optional[NDArray[np.float64]] = None
+        self.state_std: Optional[NDArray[np.float64]] = None
+        self.control_mean: Optional[NDArray[np.float64]] = None
+        self.control_std: Optional[NDArray[np.float64]] = None
 
     def train(
-        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
-    ) -> Dict[str, np.ndarray]:
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
 
@@ -672,17 +703,17 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         logger.info(f'Training time for predictor {time_total}s ')
 
         return dict(
-            epoch_loss_initializer=np.array(epoch_losses_initializer),
-            epoch_loss_predictor=np.array(epoch_losses_predictor),
-            training_time=np.array([time_total]),
+            epoch_loss_initializer=np.array(epoch_losses_initializer, dtype=np.float64),
+            epoch_loss_predictor=np.array(epoch_losses_predictor, dtype=np.float64),
+            training_time=np.array([time_total], dtype=np.float64),
         )
 
     def simulate(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
-    ) -> np.ndarray:
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -709,12 +740,19 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
             pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
 
             y = self.predictor.forward(pred_x, x0=init_x)
-            y_np = y.cpu().detach().squeeze().numpy()  # type: ignore
+            # We do this just to get proper type hints.
+            # Option 1 should always execute until we change the signature.
+            if isinstance(y, torch.Tensor):
+                y_np: NDArray[np.float64] = (
+                    y.cpu().detach().squeeze().numpy().astype(np.float64)
+                )
+            else:
+                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]):
+    def save(self, file_path: Tuple[str, ...]) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -735,16 +773,16 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
                 f,
             )
 
-    def load(self, file_path: Tuple[str, ...]):
+    def load(self, file_path: Tuple[str, ...]) -> None:
         self.predictor.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)
+            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
         )
         with open(file_path[1], mode='r') as f:
             norm = json.load(f)
-        self.state_mean = np.array(norm['state_mean'])
-        self.state_std = np.array(norm['state_stddev'])
-        self.control_mean = np.array(norm['control_mean'])
-        self.control_std = np.array(norm['control_stddev'])
+        self.state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self.state_std = np.array(norm['state_stddev'], dtype=np.float64)
+        self.control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self.control_std = np.array(norm['control_stddev'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return 'predictor.pth', 'json'
@@ -756,17 +794,24 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         return predictor_count
 
 
-class _InitializerDataset(data.Dataset):
+class _InitializerDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
     # x=[control state], y=[state]
-    def __init__(self, control_seqs, state_seqs, sequence_length):
+    def __init__(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        sequence_length: int,
+    ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
-        self.x = None
-        self.y = None
-        self.__load_data(control_seqs, state_seqs)
+        self.x, self.y = self.__load_data(control_seqs, state_seqs)
 
-    def __load_data(self, control_seqs, state_seqs):
+    def __load_data(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
         x_seq = list()
         y_seq = list()
         for control, state in zip(control_seqs, state_seqs):
@@ -793,27 +838,32 @@ class _InitializerDataset(data.Dataset):
             x_seq.append(x)
             y_seq.append(y)
 
-        self.x = np.vstack(x_seq)
-        self.y = np.vstack(y_seq)
+        return np.vstack(x_seq), np.vstack(y_seq)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.x.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
         return {'x': self.x[idx], 'y': self.y[idx]}
 
 
-class _PredictorDataset(data.Dataset):
-    def __init__(self, control_seqs, state_seqs, sequence_length):
+class _PredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
+    def __init__(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        sequence_length: int,
+    ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
-        self.x0 = None
-        self.x = None
-        self.y = None
-        self.__load_data(control_seqs, state_seqs)
+        self.x0, self.x, self.y = self.__load_data(control_seqs, state_seqs)
 
-    def __load_data(self, control_seqs, state_seqs):
+    def __load_data(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
         x0_seq = list()
         x_seq = list()
         y_seq = list()
@@ -848,12 +898,10 @@ class _PredictorDataset(data.Dataset):
             x_seq.append(x)
             y_seq.append(y)
 
-        self.x0 = np.vstack(x0_seq)
-        self.x = np.vstack(x_seq)
-        self.y = np.vstack(y_seq)
+        return np.vstack(x0_seq), np.vstack(x_seq), np.vstack(y_seq)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.x0.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
         return {'x0': self.x0[idx], 'x': self.x[idx], 'y': self.y[idx]}

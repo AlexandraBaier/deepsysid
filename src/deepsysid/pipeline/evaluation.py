@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 import h5py
 import numpy as np
+from numpy.typing import NDArray
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from .configuration import ExperimentConfiguration
@@ -25,8 +26,8 @@ from .metrics import (
 class EvaluationResult:
     file_names: List[str]
     steps: List[int]
-    scores_per_step: Dict[str, np.ndarray]
-    average_scores: Dict[str, np.ndarray]
+    scores_per_step: Dict[str, NDArray[np.float64]]
+    average_scores: Dict[str, NDArray[np.float64]]
     horizon_size: int
 
 
@@ -36,7 +37,7 @@ class TrajectoryResult:
     rmse_mean: float
     rmse_stddev: float
     n_samples: int
-    rmse_per_step: List[np.ndarray]
+    rmse_per_step: List[NDArray[np.float64]]
     horizon_size: int
 
 
@@ -46,7 +47,7 @@ def evaluate_model(
     mode: Literal['train', 'validation', 'test'],
     result_directory: str,
     threshold: Optional[float] = None,
-):
+) -> None:
     results = []
     for horizon_size in range(1, config.horizon_size + 1):
         result = evaluate_model_specific_horizon(
@@ -135,25 +136,27 @@ def evaluate_model_specific_horizon(
         file_names = [fn.decode('UTF-8') for fn in f['file_names'][:].tolist()]
         for i in range(len(file_names)):
             # Only grab the first "horizon_size" predictions for evaluation.
-            pred.append(f['predicted'][str(i)][:horizon_size])
-            true.append(f['true'][str(i)][:horizon_size])
+            pred.append(f['predicted'][str(i)][:horizon_size].astype(np.float64))
+            true.append(f['true'][str(i)][:horizon_size].astype(np.float64))
             steps.append(f['predicted'][str(i)][:horizon_size].shape[0])
 
-    def mse(t: np.ndarray, p: np.ndarray) -> np.ndarray:
-        return mean_squared_error(t, p, multioutput='raw_values')
+    def mse(t: NDArray[np.float64], p: NDArray[np.float64]) -> NDArray[np.float64]:
+        return mean_squared_error(t, p, multioutput='raw_values')  # type: ignore
 
-    def rmse(t: np.ndarray, p: np.ndarray) -> np.ndarray:
-        return np.sqrt(mean_squared_error(t, p, multioutput='raw_values'))
+    def rmse(t: NDArray[np.float64], p: NDArray[np.float64]) -> NDArray[np.float64]:
+        return np.sqrt(  # type: ignore
+            mean_squared_error(t, p, multioutput='raw_values')
+        )
 
-    def rmse_std(t: np.ndarray, p: np.ndarray) -> np.ndarray:
-        return np.std(
+    def rmse_std(t: NDArray[np.float64], p: NDArray[np.float64]) -> NDArray[np.float64]:
+        return np.std(  # type: ignore
             np.sqrt(mean_squared_error(t, p, multioutput='raw_values')), axis=0
         )
 
-    def mae(t: np.ndarray, p: np.ndarray) -> np.ndarray:
-        return mean_absolute_error(t, p, multioutput='raw_values')
+    def mae(t: NDArray[np.float64], p: NDArray[np.float64]) -> NDArray[np.float64]:
+        return mean_absolute_error(t, p, multioutput='raw_values')  # type: ignore
 
-    def d1(t: np.ndarray, p: np.ndarray) -> np.ndarray:
+    def d1(t: NDArray[np.float64], p: NDArray[np.float64]) -> NDArray[np.float64]:
         return index_of_agreement(t, p, j=1)
 
     score_functions = (
@@ -187,7 +190,7 @@ def evaluate_4dof_ship_trajectory(
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
-):
+) -> None:
     result_file_path = os.path.join(
         result_directory,
         model_name,
@@ -266,7 +269,7 @@ def evaluate_quadcopter_trajectory(
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
-):
+) -> None:
     result_file_path = os.path.join(
         result_directory,
         model_name,
@@ -346,7 +349,7 @@ def save_trajectory_results(
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
-):
+) -> None:
     scores_file_path = os.path.join(
         result_directory,
         model_name,

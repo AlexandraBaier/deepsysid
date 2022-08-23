@@ -5,7 +5,7 @@ import random
 import pandas as pd
 
 
-def main():
+def main() -> None:
     root_dir = os.environ['DATASET_DIRECTORY']
     raw_dir = os.path.join(root_dir, 'raw')
     processed_dir = os.path.join(root_dir, 'processed')

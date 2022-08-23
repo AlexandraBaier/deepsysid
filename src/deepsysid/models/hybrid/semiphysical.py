@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.metrics import r2_score
 from torch import nn
@@ -17,7 +18,7 @@ class SemiphysicalComponent(nn.Module, abc.ABC):
     STATES: Optional[List[str]] = None
     CONTROLS: Optional[List[str]] = None
 
-    def __init__(self, control_dim: int, state_dim: int, device: torch.device):
+    def __init__(self, control_dim: int, state_dim: int, device: torch.device) -> None:
         super().__init__()
 
         self.control_dim = control_dim
@@ -36,16 +37,16 @@ class SemiphysicalComponent(nn.Module, abc.ABC):
     @abc.abstractmethod
     def train_semiphysical(
         self,
-        control_seqs: List[np.ndarray],
-        state_seqs: List[np.ndarray],
-        target_seqs: List[np.ndarray],
-    ):
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        target_seqs: List[NDArray[np.float64]],
+    ) -> None:
         pass
 
-    def get_parameters_to_save(self) -> List[np.ndarray]:
+    def get_parameters_to_save(self) -> List[NDArray[np.float64]]:
         return []
 
-    def load_parameters(self, parameters: List[np.ndarray]):
+    def load_parameters(self, parameters: List[NDArray[np.float64]]) -> None:
         pass
 
 
@@ -55,10 +56,10 @@ class NoOpSemiphysicalComponent(SemiphysicalComponent):
 
     def train_semiphysical(
         self,
-        control_seqs: List[np.ndarray],
-        state_seqs: List[np.ndarray],
-        target_seqs: List[np.ndarray],
-    ):
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        target_seqs: List[NDArray[np.float64]],
+    ) -> None:
         pass
 
 
@@ -77,8 +78,8 @@ class LinearComponent(SemiphysicalComponent):
         )
         self.model.weight.requires_grad = False
 
-        self.semiphysical_mean: Optional[np.ndarray] = None
-        self.semiphysical_std: Optional[np.ndarray] = None
+        self.semiphysical_mean: Optional[NDArray[np.float64]] = None
+        self.semiphysical_std: Optional[NDArray[np.float64]] = None
 
     def forward(self, control: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         if self.semiphysical_mean is None or self.semiphysical_std is None:
@@ -111,10 +112,10 @@ class LinearComponent(SemiphysicalComponent):
 
     def train_semiphysical(
         self,
-        control_seqs: List[np.ndarray],
-        state_seqs: List[np.ndarray],
-        target_seqs: List[np.ndarray],
-    ):
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        target_seqs: List[NDArray[np.float64]],
+    ) -> None:
         semiphysical_in_seqs = [
             self.expand_semiphysical_input(
                 torch.from_numpy(control[1:]), torch.from_numpy(state[:-1])
@@ -147,12 +148,12 @@ class LinearComponent(SemiphysicalComponent):
         )
         logger.info(f'Whitebox R2 Score: {linear_fit}')
 
-        self.model.weight = nn.Parameter(
+        self.model.weight = nn.Parameter(  # type: ignore
             torch.from_numpy(regressor.coef_).float().to(self.device),
             requires_grad=False,
         )
 
-    def get_parameters_to_save(self) -> List[np.ndarray]:
+    def get_parameters_to_save(self) -> List[NDArray[np.float64]]:
         if self.semiphysical_mean is None or self.semiphysical_std is None:
             raise ValueError(
                 'Semiphysical component has not been trained '
@@ -160,7 +161,7 @@ class LinearComponent(SemiphysicalComponent):
             )
         return [self.semiphysical_mean, self.semiphysical_std]
 
-    def load_parameters(self, parameters: List[np.ndarray]):
+    def load_parameters(self, parameters: List[NDArray[np.float64]]) -> None:
         self.semiphysical_mean = parameters[0]
         self.semiphysical_std = parameters[1]
 
@@ -178,7 +179,7 @@ class QuadraticComponent(LinearComponent):
 class BlankeComponent(LinearComponent):
     STATES = ['u', 'v', 'p', 'r', 'phi']
 
-    def __init__(self, control_dim: int, state_dim: int, device: torch.device):
+    def __init__(self, control_dim: int, state_dim: int, device: torch.device) -> None:
         super().__init__(control_dim, state_dim, device)
 
         self.model = (
@@ -194,10 +195,10 @@ class BlankeComponent(LinearComponent):
 
     def train_semiphysical(
         self,
-        control_seqs: List[np.ndarray],
-        state_seqs: List[np.ndarray],
-        target_seqs: List[np.ndarray],
-    ):
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        target_seqs: List[NDArray[np.float64]],
+    ) -> None:
         semiphysical_in_seqs = [
             self.expand_semiphysical_input(
                 torch.from_numpy(control[1:]), torch.from_numpy(state[:-1])
@@ -223,9 +224,11 @@ class BlankeComponent(LinearComponent):
         train_y = np.vstack(target_seqs)
 
         # Train each dimension as separate equation
-        def train_dimension(dim_mask: Tuple[int, ...], dim_name: str, dim_idx: int):
+        def train_dimension(
+            dim_mask: Tuple[int, ...], dim_name: str, dim_idx: int
+        ) -> RidgeCV:
             regressor = RidgeCV(
-                alphas=np.logspace(-6, 6, 25),
+                alphas=np.logspace(-6, 6, 25, dtype=np.float64),
                 fit_intercept=False,
             )
             regressor.fit(train_x[:, dim_mask], train_y[:, dim_idx])
@@ -248,14 +251,16 @@ class BlankeComponent(LinearComponent):
         reg_phi = train_dimension(mask_phi, 'phi', self.STATES.index('phi'))
 
         weight = np.zeros(
-            (len(BlankeComponent.STATES), self.get_semiphysical_features())
+            (len(BlankeComponent.STATES), self.get_semiphysical_features()),
+            dtype=np.float64,
         )
         weight[self.STATES.index('u'), mask_u] = reg_u.coef_
         weight[self.STATES.index('v'), mask_v] = reg_v.coef_
         weight[self.STATES.index('r'), mask_r] = reg_r.coef_
         weight[self.STATES.index('phi'), mask_phi] = reg_phi.coef_
 
-        self.model.weight = nn.Parameter(
+        # mypy claims nn does not have an attribute Parameter, which is false.
+        self.model.weight = nn.Parameter(  # type: ignore
             torch.from_numpy(weight).float().to(self.device), requires_grad=False
         )
 

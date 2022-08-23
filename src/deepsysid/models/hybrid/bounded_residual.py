@@ -1,10 +1,11 @@
 import abc
 import json
 import logging
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from torch import nn, optim
 from torch.nn.functional import mse_loss
 from torch.utils import data
@@ -118,7 +119,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.semiphysical = semiphysical
 
         if physical.STATES is None:
-            self.physical_state_mask: np.ndarray = np.array(
+            self.physical_state_mask: NDArray[np.int32] = np.array(
                 list(range(len(config.state_names))), dtype=np.int32
             )
         else:
@@ -127,7 +128,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 dtype=np.int32,
             )
         if physical.CONTROLS is None:
-            self.physical_control_mask: np.ndarray = np.array(
+            self.physical_control_mask: NDArray[np.int32] = np.array(
                 list(range(len(config.control_names))), dtype=np.int32
             )
         else:
@@ -137,7 +138,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             )
 
         if semiphysical.STATES is None:
-            self.semiphysical_state_mask: np.ndarray = np.array(
+            self.semiphysical_state_mask: NDArray[np.int32] = np.array(
                 list(range(len(config.state_names))), dtype=np.int32
             )
         else:
@@ -146,7 +147,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 dtype=np.int32,
             )
         if semiphysical.CONTROLS is None:
-            self.semiphysical_control_mask: np.ndarray = np.array(
+            self.semiphysical_control_mask: NDArray[np.int32] = np.array(
                 list(range(len(config.control_names))), dtype=np.int32
             )
         else:
@@ -179,14 +180,16 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             params=self.blackbox.parameters(), lr=self.learning_rate
         )
 
-        self.state_mean: Optional[np.ndarray] = None
-        self.state_std: Optional[np.ndarray] = None
-        self.control_mean: Optional[np.ndarray] = None
-        self.control_std: Optional[np.ndarray] = None
+        self.state_mean: Optional[NDArray[np.float64]] = None
+        self.state_std: Optional[NDArray[np.float64]] = None
+        self.control_mean: Optional[NDArray[np.float64]] = None
+        self.control_std: Optional[NDArray[np.float64]] = None
 
     def train(
-        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
-    ) -> Dict[str, np.ndarray]:
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_teacher = []
         epoch_losses_multistep = []
@@ -219,7 +222,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         def scale_acc_physical(x: torch.Tensor) -> torch.Tensor:
             return x / state_std[self.physical_state_mask]  # type: ignore
 
-        def scale_acc_physical_np(x: np.ndarray) -> np.ndarray:
+        def scale_acc_physical_np(x: NDArray[np.float64]) -> NDArray[np.float64]:
             return x / self.state_std[self.physical_state_mask]  # type: ignore
 
         # Train linear model
@@ -272,7 +275,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     y, batch['y'].float().to(self.device)  # type: ignore
                 )
                 total_loss += batch_loss.item()
-                batch_loss.backward()
+                batch_loss.backward()  # type: ignore
                 self.optimizer_initializer.step()
 
             logger.info(
@@ -344,7 +347,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_epoch_loss += batch_loss.item()
-                batch_loss.backward()
+                batch_loss.backward()  # type: ignore
                 self.optimizer_end2end.step()
 
             logger.info(
@@ -420,7 +423,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     y_est, batch['y'].float().to(self.device)
                 )
                 total_epoch_loss += batch_loss.item()
-                batch_loss.backward()
+                batch_loss.backward()  # type: ignore
                 self.optimizer_end2end.step()
 
             logger.info(
@@ -430,18 +433,18 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             epoch_losses_multistep.append([i, total_epoch_loss])
 
         return dict(
-            epoch_loss_initializer=np.array(epoch_losses_initializer),
-            epoch_loss_teacher=np.array(epoch_losses_teacher),
-            epoch_loss_multistep=np.array(epoch_losses_multistep),
+            epoch_loss_initializer=np.array(epoch_losses_initializer, dtype=np.float64),
+            epoch_loss_teacher=np.array(epoch_losses_teacher, dtype=np.float64),
+            epoch_loss_multistep=np.array(epoch_losses_multistep, dtype=np.float64),
         )
 
     def simulate(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
         threshold: float = np.infty,
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+    ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         y, whitebox, blackbox = self.simulate_hybrid(
             initial_control=initial_control,
             initial_state=initial_state,
@@ -451,11 +454,11 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
     def simulate_hybrid(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
         threshold: float = np.infty,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -486,9 +489,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         initial_state = utils.normalize(initial_state, self.state_mean, self.state_std)
         control = utils.normalize(control, self.control_mean, self.control_std)
 
-        y = np.zeros((control.shape[0], self.state_dim))
-        whitebox = np.zeros((control.shape[0], self.state_dim))
-        blackbox = np.zeros((control.shape[0], self.state_dim))
+        y = np.zeros((control.shape[0], self.state_dim), dtype=np.float64)
+        whitebox = np.zeros((control.shape[0], self.state_dim), dtype=np.float64)
+        blackbox = np.zeros((control.shape[0], self.state_dim), dtype=np.float64)
 
         with torch.no_grad():
             x_init = (
@@ -547,7 +550,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         return y, whitebox, blackbox
 
-    def save(self, file_path: Tuple[str, ...]):
+    def save(self, file_path: Tuple[str, ...]) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -576,24 +579,24 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 f,
             )
 
-    def load(self, file_path: Tuple[str, ...]):
+    def load(self, file_path: Tuple[str, ...]) -> None:
         self.semiphysical.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)
+            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
         )
         self.blackbox.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)
+            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
         )
         self.initializer.load_state_dict(
-            torch.load(file_path[2], map_location=self.device_name)
+            torch.load(file_path[2], map_location=self.device_name)  # type: ignore
         )
         with open(file_path[3], mode='r') as f:
             norm = json.load(f)
-        self.state_mean = np.array(norm['state_mean'])
-        self.state_std = np.array(norm['state_std'])
-        self.control_mean = np.array(norm['control_mean'])
-        self.control_std = np.array(norm['control_std'])
+        self.state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self.state_std = np.array(norm['state_std'], dtype=np.float64)
+        self.control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self.control_std = np.array(norm['control_std'], dtype=np.float64)
         self.semiphysical.load_parameters(
-            [np.array(param) for param in norm['semiphysical']]
+            [np.array(param, dtype=np.float64) for param in norm['semiphysical']]
         )
 
     def get_file_extension(self) -> Tuple[str, ...]:
@@ -609,7 +612,13 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         )
         return semiphysical_count + blackbox_count + initializer_count
 
-    def blackbox_forward(self, x_pred, y_wb, hx=None, return_state=False):
+    def blackbox_forward(
+        self,
+        x_pred: torch.Tensor,
+        y_wb: Optional[torch.Tensor],
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        return_state: bool = False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
         # TODO: x_pred should instead be x_control.
         # TODO: I don't remember the purpose of this function.
         #  Probably to generalize the code in some way?
@@ -788,17 +797,24 @@ class HybridBlankePropulsionModel(HybridResidualLSTMModel):
         )
 
 
-class InitializerDataset(data.Dataset):
+class InitializerDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
     # x=[control state], y=[state]
-    def __init__(self, control_seqs, state_seqs, sequence_length):
+    def __init__(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        sequence_length: int,
+    ) -> None:
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
-        self.x = None
-        self.y = None
-        self.__load_data(control_seqs, state_seqs)
+        self.x, self.y = self.__load_data(control_seqs, state_seqs)
 
-    def __load_data(self, control_seqs, state_seqs):
+    def __load_data(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
         x_seq = list()
         y_seq = list()
         for control, state in zip(control_seqs, state_seqs):
@@ -807,9 +823,12 @@ class InitializerDataset(data.Dataset):
             )
 
             x = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
+                (n_samples, self.sequence_length, self.control_dim + self.state_dim),
+                dtype=np.float64,
             )
-            y = np.zeros((n_samples, self.sequence_length, self.state_dim))
+            y = np.zeros(
+                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
+            )
 
             for idx in range(n_samples):
                 time = idx * self.sequence_length
@@ -825,35 +844,46 @@ class InitializerDataset(data.Dataset):
             x_seq.append(x)
             y_seq.append(y)
 
-        self.x = np.vstack(x_seq)
-        self.y = np.vstack(y_seq)
+        return np.vstack(x_seq), np.vstack(y_seq)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.x.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
         return {'x': self.x[idx], 'y': self.y[idx]}
 
 
-class End2EndDataset(data.Dataset):
+class End2EndDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
     def __init__(
-        self, control_seqs, state_seqs, sequence_length, un_control_seqs, un_state_seqs
-    ):
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        sequence_length: int,
+        un_control_seqs: List[NDArray[np.float64]],
+        un_state_seqs: List[NDArray[np.float64]],
+    ) -> None:
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
 
-        self.x_init = None
-        self.x_pred = None
-        self.ydot = None
-        self.y = None
-        self.initial_state = None
-        self.x_control_unnormed = None
-        self.x_state_unnormed = None
+        dataset = self.__load_data(
+            control_seqs, state_seqs, un_control_seqs, un_state_seqs
+        )
+        self.x_init = dataset['x_init']
+        self.x_pred = dataset['x_pred']
+        self.ydot = dataset['ydot']
+        self.y = dataset['y']
+        self.initial_state = dataset['initial_state']
+        self.x_control_unnormed = dataset['x_control_unnormed']
+        self.x_state_unnormed = dataset['x_state_unnormed']
 
-        self.__load_data(control_seqs, state_seqs, un_control_seqs, un_state_seqs)
-
-    def __load_data(self, control_seqs, state_seqs, un_control_seqs, un_state_seqs):
+    def __load_data(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        un_control_seqs: List[NDArray[np.float64]],
+        un_state_seqs: List[NDArray[np.float64]],
+    ) -> Dict[str, NDArray[np.float64]]:
         x_init_seq = list()
         x_pred_seq = list()
         ydot_seq = list()
@@ -871,17 +901,24 @@ class End2EndDataset(data.Dataset):
             )
 
             x_init = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
+                (n_samples, self.sequence_length, self.control_dim + self.state_dim),
+                dtype=np.float64,
             )
-            x_pred = np.zeros((n_samples, self.sequence_length, self.control_dim))
-            ydot = np.zeros((n_samples, self.sequence_length, self.state_dim))
-            y = np.zeros((n_samples, self.sequence_length, self.state_dim))
-            initial_state = np.zeros((n_samples, self.state_dim))
+            x_pred = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim), dtype=np.float64
+            )
+            ydot = np.zeros(
+                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
+            )
+            y = np.zeros(
+                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
+            )
+            initial_state = np.zeros((n_samples, self.state_dim), dtype=np.float64)
             x_control_unnormed = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim)
+                (n_samples, self.sequence_length, self.control_dim), dtype=np.float64
             )
             x_state_unnormed = np.zeros(
-                (n_samples, self.sequence_length, self.state_dim)
+                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
             )
 
             for idx in range(n_samples):
@@ -933,18 +970,20 @@ class End2EndDataset(data.Dataset):
             x_control_unnormed_seq.append(x_control_unnormed)
             x_state_unnormed_seq.append(x_state_unnormed)
 
-        self.x_init = np.vstack(x_init_seq)
-        self.x_pred = np.vstack(x_pred_seq)
-        self.ydot = np.vstack(ydot_seq)
-        self.y = np.vstack(y_seq)
-        self.initial_state = np.vstack(initial_state_seq)
-        self.x_control_unnormed = np.vstack(x_control_unnormed_seq)
-        self.x_state_unnormed = np.vstack(x_state_unnormed_seq)
+        return dict(
+            x_init=np.vstack(x_init_seq),
+            x_pred=np.vstack(x_pred_seq),
+            ydot=np.vstack(ydot_seq),
+            y=np.vstack(y_seq),
+            initial_state=np.vstack(initial_state_seq),
+            x_control_unnormed=np.vstack(x_control_unnormed_seq),
+            x_state_unnormed=np.vstack(x_state_unnormed_seq),
+        )
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.x_init.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
         return {
             'x_init': self.x_init[idx],
             'x_pred': self.x_pred[idx],

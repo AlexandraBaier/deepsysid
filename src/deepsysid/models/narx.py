@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from torch import optim
 from torch.nn import functional
 from torch.utils import data
@@ -56,14 +57,16 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
             params=self.model.parameters(), lr=self.learning_rate
         )
 
-        self.state_mean: Optional[np.ndarray] = None
-        self.state_std: Optional[np.ndarray] = None
-        self.control_mean: Optional[np.ndarray] = None
-        self.control_std: Optional[np.ndarray] = None
+        self.state_mean: Optional[NDArray[np.float64]] = None
+        self.state_std: Optional[NDArray[np.float64]] = None
+        self.control_mean: Optional[NDArray[np.float64]] = None
+        self.control_std: Optional[NDArray[np.float64]] = None
 
     def train(
-        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
-    ) -> Dict[str, np.ndarray]:
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses = []
 
         self.model.train()
@@ -94,20 +97,20 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
                     state_pred, batch['state_true'].float().to(self.device)
                 )
                 total_loss += batch_loss.item()
-                batch_loss.backward()
+                batch_loss.backward()  # type: ignore
                 self.optimizer.step()
 
             logger.info(f'Epoch {i + 1}/{self.epochs} - Epoch Loss: {total_loss}')
             epoch_losses.append([i, total_loss])
 
-        return dict(epoch_loss=np.array(epoch_losses))
+        return dict(epoch_loss=np.array(epoch_losses, dtype=np.float64))
 
     def simulate(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
-    ) -> np.ndarray:
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -152,7 +155,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
                 state = self.model.forward(
                     torch.cat((control_window, state_window), dim=1)
                 )
-                state_np = state.detach().cpu().numpy().squeeze()
+                state_np = state.detach().cpu().numpy().squeeze().astype(np.float64)
                 states.append(state_np)
                 state_window = torch.cat(
                     (state_window[:, self.state_dim :], state), dim=1
@@ -160,7 +163,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
 
         return utils.denormalize(np.vstack(states), self.state_mean, self.state_std)
 
-    def save(self, file_path: Tuple[str, ...]):
+    def save(self, file_path: Tuple[str, ...]) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -181,16 +184,16 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
                 f,
             )
 
-    def load(self, file_path: Tuple[str, ...]):
+    def load(self, file_path: Tuple[str, ...]) -> None:
         self.model.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)
+            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
         )
         with open(file_path[1], mode='r') as f:
             norm = json.load(f)
-        self.state_mean = np.array(norm['state_mean'])
-        self.state_std = np.array(norm['state_std'])
-        self.control_mean = np.array(norm['control_mean'])
-        self.control_std = np.array(norm['control_std'])
+        self.state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self.state_std = np.array(norm['state_std'], dtype=np.float64)
+        self.control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self.control_std = np.array(norm['control_std'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return 'pth', 'json'
@@ -199,30 +202,47 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 
 
-class _Dataset(data.Dataset):
-    def __init__(self, window_size, control_seqs, state_seqs):
-        self.window_input = []
-        self.state_true = []
+class _Dataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
+    def __init__(
+        self,
+        window_size: int,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> None:
+        self.window_size = window_size
+        self.window_input, self.state_true = self.__load_dataset(
+            control_seqs, state_seqs
+        )
+
+    def __load_dataset(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+        window_input = []
+        state_true = []
         for control, state in zip(control_seqs, state_seqs):
             for time in range(
-                window_size, control.shape[0] - 1, int(window_size / 4) + 1
+                self.window_size, control.shape[0] - 1, int(self.window_size / 4) + 1
             ):
-                self.window_input.append(
+                window_input.append(
                     np.concatenate(
                         (
-                            control[time - window_size + 1 : time + 1, :].flatten(),
-                            state[time - window_size : time, :].flatten(),
+                            control[
+                                time - self.window_size + 1 : time + 1, :
+                            ].flatten(),
+                            state[time - self.window_size : time, :].flatten(),
                         )
                     )
                 )
-                self.state_true.append(state[time + 1, :])
-        self.window_input = np.vstack(self.window_input)
-        self.state_true = np.vstack(self.state_true)
+                state_true.append(state[time + 1, :])
 
-    def __len__(self):
+        return np.vstack(window_input), np.vstack(state_true)
+
+    def __len__(self) -> int:
         return self.window_input.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
         return dict(
             window_input=self.window_input[idx], state_true=self.state_true[idx]
         )

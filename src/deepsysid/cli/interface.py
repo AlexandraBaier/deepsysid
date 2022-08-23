@@ -23,13 +23,13 @@ MODELS_DIR_ENV_VAR = 'MODELS_DIRECTORY'
 RESULT_DIR_ENV_VAR = 'RESULT_DIRECTORY'
 
 
-def run_deepsysid_cli():
+def run_deepsysid_cli() -> None:
     cli = DeepSysIdCommandLineInterface()
     cli.run()
 
 
 class DeepSysIdCommandLineInterface:
-    def __init__(self):
+    def __init__(self) -> None:
         self.parser = argparse.ArgumentParser(
             'Command line interface for the deepsysid package.'
         )
@@ -119,11 +119,11 @@ class DeepSysIdCommandLineInterface:
         )
         self.write_model_names_parser.set_defaults(func=self.__write_model_names)
 
-    def run(self):
+    def run(self) -> None:
         args = self.parser.parse_args()
         args.func(args)
 
-    def __build_configuration(self, args):
+    def __build_configuration(self, args: argparse.Namespace) -> None:
         with open(os.path.expanduser(args.template), mode='r') as f:
             template = json.load(f)
 
@@ -135,7 +135,7 @@ class DeepSysIdCommandLineInterface:
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='w') as f:
             json.dump(configuration.dict(), f)
 
-    def __train_model(self, args):
+    def __train_model(self, args: argparse.Namespace) -> None:
         if 'device_idx' in args:
             device_name = build_device_name(args.enable_cuda, args.device_idx)
         else:
@@ -154,7 +154,7 @@ class DeepSysIdCommandLineInterface:
             models_directory=os.environ[MODELS_DIR_ENV_VAR],
         )
 
-    def __test_model(self, args):
+    def __test_model(self, args: argparse.Namespace) -> None:
         if 'device_idx' in args:
             device_name = build_device_name(args.enable_cuda, args.device_idx)
         else:
@@ -174,7 +174,7 @@ class DeepSysIdCommandLineInterface:
             models_directory=os.environ[MODELS_DIR_ENV_VAR],
         )
 
-    def __evaluate_model(self, args):
+    def __evaluate_model(self, args: argparse.Namespace) -> None:
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
         config = ExperimentConfiguration.parse_obj(config)
@@ -199,7 +199,7 @@ class DeepSysIdCommandLineInterface:
                     threshold=threshold,
                 )
 
-    def __evaluate_4dof_ship_trajectory(self, args):
+    def __evaluate_4dof_ship_trajectory(self, args: argparse.Namespace) -> None:
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
         config = ExperimentConfiguration.parse_obj(config)
@@ -211,7 +211,7 @@ class DeepSysIdCommandLineInterface:
             mode=args.mode,
         )
 
-    def __evaluate_quadcopter_trajectory(self, args):
+    def __evaluate_quadcopter_trajectory(self, args: argparse.Namespace) -> None:
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
         config = ExperimentConfiguration.parse_obj(config)
@@ -223,7 +223,7 @@ class DeepSysIdCommandLineInterface:
             mode=args.mode,
         )
 
-    def __write_model_names(self, args):
+    def __write_model_names(self, args: argparse.Namespace) -> None:
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
 
@@ -240,7 +240,7 @@ def add_parser_arguments(
     cuda_argument: bool = False,
     stdout_argument: bool = False,
     mode_argument: bool = False,
-):
+) -> None:
     if model_argument:
         parser.add_argument('model', help='model name as defined in configuration')
     if cuda_argument:

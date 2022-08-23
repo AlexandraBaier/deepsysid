@@ -24,7 +24,7 @@ class BasicLSTM(nn.Module):
         self.num_recurrent_layers = num_recurrent_layers
         self.recurrent_dim = recurrent_dim
 
-        self.predictor_lstm = nn.LSTM(
+        self.predictor_lstm = nn.LSTM(  # type: ignore
             input_size=input_dim,
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
@@ -52,7 +52,7 @@ class BasicLSTM(nn.Module):
         x_pred: torch.Tensor,
         y_init: Optional[torch.Tensor] = None,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        return_state=False,
+        return_state: bool = False,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
         if y_init is not None:
             h0 = y_init.new_zeros(
@@ -71,7 +71,7 @@ class BasicLSTM(nn.Module):
         if return_state:
             return x, (h0, c0)
         else:
-            return x
+            return x  # type: ignore
 
 
 class LinearOutputLSTM(nn.Module):
@@ -88,7 +88,7 @@ class LinearOutputLSTM(nn.Module):
         self.num_recurrent_layers = num_recurrent_layers
         self.recurrent_dim = recurrent_dim
 
-        self.predictor_lstm = nn.LSTM(
+        self.predictor_lstm = nn.LSTM(  # type: ignore
             input_size=input_dim,
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
@@ -110,7 +110,7 @@ class LinearOutputLSTM(nn.Module):
         self,
         x_pred: torch.Tensor,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        return_state=False,
+        return_state: bool = False,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
         x, (h0, c0) = self.predictor_lstm.forward(x_pred, hx)
         x = self.out.forward(x)
@@ -137,7 +137,7 @@ class LTIRnn(nn.Module):
         self.beta = beta
         self.nl = torch.tanh
 
-        self.Y = torch.nn.Parameter(torch.zeros((self.nx, self.nx)))
+        self.Y = torch.nn.Parameter(torch.zeros((self.nx, self.nx)))  # type: ignore
         self.A_tilde = torch.nn.Linear(self.nx, self.nx, bias=False)
         self.B1_tilde = torch.nn.Linear(self.nu, self.nx, bias=False)
         self.B2_tilde = torch.nn.Linear(self.nw, self.nx, bias=False)
@@ -146,32 +146,32 @@ class LTIRnn(nn.Module):
         self.D12 = torch.nn.Linear(self.nw, self.ny, bias=False)
         self.C2_tilde = torch.nn.Linear(self.nx, self.nz, bias=False)
         self.D21_tilde = torch.nn.Linear(self.nu, self.nz, bias=False)
-        self.lambdas = torch.nn.Parameter(torch.zeros((self.nw, 1)))
+        self.lambdas = torch.nn.Parameter(torch.zeros((self.nw, 1)))  # type: ignore
 
     def initialize_lmi(self) -> None:
         # storage function
-        Y = cp.Variable((self.nx, self.nx), 'Y')
+        Y = cp.Variable((self.nx, self.nx), 'Y')  # type: ignore
         # hidden state
-        A_tilde = cp.Variable((self.nx, self.nx), 'A_tilde')
-        B1_tilde = cp.Variable((self.nx, self.nu), 'B1_tilde')
-        B2_tilde = cp.Variable((self.nx, self.nw), 'B2_tilde')
+        A_tilde = cp.Variable((self.nx, self.nx), 'A_tilde')  # type: ignore
+        B1_tilde = cp.Variable((self.nx, self.nu), 'B1_tilde')  # type: ignore
+        B2_tilde = cp.Variable((self.nx, self.nw), 'B2_tilde')  # type: ignore
         # output
-        C1 = cp.Variable((self.ny, self.nx), 'C1')
-        D11 = cp.Variable((self.ny, self.nu), 'D11')
-        D12 = cp.Variable((self.ny, self.nw), 'D12')
+        C1 = cp.Variable((self.ny, self.nx), 'C1')  # type: ignore
+        D11 = cp.Variable((self.ny, self.nu), 'D11')  # type: ignore
+        D12 = cp.Variable((self.ny, self.nw), 'D12')  # type: ignore
         # disturbance
         C2 = np.random.normal(0, 1 / np.sqrt(self.nw), size=(self.nz, self.nx))
         D21 = np.random.normal(0, 1 / np.sqrt(self.nw), size=(self.nz, self.nu))
         # multipliers
-        lambdas = cp.Variable((self.nw, 1), 'tau', nonneg=True)
-        T = cp.diag(lambdas)
+        lambdas = cp.Variable((self.nw, 1), 'tau', nonneg=True)  # type: ignore
+        T = cp.diag(lambdas)  # type: ignore
 
         C2_tilde = T @ C2
         D21_tilde = T @ D21
 
         if self.ga == 0:
             # lmi that ensures finite l2 gain
-            M = cp.bmat(
+            M = cp.bmat(  # type: ignore
                 [
                     [-Y, self.beta * C2_tilde.T, A_tilde.T],
                     [self.beta * C2_tilde, -2 * T, B2_tilde.T],
@@ -180,7 +180,7 @@ class LTIRnn(nn.Module):
             )
         else:
             # lmi that ensures l2 gain gamma
-            M = cp.bmat(
+            M = cp.bmat(  # type: ignore
                 [
                     [
                         -Y,
@@ -214,13 +214,13 @@ class LTIRnn(nn.Module):
         tol = 1e-4
         # rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
         # objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
-        objective = cp.Minimize(None)
-        problem = cp.Problem(objective, [M << -tol * np.eye(nM)])
+        objective = cp.Minimize(None)  # type: ignore
+        problem = cp.Problem(objective, [M << -tol * np.eye(nM)])  # type: ignore
 
         logger.info(
             'Initialize Parameter by values that satisfy LMI constraints, solve SDP ...'
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.SCS)  # type: ignore
         # check if t is negative
         # max_eig_lmi = np.max(np.real(np.linalg.eig(M.value)[0]))
 
@@ -408,7 +408,7 @@ class InitLSTM(nn.Module):
         self.num_recurrent_layers = num_recurrent_layers
         self.recurrent_dim = recurrent_dim
 
-        self.init_lstm = nn.LSTM(
+        self.init_lstm = nn.LSTM(  # type: ignore
             input_size=input_dim + output_dim,
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
@@ -416,7 +416,7 @@ class InitLSTM(nn.Module):
             batch_first=True,
         )
 
-        self.predictor_lstm = nn.LSTM(
+        self.predictor_lstm = nn.LSTM(  # type: ignore
             input_size=input_dim,
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
@@ -440,11 +440,11 @@ class InitLSTM(nn.Module):
                 nn.init.xavier_normal_(param)
 
     def forward(
-        self, input, x0=None, return_init=False
+        self, input: torch.Tensor, x0: torch.Tensor, return_init: bool = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
         h_init, (h0_init, c0_init) = self.init_lstm(x0)
         h, (_, _) = self.predictor_lstm(input, (h0_init, c0_init))
         if return_init:
             return self.output_layer(h), self.init_layer(h_init)
         else:
-            return self.output_layer(h)
+            return self.output_layer(h)  # type: ignore

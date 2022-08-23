@@ -138,4 +138,4 @@ def retrieve_model_class(model_class_string: str) -> Type[DynamicIdentificationM
 
     if not issubclass(cls, DynamicIdentificationModel):
         raise ValueError(f'{cls} is not a subclass of DynamicIdentificationModel')
-    return cls
+    return cls  # type: ignore

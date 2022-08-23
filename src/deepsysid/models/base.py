@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel
 from sklearn.metrics import r2_score
 
@@ -22,30 +23,34 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
     CONFIG: Type[DynamicIdentificationModelConfig] = DynamicIdentificationModelConfig
 
     @abc.abstractmethod
-    def __init__(self, config: Optional[DynamicIdentificationModelConfig]):
+    def __init__(self, config: Optional[DynamicIdentificationModelConfig]) -> None:
         pass
 
     @abc.abstractmethod
     def train(
-        self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]
-    ) -> Optional[Dict[str, np.ndarray]]:
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Optional[Dict[str, NDArray[np.float64]]]:
         pass
 
     @abc.abstractmethod
     def simulate(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
-    ) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, np.ndarray]]]:
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> Union[
+        NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
+    ]:
         pass
 
     @abc.abstractmethod
-    def save(self, file_path: Tuple[str, ...]):
+    def save(self, file_path: Tuple[str, ...]) -> None:
         pass
 
     @abc.abstractmethod
-    def load(self, file_path: Tuple[str, ...]):
+    def load(self, file_path: Tuple[str, ...]) -> None:
         pass
 
     @abc.abstractmethod
@@ -58,19 +63,23 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
 
 
 class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
-    def __init__(self, window_size: int, regressor):
+    def __init__(self, window_size: int, regressor) -> None:  # type: ignore
         assert window_size >= 1
         super().__init__(None)
 
         self.window_size = window_size
         self.regressor = regressor
 
-        self.control_mean: Optional[np.ndarray] = None
-        self.control_stddev: Optional[np.ndarray] = None
-        self.state_mean: Optional[np.ndarray] = None
-        self.state_stddev: Optional[np.ndarray] = None
+        self.control_mean: Optional[NDArray[np.float64]] = None
+        self.control_stddev: Optional[NDArray[np.float64]] = None
+        self.state_mean: Optional[NDArray[np.float64]] = None
+        self.state_stddev: Optional[NDArray[np.float64]] = None
 
-    def train(self, control_seqs: List[np.ndarray], state_seqs: List[np.ndarray]):
+    def train(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> None:
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]
 
@@ -102,10 +111,10 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
 
     def simulate(
         self,
-        initial_control: np.ndarray,
-        initial_state: np.ndarray,
-        control: np.ndarray,
-    ) -> np.ndarray:
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
         """
         Multi-step prediction of system states given control inputs and initial window.
 
@@ -151,12 +160,12 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
             window = np.concatenate((window[full_dim:], control[i], state))
 
         pred_states = utils.denormalize(
-            np.array(pred_states_list), self.state_mean, self.state_stddev
+            np.array(pred_states_list, np.float64), self.state_mean, self.state_stddev
         )
 
         return pred_states
 
-    def _map_regressor_input(self, x: np.ndarray) -> np.ndarray:
+    def _map_regressor_input(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
         """
         Apply any transformations, e.g. nonlinearities, to input of regressor.
         Arguments:
@@ -166,8 +175,8 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
         return x
 
     def transform_to_single_step_training_data(
-        self, control: np.ndarray, state: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        self, control: NDArray[np.float64], state: NDArray[np.float64]
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
         full_dim = control.shape[1] + state.shape[1]
         control_dim = control.shape[1]
 
@@ -180,7 +189,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
 
         return x, y
 
-    def sliding_window(self, arr: np.ndarray) -> np.ndarray:
+    def sliding_window(self, arr: NDArray[np.float64]) -> NDArray[np.float64]:
         # non-overlapping windows
         width = self.window_size + 1
         return np.hstack([arr[i : 1 + i - width or None : width] for i in range(width)])

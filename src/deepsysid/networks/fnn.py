@@ -28,4 +28,4 @@ class DenseReLUNetwork(nn.Module):
         :param x: (batch, input_dim)
         :return: (batch, output_dim)
         """
-        return self.network.forward(x)
+        return self.network.forward(x)  # type: ignore
