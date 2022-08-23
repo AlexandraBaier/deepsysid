@@ -13,6 +13,7 @@ from torch.utils import data
 from ...networks import loss, rnn
 from .. import base, utils
 from ..base import DynamicIdentificationModelConfig
+from ..datasets import RecurrentHybridPredictorDataset, RecurrentInitializerDataset
 from .physical import (
     MinimalManeuveringComponent,
     MinimalManeuveringConfig,
@@ -259,7 +260,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         # Do not let the semiphysical model train together with the LSTM.
         self.semiphysical.eval()
 
-        initializer_dataset = InitializerDataset(
+        initializer_dataset = RecurrentInitializerDataset(
             control_seqs, state_seqs, self.sequence_length
         )
         for i in range(self.epochs_initializer):
@@ -284,7 +285,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             )
             epoch_losses_initializer.append([i, total_loss])
 
-        dataset = End2EndDataset(
+        dataset = RecurrentHybridPredictorDataset(
             control_seqs=control_seqs,
             state_seqs=state_seqs,
             un_control_seqs=un_control_seqs,
@@ -795,201 +796,3 @@ class HybridBlankePropulsionModel(HybridResidualLSTMModel):
             config=config,
             device_name=config.device_name,
         )
-
-
-class InitializerDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
-    # x=[control state], y=[state]
-    def __init__(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-        sequence_length: int,
-    ) -> None:
-        self.sequence_length = sequence_length
-        self.control_dim = control_seqs[0].shape[1]
-        self.state_dim = state_seqs[0].shape[1]
-        self.x, self.y = self.__load_data(control_seqs, state_seqs)
-
-    def __load_data(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
-        x_seq = list()
-        y_seq = list()
-        for control, state in zip(control_seqs, state_seqs):
-            n_samples = int(
-                (control.shape[0] - self.sequence_length - 1) / self.sequence_length
-            )
-
-            x = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim),
-                dtype=np.float64,
-            )
-            y = np.zeros(
-                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
-            )
-
-            for idx in range(n_samples):
-                time = idx * self.sequence_length
-
-                x[idx, :, :] = np.hstack(
-                    (
-                        control[time + 1 : time + 1 + self.sequence_length, :],
-                        state[time : time + self.sequence_length, :],
-                    )
-                )
-                y[idx, :, :] = state[time + 1 : time + 1 + self.sequence_length, :]
-
-            x_seq.append(x)
-            y_seq.append(y)
-
-        return np.vstack(x_seq), np.vstack(y_seq)
-
-    def __len__(self) -> int:
-        return self.x.shape[0]
-
-    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
-        return {'x': self.x[idx], 'y': self.y[idx]}
-
-
-class End2EndDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
-    def __init__(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-        sequence_length: int,
-        un_control_seqs: List[NDArray[np.float64]],
-        un_state_seqs: List[NDArray[np.float64]],
-    ) -> None:
-        self.sequence_length = sequence_length
-        self.control_dim = control_seqs[0].shape[1]
-        self.state_dim = state_seqs[0].shape[1]
-
-        dataset = self.__load_data(
-            control_seqs, state_seqs, un_control_seqs, un_state_seqs
-        )
-        self.x_init = dataset['x_init']
-        self.x_pred = dataset['x_pred']
-        self.ydot = dataset['ydot']
-        self.y = dataset['y']
-        self.initial_state = dataset['initial_state']
-        self.x_control_unnormed = dataset['x_control_unnormed']
-        self.x_state_unnormed = dataset['x_state_unnormed']
-
-    def __load_data(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-        un_control_seqs: List[NDArray[np.float64]],
-        un_state_seqs: List[NDArray[np.float64]],
-    ) -> Dict[str, NDArray[np.float64]]:
-        x_init_seq = list()
-        x_pred_seq = list()
-        ydot_seq = list()
-        y_seq = list()
-        initial_state_seq = list()
-        x_control_unnormed_seq = list()
-        x_state_unnormed_seq = list()
-
-        for control, state, un_control, un_state in zip(
-            control_seqs, state_seqs, un_control_seqs, un_state_seqs
-        ):
-            n_samples = int(
-                (control.shape[0] - self.sequence_length - 1)
-                / (2 * self.sequence_length)
-            )
-
-            x_init = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim),
-                dtype=np.float64,
-            )
-            x_pred = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim), dtype=np.float64
-            )
-            ydot = np.zeros(
-                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
-            )
-            y = np.zeros(
-                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
-            )
-            initial_state = np.zeros((n_samples, self.state_dim), dtype=np.float64)
-            x_control_unnormed = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim), dtype=np.float64
-            )
-            x_state_unnormed = np.zeros(
-                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
-            )
-
-            for idx in range(n_samples):
-                time = idx * self.sequence_length
-
-                x_init[idx, :, :] = np.hstack(
-                    (
-                        control[time : time + self.sequence_length, :],
-                        state[time : time + self.sequence_length, :],
-                    )
-                )
-                x_pred[idx, :, :] = control[
-                    time + self.sequence_length : time + 2 * self.sequence_length, :
-                ]
-                ydot[idx, :, :] = (
-                    state[
-                        time + self.sequence_length : time + 2 * self.sequence_length, :
-                    ]
-                    - state[
-                        time
-                        + self.sequence_length
-                        - 1 : time
-                        + 2 * self.sequence_length
-                        - 1,
-                        :,
-                    ]
-                )
-                y[idx, :, :] = state[
-                    time + self.sequence_length : time + 2 * self.sequence_length, :
-                ]
-                initial_state[idx, :] = un_state[time + self.sequence_length - 1, :]
-                x_control_unnormed[idx, :, :] = un_control[
-                    time + self.sequence_length : time + 2 * self.sequence_length, :
-                ]
-                x_state_unnormed[idx, :, :] = un_state[
-                    time
-                    + self.sequence_length
-                    - 1 : time
-                    + 2 * self.sequence_length
-                    - 1,
-                    :,
-                ]
-
-            x_init_seq.append(x_init)
-            x_pred_seq.append(x_pred)
-            ydot_seq.append(ydot)
-            y_seq.append(y)
-            initial_state_seq.append(initial_state)
-            x_control_unnormed_seq.append(x_control_unnormed)
-            x_state_unnormed_seq.append(x_state_unnormed)
-
-        return dict(
-            x_init=np.vstack(x_init_seq),
-            x_pred=np.vstack(x_pred_seq),
-            ydot=np.vstack(ydot_seq),
-            y=np.vstack(y_seq),
-            initial_state=np.vstack(initial_state_seq),
-            x_control_unnormed=np.vstack(x_control_unnormed_seq),
-            x_state_unnormed=np.vstack(x_state_unnormed_seq),
-        )
-
-    def __len__(self) -> int:
-        return self.x_init.shape[0]
-
-    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
-        return {
-            'x_init': self.x_init[idx],
-            'x_pred': self.x_pred[idx],
-            'ydot': self.ydot[idx],
-            'y': self.y[idx],
-            'initial_state': self.initial_state[idx],
-            'x_control_unnormed': self.x_control_unnormed[idx],
-            'x_state_unnormed': self.x_state_unnormed[idx],
-        }

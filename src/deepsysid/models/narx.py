@@ -12,6 +12,7 @@ from torch.utils import data
 from ..networks.fnn import DenseReLUNetwork
 from . import base, utils
 from .base import DynamicIdentificationModelConfig
+from .datasets import FixedWindowDataset
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
             for state in state_seqs
         ]
 
-        dataset = _Dataset(self.window_size, control_seqs, state_seqs)
+        dataset = FixedWindowDataset(self.window_size, control_seqs, state_seqs)
         for i in range(self.epochs):
             data_loader = data.DataLoader(
                 dataset, self.batch_size, shuffle=True, drop_last=True
@@ -200,49 +201,3 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
 
     def get_parameter_count(self) -> int:
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-
-
-class _Dataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
-    def __init__(
-        self,
-        window_size: int,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-    ) -> None:
-        self.window_size = window_size
-        self.window_input, self.state_true = self.__load_dataset(
-            control_seqs, state_seqs
-        )
-
-    def __load_dataset(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
-        window_input = []
-        state_true = []
-        for control, state in zip(control_seqs, state_seqs):
-            for time in range(
-                self.window_size, control.shape[0] - 1, int(self.window_size / 4) + 1
-            ):
-                window_input.append(
-                    np.concatenate(
-                        (
-                            control[
-                                time - self.window_size + 1 : time + 1, :
-                            ].flatten(),
-                            state[time - self.window_size : time, :].flatten(),
-                        )
-                    )
-                )
-                state_true.append(state[time + 1, :])
-
-        return np.vstack(window_input), np.vstack(state_true)
-
-    def __len__(self) -> int:
-        return self.window_input.shape[0]
-
-    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
-        return dict(
-            window_input=self.window_input[idx], state_true=self.state_true[idx]
-        )

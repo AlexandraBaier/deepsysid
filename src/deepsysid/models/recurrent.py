@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 from ..networks import loss, rnn
 from . import base, utils
 from .base import DynamicIdentificationModelConfig
+from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         us = [utils.normalize(control, self.u_mean, self.u_stddev) for control in us]
         ys = [utils.normalize(state, self.y_mean, self.y_stddev) for state in ys]
 
-        initializer_dataset = _InitializerDataset(us, ys, self.sequence_length)
+        initializer_dataset = RecurrentInitializerDataset(us, ys, self.sequence_length)
 
         time_start_init = time.time()
         for i in range(self.epochs_initializer):
@@ -138,7 +139,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 f'Epoch Loss (Initializer): {total_loss}'
             )
         time_end_init = time.time()
-        predictor_dataset = _PredictorDataset(us, ys, self.sequence_length)
+        predictor_dataset = RecurrentPredictorDataset(us, ys, self.sequence_length)
 
         time_start_pred = time.time()
         t = self.initial_decay_parameter
@@ -406,7 +407,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             for state in state_seqs
         ]
 
-        initializer_dataset = _InitializerDataset(
+        initializer_dataset = RecurrentInitializerDataset(
             control_seqs, state_seqs, self.sequence_length
         )
 
@@ -431,7 +432,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             epoch_losses_initializer.append([i, total_loss])
 
         time_end_init = time.time()
-        predictor_dataset = _PredictorDataset(
+        predictor_dataset = RecurrentPredictorDataset(
             control_seqs, state_seqs, self.sequence_length
         )
 
@@ -646,11 +647,11 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
             for state in state_seqs
         ]
 
-        initializer_dataset = _InitializerDataset(
+        initializer_dataset = RecurrentInitializerDataset(
             control_seqs, state_seqs, self.sequence_length
         )
 
-        predictor_dataset = _PredictorDataset(
+        predictor_dataset = RecurrentPredictorDataset(
             control_seqs, state_seqs, self.sequence_length
         )
 
@@ -792,116 +793,3 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
             p.numel() for p in self.predictor.parameters() if p.requires_grad
         )
         return predictor_count
-
-
-class _InitializerDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
-    # x=[control state], y=[state]
-    def __init__(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-        sequence_length: int,
-    ):
-        self.sequence_length = sequence_length
-        self.control_dim = control_seqs[0].shape[1]
-        self.state_dim = state_seqs[0].shape[1]
-        self.x, self.y = self.__load_data(control_seqs, state_seqs)
-
-    def __load_data(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
-        x_seq = list()
-        y_seq = list()
-        for control, state in zip(control_seqs, state_seqs):
-            n_samples = int(
-                (control.shape[0] - self.sequence_length - 1) / self.sequence_length
-            )
-
-            x = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
-            )
-            y = np.zeros((n_samples, self.sequence_length, self.state_dim))
-
-            for idx in range(n_samples):
-                time = idx * self.sequence_length
-
-                x[idx, :, :] = np.hstack(
-                    (
-                        control[time + 1 : time + 1 + self.sequence_length, :],
-                        state[time : time + self.sequence_length, :],
-                    )
-                )
-                y[idx, :, :] = state[time + 1 : time + 1 + self.sequence_length, :]
-
-            x_seq.append(x)
-            y_seq.append(y)
-
-        return np.vstack(x_seq), np.vstack(y_seq)
-
-    def __len__(self) -> int:
-        return self.x.shape[0]
-
-    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
-        return {'x': self.x[idx], 'y': self.y[idx]}
-
-
-class _PredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
-    def __init__(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-        sequence_length: int,
-    ):
-        self.sequence_length = sequence_length
-        self.control_dim = control_seqs[0].shape[1]
-        self.state_dim = state_seqs[0].shape[1]
-        self.x0, self.x, self.y = self.__load_data(control_seqs, state_seqs)
-
-    def __load_data(
-        self,
-        control_seqs: List[NDArray[np.float64]],
-        state_seqs: List[NDArray[np.float64]],
-    ) -> Tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-        x0_seq = list()
-        x_seq = list()
-        y_seq = list()
-        for control, state in zip(control_seqs, state_seqs):
-            n_samples = int(
-                (control.shape[0] - 2 * self.sequence_length) / self.sequence_length
-            )
-
-            x0 = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim)
-            )
-            x = np.zeros((n_samples, self.sequence_length, self.control_dim))
-            y = np.zeros((n_samples, self.sequence_length, self.state_dim))
-
-            for idx in range(n_samples):
-                time = idx * self.sequence_length
-
-                x0[idx, :, :] = np.hstack(
-                    (
-                        control[time : time + self.sequence_length],
-                        state[time : time + self.sequence_length, :],
-                    )
-                )
-                x[idx, :, :] = control[
-                    time + self.sequence_length : time + 2 * self.sequence_length, :
-                ]
-                y[idx, :, :] = state[
-                    time + self.sequence_length : time + 2 * self.sequence_length, :
-                ]
-
-            x0_seq.append(x0)
-            x_seq.append(x)
-            y_seq.append(y)
-
-        return np.vstack(x0_seq), np.vstack(x_seq), np.vstack(y_seq)
-
-    def __len__(self) -> int:
-        return self.x0.shape[0]
-
-    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
-        return {'x0': self.x0[idx], 'x': self.x[idx], 'y': self.y[idx]}
