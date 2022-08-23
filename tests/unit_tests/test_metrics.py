@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from deepsysid.utils import index_of_agreement
+from deepsysid.pipeline.evaluation import index_of_agreement
 
 
 def test_index_of_agreement_empty_arrays():

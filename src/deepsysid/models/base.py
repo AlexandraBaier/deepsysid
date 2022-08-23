@@ -85,9 +85,7 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
             )
             state = utils.normalize(state_seqs[i], self.state_mean, self.state_stddev)
 
-            x, y = utils.transform_to_single_step_training_data(
-                control, state, self.window_size
-            )
+            x, y = self.transform_to_single_step_training_data(control, state)
             x = self._map_regressor_input(x)
 
             train_x_list.append(x)
@@ -158,3 +156,23 @@ class FixedWindowModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
             with window size W
         """
         return x
+
+    def transform_to_single_step_training_data(
+        self, control: np.ndarray, state: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        full_dim = control.shape[1] + state.shape[1]
+        control_dim = control.shape[1]
+
+        rows = np.hstack((control, state))
+        windows = self.sliding_window(rows)
+        # x = [u(t-W) x(t-W) ... u(t-1) x(t-1) u(t)]
+        x = windows[:, : full_dim * self.window_size + control_dim]
+        # y = x(t)
+        y = windows[:, full_dim * self.window_size + control_dim :]
+
+        return x, y
+
+    def sliding_window(self, arr: np.ndarray) -> np.ndarray:
+        # non-overlapping windows
+        width = self.window_size + 1
+        return np.hstack([arr[i : 1 + i - width or None : width] for i in range(width)])
