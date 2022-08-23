@@ -1,5 +1,5 @@
 import os
-from typing import List, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -37,3 +37,45 @@ def load_file_names(directory: str) -> List[str]:
         if fn.endswith('.csv'):
             file_names.append(os.path.join(directory, fn))
     return sorted(file_names)
+
+
+def build_trajectory_file_name(
+    mode: Literal['train', 'validation', 'test'],
+    window_size: int,
+    horizon_size: int,
+    extension: str,
+) -> str:
+    return f'trajectory-{mode}-w_{window_size}-h_{horizon_size}.{extension}'
+
+
+def build_score_file_name(
+    mode: Literal['train', 'validation', 'test'],
+    window_size: int,
+    horizon_size: int,
+    extension: str,
+    threshold: Optional[float] = None,
+) -> str:
+    if threshold is None:
+        return f'scores-{mode}-w_{window_size}-h_{horizon_size}.{extension}'
+
+    threshold_str = f'{threshold:f}'.replace('.', '')
+    return (
+        f'scores-{mode}-w_{window_size}-h_{horizon_size}-t_{threshold_str}.{extension}'
+    )
+
+
+def build_result_file_name(
+    mode: Literal['train', 'validation', 'test'],
+    window_size: int,
+    horizon_size: int,
+    extension: str,
+    threshold: Optional[float] = None,
+) -> str:
+    if threshold is None:
+        return f'{mode}-w_{window_size}-h_{horizon_size}.{extension}'
+
+    threshold_str = f'{threshold:f}'.replace('.', '')
+    return (
+        f'threshold_hybrid_{mode}-w_{window_size}'
+        f'-h_{horizon_size}-t_{threshold_str}.{extension}'
+    )

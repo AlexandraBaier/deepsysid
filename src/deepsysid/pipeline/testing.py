@@ -8,7 +8,7 @@ import numpy as np
 from ..models.base import DynamicIdentificationModel
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
 from ..pipeline.configuration import ExperimentConfiguration, initialize_model
-from .data_io import load_file_names, load_simulation_data
+from .data_io import build_result_file_name, load_file_names, load_simulation_data
 from .model_io import load_model
 
 
@@ -230,20 +230,3 @@ def write_test_results_to_hdf5(
             metadata_sub_grp = metadata_grp.create_group(name)
             for i, data in enumerate(md[name] for md in metadata):
                 metadata_sub_grp.create_dataset(str(i), data=data)
-
-
-def build_result_file_name(
-    mode: Literal['train', 'validation', 'test'],
-    window_size: int,
-    horizon_size: int,
-    extension: str,
-    threshold: Optional[float] = None,
-) -> str:
-    if threshold is None:
-        return f'{mode}-w_{window_size}-h_{horizon_size}.{extension}'
-
-    threshold_str = f'{threshold:f}'.replace('.', '')
-    return (
-        f'threshold_hybrid_{mode}-w_{window_size}'
-        f'-h_{horizon_size}-t_{threshold_str}.{extension}'
-    )
