@@ -6,7 +6,7 @@ import numpy as np
 from pydantic import BaseModel
 from sklearn.metrics import r2_score
 
-from .. import utils
+from . import utils
 
 logger = logging.getLogger(__name__)
 

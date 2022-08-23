@@ -8,9 +8,8 @@ from torch import optim
 from torch.nn import functional
 from torch.utils import data
 
-from .. import utils
 from ..networks.fnn import DenseReLUNetwork
-from . import base
+from . import base, utils
 from .base import DynamicIdentificationModelConfig
 
 logger = logging.getLogger(__name__)

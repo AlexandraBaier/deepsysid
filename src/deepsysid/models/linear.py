@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-from .. import utils
+from . import utils
 from .base import (
     DynamicIdentificationModel,
     DynamicIdentificationModelConfig,

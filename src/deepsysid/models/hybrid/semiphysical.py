@@ -8,7 +8,7 @@ from sklearn.linear_model import LinearRegression, RidgeCV
 from sklearn.metrics import r2_score
 from torch import nn
 
-from ... import utils
+from .. import utils
 
 logger = logging.getLogger(__name__)
 

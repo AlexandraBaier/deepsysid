@@ -9,9 +9,8 @@ from torch import nn, optim
 from torch.nn.functional import mse_loss
 from torch.utils import data
 
-from ... import utils
 from ...networks import loss, rnn
-from .. import base
+from .. import base, utils
 from ..base import DynamicIdentificationModelConfig
 from .physical import (
     MinimalManeuveringComponent,

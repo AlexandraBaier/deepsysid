@@ -9,14 +9,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
 
-from .. import utils
 from ..networks import loss, rnn
 from ..networks.switching import (
     StableSwitchingLSTM,
     SwitchingBaseLSTM,
     UnconstrainedSwitchingLSTM,
 )
-from . import base
+from . import base, utils
 from .recurrent import LSTMInitModelConfig
 
 logger = logging.getLogger(__name__)
