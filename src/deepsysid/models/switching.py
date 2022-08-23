@@ -171,6 +171,14 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         initial_state: np.ndarray,
         control: np.ndarray,
     ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        if (
+            self.state_mean is None
+            or self.state_std is None
+            or self.control_mean is None
+            or self.control_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
         system_matrices = []
         control_matrices = []
 

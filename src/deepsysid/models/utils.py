@@ -1,6 +1,9 @@
-from typing import List, Tuple
+from typing import List, Tuple, TypeVar
 
 import numpy as np
+from torch import Tensor
+
+TensorType = TypeVar('TensorType', Tensor, np.ndarray)
 
 
 def mean_stddev(array_seq: List[np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
@@ -9,9 +12,9 @@ def mean_stddev(array_seq: List[np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
     return mean, stddev
 
 
-def denormalize(x, mean, stddev):
+def denormalize(x: TensorType, mean: TensorType, stddev: TensorType) -> TensorType:
     return x * stddev + mean
 
 
-def normalize(x, mean, stddev):
+def normalize(x: TensorType, mean: TensorType, stddev: TensorType) -> TensorType:
     return (x - mean) / stddev

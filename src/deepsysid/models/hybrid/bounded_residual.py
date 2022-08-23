@@ -456,6 +456,14 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         control: np.ndarray,
         threshold: float = np.infty,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if (
+            self.state_mean is None
+            or self.state_std is None
+            or self.control_mean is None
+            or self.control_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
         self.blackbox.eval()
         self.initializer.eval()
         self.semiphysical.eval()

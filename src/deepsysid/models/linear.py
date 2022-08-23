@@ -67,6 +67,14 @@ class LinearModel(DynamicIdentificationModel):
         assert initial_state.shape[1] == self.state_dim
         assert control.shape[1] == self.control_dim
 
+        if (
+            self.state_mean is None
+            or self.state_stddev is None
+            or self.control_mean is None
+            or self.control_stddev is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
         control = utils.normalize(control, self.control_mean, self.control_stddev)
         state = utils.normalize(initial_state, self.state_mean, self.state_stddev)[-1]
 

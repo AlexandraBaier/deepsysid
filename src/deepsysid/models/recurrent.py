@@ -459,6 +459,14 @@ class LSTMInitModel(base.DynamicIdentificationModel):
         initial_state: np.ndarray,
         control: np.ndarray,
     ) -> np.ndarray:
+        if (
+            self.state_mean is None
+            or self.state_std is None
+            or self.control_mean is None
+            or self.control_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
         self.initializer.eval()
         self.predictor.eval()
 
@@ -675,6 +683,14 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         initial_state: np.ndarray,
         control: np.ndarray,
     ) -> np.ndarray:
+        if (
+            self.state_mean is None
+            or self.state_std is None
+            or self.control_mean is None
+            or self.control_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
         self.predictor.eval()
 
         initial_control = utils.normalize(
