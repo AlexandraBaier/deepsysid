@@ -18,7 +18,7 @@ repos:
         pass_filenames: false
       - id: mypy
         name: mypy
-        entry: poetry run mypy --strict src
+        entry: poetry run mypy src
         language: system
         pass_filenames: false
         fail_fast: true
