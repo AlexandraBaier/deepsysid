@@ -1,6 +1,7 @@
 import pathlib
 
 from deepsysid.pipeline.configuration import (
+    ExperimentConfiguration,
     ExperimentGridSearchSettings,
     ExperimentGridSearchTemplate,
     ModelGridSearchTemplate,
@@ -22,7 +23,7 @@ from .pipeline import (
 )
 
 
-def test_experiment_session_manager_session_action_new_successful(
+def test_experiment_session_manager_new_and_test_best_successful(
     tmp_path: pathlib.Path,
 ) -> None:
     paths = prepare_directories(tmp_path)
@@ -79,6 +80,12 @@ def test_experiment_session_manager_session_action_new_successful(
         ],
     )
 
+    n_models = len(
+        ExperimentConfiguration.from_grid_search_template(
+            template, device_name=get_cpu_device_name()
+        ).models
+    )
+
     manager = ExperimentSessionManager(
         config=template,
         device_name=get_cpu_device_name(),
@@ -89,3 +96,24 @@ def test_experiment_session_manager_session_action_new_successful(
         target_metric='rmse',
     )
     manager.run_session()
+    session_report = manager.get_session_report()
+    assert len(session_report.unfinished_models) == 0, 'No models left to validate.'
+    assert (
+        len(session_report.validated_models) == n_models
+    ), 'All generated models should be validated.'
+
+    manager = ExperimentSessionManager(
+        config=template,
+        device_name=get_cpu_device_name(),
+        session_action=SessionAction.TEST_BEST,
+        dataset_directory=str(paths['data']),
+        models_directory=str(paths['models']),
+        results_directory=str(paths['result']),
+        target_metric='rmse',
+        session_report=session_report,
+    )
+    manager.run_session()
+    session_report = manager.get_session_report()
+    assert (
+        len(session_report.tested_models) == 3
+    ), 'Only 3 models should be tested (one per class/base name).'

@@ -191,7 +191,7 @@ class ExperimentSessionManager(object):
             )
             for base_name in base_names
         )
-        models_to_test = set(best_per_class.keys()).union(best_per_base_name.keys())
+        models_to_test = set(best_per_class.values()).union(best_per_base_name.values())
         for model_name in models_to_test:
             self._run_test_eval(model_name=model_name, mode='test')
             logger.info(f'Tested: {model_name}')
@@ -220,7 +220,7 @@ class ExperimentSessionManager(object):
             scores = json.load(f)
         try:
             validation_score = sum(
-                scores[f'horizon-{self.config.settings.horizon_size}'][
+                scores[f'horizon-{self.config.settings.horizon_size}']['scores'][
                     self.target_metric
                 ]
             )
