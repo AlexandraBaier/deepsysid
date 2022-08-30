@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import cvxpy as cp
@@ -24,13 +25,14 @@ class BasicLSTM(nn.Module):
         self.num_recurrent_layers = num_recurrent_layers
         self.recurrent_dim = recurrent_dim
 
-        self.predictor_lstm = nn.LSTM(  # type: ignore
-            input_size=input_dim,
-            hidden_size=recurrent_dim,
-            num_layers=num_recurrent_layers,
-            dropout=dropout,
-            batch_first=True,
-        )
+        with warnings.catch_warnings():
+            self.predictor_lstm = nn.LSTM(  # type: ignore
+                input_size=input_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+            )
 
         layer_dim = [recurrent_dim] + output_dim
         self.out = nn.ModuleList(
@@ -88,13 +90,14 @@ class LinearOutputLSTM(nn.Module):
         self.num_recurrent_layers = num_recurrent_layers
         self.recurrent_dim = recurrent_dim
 
-        self.predictor_lstm = nn.LSTM(  # type: ignore
-            input_size=input_dim,
-            hidden_size=recurrent_dim,
-            num_layers=num_recurrent_layers,
-            dropout=dropout,
-            batch_first=True,
-        )
+        with warnings.catch_warnings():
+            self.predictor_lstm = nn.LSTM(  # type: ignore
+                input_size=input_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+            )
 
         self.out = nn.Linear(
             in_features=recurrent_dim, out_features=output_dim, bias=False
@@ -408,21 +411,22 @@ class InitLSTM(nn.Module):
         self.num_recurrent_layers = num_recurrent_layers
         self.recurrent_dim = recurrent_dim
 
-        self.init_lstm = nn.LSTM(  # type: ignore
-            input_size=input_dim + output_dim,
-            hidden_size=recurrent_dim,
-            num_layers=num_recurrent_layers,
-            dropout=dropout,
-            batch_first=True,
-        )
+        with warnings.catch_warnings():
+            self.init_lstm = nn.LSTM(  # type: ignore
+                input_size=input_dim + output_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+            )
 
-        self.predictor_lstm = nn.LSTM(  # type: ignore
-            input_size=input_dim,
-            hidden_size=recurrent_dim,
-            num_layers=num_recurrent_layers,
-            dropout=dropout,
-            batch_first=True,
-        )
+            self.predictor_lstm = nn.LSTM(  # type: ignore
+                input_size=input_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+            )
 
         self.output_layer = torch.nn.Linear(
             in_features=recurrent_dim, out_features=output_dim, bias=False
