@@ -44,7 +44,6 @@ class ExperimentSessionManager(object):
         dataset_directory: str,
         models_directory: str,
         results_directory: str,
-        target_metric: str = 'rmse',
         session_report: Optional[ExperimentSessionReport] = None,
     ) -> None:
         self.config = config
@@ -56,7 +55,7 @@ class ExperimentSessionManager(object):
         self.dataset_directory = dataset_directory
         self.models_directory = models_directory
         self.results_directory = results_directory
-        self.target_metric = target_metric
+        self.target_metric = 'rmse'
 
         if session_action == SessionAction.NEW and session_report is not None:
             raise ValueError('Cannot start New session with existing session report.')

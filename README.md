@@ -114,19 +114,21 @@ An example template can be found under `examples/patrol_ship.template.json`.
 The `deepsysid` package exposes a command-line interface. 
 Run `deepsysid` or `deepsysid --help` to access the list of available subcommands:
 ```
-usage: Command line interface for the deepsysid package. [-h]
-                                                         {build_configuration,train,test,evaluate,write_model_names}
-                                                         ...
+usage: Command line interface for the deepsysid package. [-h] {build_configuration,train,test,evaluate,evaluate_4dof_ship_trajectory,evaluate_quadcopter_trajectory,write_model_names,session} ...
 
 positional arguments:
-  {build_configuration,train,test,evaluate,write_model_names}
+  {build_configuration,train,test,evaluate,evaluate_4dof_ship_trajectory,evaluate_quadcopter_trajectory,write_model_names,session}
     build_configuration
-                        Build configuration file given grid-search configuration template. Resulting
-                        configuration is written to CONFIGURATION.
+                        Build configuration file given grid-search configuration template. Resulting configuration is written to CONFIGURATION.
     train               Train a model.
     test                Test a model.
     evaluate            Evaluate a model.
+    evaluate_4dof_ship_trajectory
+                        Evaluate the trajectory of a 4-DOF ship model, such as the 4-DOF ship motion dataset found at https://darus.uni-stuttgart.de/dataset.xhtml?persistentId=doi:10.18419/darus-2905.
+    evaluate_quadcopter_trajectory
+                        Evaluate the trajectory of a 6-DOF quadcopter model, such as the quadcopter motion dataset found at https://github.com/wavelab/pelican_dataset.
     write_model_names   Write all model names from the configuration to a text file.
+    session             Run a full experiment given a grid-search session template. State of the session can be loaded from and is saved to disk. This allows stopping and continuing a session at any point.
 
 optional arguments:
   -h, --help            show this help message and exit

@@ -93,7 +93,6 @@ def test_experiment_session_manager_new_and_test_best_successful(
         dataset_directory=str(paths['data']),
         models_directory=str(paths['models']),
         results_directory=str(paths['result']),
-        target_metric='rmse',
     )
     manager.run_session()
     session_report = manager.get_session_report()
@@ -109,7 +108,6 @@ def test_experiment_session_manager_new_and_test_best_successful(
         dataset_directory=str(paths['data']),
         models_directory=str(paths['models']),
         results_directory=str(paths['result']),
-        target_metric='rmse',
         session_report=session_report,
     )
     manager.run_session()
