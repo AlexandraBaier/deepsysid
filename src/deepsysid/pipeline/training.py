@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 from typing import Dict
 
 import h5py
@@ -11,6 +10,8 @@ from ..pipeline.configuration import ExperimentConfiguration, initialize_model
 from .data_io import load_simulation_data
 from .model_io import save_model
 
+logger = logging.getLogger(__name__)
+
 
 def train_model(
     configuration: ExperimentConfiguration,
@@ -18,7 +19,6 @@ def train_model(
     device_name: str,
     dataset_directory: str,
     models_directory: str,
-    disable_stdout: bool,
 ) -> None:
     dataset_directory = os.path.join(dataset_directory, 'processed', 'train')
     model_directory = os.path.expanduser(
@@ -29,17 +29,11 @@ def train_model(
     except FileExistsError:
         pass
 
-    # Configure logging
-    # This is the "root" logger, so we do not initializer it with a name.
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
     logger.addHandler(
         logging.FileHandler(
             filename=os.path.join(model_directory, 'training.log'), mode='a'
         )
     )
-    if not disable_stdout:
-        logger.addHandler(logging.StreamHandler(sys.stdout))
 
     # Load dataset
     controls, states = load_simulation_data(

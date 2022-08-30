@@ -1,6 +1,8 @@
 import argparse
 import json
+import logging
 import os
+import sys
 from typing import Optional
 
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
@@ -141,6 +143,13 @@ class DeepSysIdCommandLineInterface:
         else:
             device_name = build_device_name(args.enable_cuda, None)
 
+        # Configure logging
+        # This is the "root" logger, so we do not initializer it with a name.
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        if not args.disable_stdout:
+            logger.addHandler(logging.StreamHandler(sys.stdout))
+
         with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
             config = json.load(f)
         config = ExperimentConfiguration.parse_obj(config)
@@ -150,7 +159,6 @@ class DeepSysIdCommandLineInterface:
             device_name=device_name,
             configuration=config,
             dataset_directory=os.environ[DATASET_DIR_ENV_VAR],
-            disable_stdout=args.disable_stdout,
             models_directory=os.environ[MODELS_DIR_ENV_VAR],
         )
 

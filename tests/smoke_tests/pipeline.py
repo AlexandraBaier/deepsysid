@@ -190,7 +190,6 @@ def run_pipeline(
         configuration=config,
         dataset_directory=str(paths['data']),
         models_directory=str(paths['models']),
-        disable_stdout=True,
     )
 
     # Run model testing.
