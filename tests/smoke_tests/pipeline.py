@@ -8,7 +8,7 @@ from deepsysid.pipeline.testing import test_model as run_model
 from deepsysid.pipeline.training import train_model
 
 
-def _get_data(idx: int) -> str:
+def get_data(idx: int) -> str:
     data = [
         """time,n,deltal,deltar,Vw,alpha_x,alpha_y,u,v,p,r,phi
 0,366.361745840294,-0.000667792634540374,0.000505048081770158,2.3058404686817005,0.730398366799378,0.6830213948162981,1.9059304828813899,0.0684893236802277,0.0,0.0,0.0
@@ -115,7 +115,15 @@ def get_thresholds() -> List[float]:
     return [1.0, 0.5, 0.1]
 
 
-def _prepare_directories(
+def get_train_fraction() -> float:
+    return 0.6
+
+
+def get_validation_fraction() -> float:
+    return 0.3
+
+
+def prepare_directories(
     base_path: pathlib.Path,
 ) -> Dict[str, pathlib.Path]:
     models_directory = base_path.joinpath('models')
@@ -157,13 +165,13 @@ def run_pipeline(
     config: DynamicIdentificationModelConfig,
 ):
     # Define and create temporary file paths and directories.
-    paths = _prepare_directories(base_path)
+    paths = prepare_directories(base_path)
 
     # Setup configuration file.
     configuration_dict = dict(
-        train_fraction=0.6,
-        validation_fraction=0.5,
-        time_delta=0.5,
+        train_fraction=get_train_fraction(),
+        validation_fraction=get_validation_fraction(),
+        time_delta=get_time_delta(),
         window_size=get_window_size(),
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
@@ -179,9 +187,9 @@ def run_pipeline(
     config = ExperimentConfiguration.parse_obj(configuration_dict)
 
     # Setup dataset directory.
-    paths['train'].joinpath('train-0.csv').write_text(data=_get_data(0))
-    paths['validation'].joinpath('validation-0.csv').write_text(data=_get_data(1))
-    paths['test'].joinpath('test-0.csv').write_text(data=_get_data(2))
+    paths['train'].joinpath('train-0.csv').write_text(data=get_data(0))
+    paths['validation'].joinpath('validation-0.csv').write_text(data=get_data(1))
+    paths['test'].joinpath('test-0.csv').write_text(data=get_data(2))
 
     # Run model training.
     train_model(
