@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from .configuration import ExperimentConfiguration, ExperimentGridSearchTemplate
 from .data_io import build_score_file_name
-from .evaluation import evaluate_model
+from .evaluation import ReadableEvaluationScores, evaluate_model
 from .testing import test_model
 from .training import train_model
 
@@ -216,12 +216,12 @@ class ExperimentSessionManager(object):
         with open(
             os.path.join(self.results_directory, model_name, score_file_name)
         ) as f:
-            scores = json.load(f)
+            scores: ReadableEvaluationScores = ReadableEvaluationScores.parse_obj(
+                json.load(f)
+            )
         try:
             validation_score = sum(
-                scores[f'horizon-{self.config.settings.horizon_size}']['scores'][
-                    self.target_metric
-                ]
+                scores.scores_per_horizon[self.config.settings.horizon_size].rmse
             )
         except KeyError:
             raise ValueError(f'Target metric {self.target_metric} could not be found.')

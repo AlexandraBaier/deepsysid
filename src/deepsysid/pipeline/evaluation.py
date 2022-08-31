@@ -1,11 +1,11 @@
 import dataclasses
-import json
 import os
-from typing import Any, Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import h5py
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import BaseModel
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from .configuration import ExperimentConfiguration
@@ -22,12 +22,35 @@ from .metrics import (
 )
 
 
+class PerHorizonAverageScores(BaseModel):
+    mse: List[float]
+    rmse: List[float]
+    rmse_std: List[float]
+    mae: List[float]
+    d1: List[float]
+
+
+class ReadableEvaluationScores(BaseModel):
+    state_names: List[str]
+    scores_per_horizon: Dict[int, PerHorizonAverageScores]
+
+
+class PerHorizonTrajectoryScores(BaseModel):
+    rmse_mean: float
+    rmse_std: float
+    n_samples: int
+
+
+class ReadableTrajectoryScores(BaseModel):
+    scores_per_horizon: Dict[int, PerHorizonTrajectoryScores]
+
+
 @dataclasses.dataclass
 class EvaluationResult:
     file_names: List[str]
     steps: List[int]
     scores_per_step: Dict[str, NDArray[np.float64]]
-    average_scores: Dict[str, NDArray[np.float64]]
+    average_scores: Dict[str, List[float]]
     horizon_size: int
 
 
@@ -96,14 +119,25 @@ def evaluate_model(
             threshold=threshold,
         ),
     )
-    obj: Dict[str, Any] = dict()
-    obj['state_names'] = config.state_names
-    for result in results:
-        result_obj = dict()
-        result_obj['scores'] = result.average_scores
-        obj[f'horizon-{result.horizon_size}'] = result_obj
+    readable_evaluation_result = ReadableEvaluationScores(
+        state_names=config.state_names,
+        scores_per_horizon=dict(
+            (
+                result.horizon_size,
+                PerHorizonAverageScores(
+                    mse=result.average_scores['mse'],
+                    rmse=result.average_scores['rmse'],
+                    rmse_std=result.average_scores['rmse_std'],
+                    mae=result.average_scores['mae'],
+                    d1=result.average_scores['d1'],
+                ),
+            )
+            for result in results
+        ),
+    )
+
     with open(readable_scores_file_path, mode='w') as f:
-        json.dump(obj, f)
+        f.write(readable_evaluation_result.json())
 
 
 def evaluate_model_specific_horizon(
@@ -162,7 +196,7 @@ def evaluate_model_specific_horizon(
     score_functions = (
         ('mse', mse),
         ('rmse', rmse),
-        ('rmse-std', rmse_std),
+        ('rmse_std', rmse_std),
         ('mae', mae),
         ('d1', d1),
     )
@@ -386,12 +420,18 @@ def save_trajectory_results(
             extension='json',
         ),
     )
-    obj = dict()
-    for result in results:
-        result_obj = dict()
-        result_obj['rmse_mean'] = result.rmse_mean
-        result_obj['rmse_stddev'] = result.rmse_stddev
-        result_obj['n_samples'] = result.n_samples
-        obj[f'horizon-{result.horizon_size}'] = result_obj
+    trajectory_scores = ReadableTrajectoryScores(
+        scores_per_horizon=dict(
+            (
+                result.horizon_size,
+                PerHorizonTrajectoryScores(
+                    rmse_mean=result.rmse_mean,
+                    rmse_std=result.rmse_stddev,
+                    n_samples=result.n_samples,
+                ),
+            )
+            for result in results
+        )
+    )
     with open(readable_scores_file_path, mode='w') as f:
-        json.dump(obj, f)
+        f.write(trajectory_scores.json())
