@@ -10,15 +10,15 @@ import torch.optim as optim
 import torch.utils.data as data
 from numpy.typing import NDArray
 
-from ..networks import loss, rnn
-from ..networks.switching import (
+from ...networks import loss, rnn
+from ...networks.switching import (
     StableSwitchingLSTM,
     SwitchingBaseLSTM,
     UnconstrainedSwitchingLSTM,
 )
-from . import base, utils
-from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
-from .recurrent import LSTMInitModelConfig
+from .. import base, utils
+from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
+from ..recurrent import LSTMInitModelConfig
 
 logger = logging.getLogger(__name__)
 

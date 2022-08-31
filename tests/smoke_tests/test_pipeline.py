@@ -13,7 +13,7 @@ from deepsysid.models.recurrent import (
     LSTMCombinedInitModel,
     LSTMInitModel,
 )
-from deepsysid.models.switching import StableSwitchingLSTMModel
+from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
 
 from . import pipeline
 
@@ -307,7 +307,7 @@ def test_lstm_combined_init_model(tmp_path: pathlib.Path):
 
 def test_stable_switching_lstm_model(tmp_path: pathlib.Path):
     model_name = 'StableSwitchingLSTMModel'
-    model_class = 'deepsysid.models.switching.StableSwitchingLSTMModel'
+    model_class = 'deepsysid.models.switching.switchrnn.StableSwitchingLSTMModel'
     config = StableSwitchingLSTMModel.CONFIG(
         control_names=pipeline.get_control_names(),
         state_names=pipeline.get_state_names(),
@@ -328,7 +328,7 @@ def test_stable_switching_lstm_model(tmp_path: pathlib.Path):
 
 def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path):
     model_name = 'UnconstrainedSwitchingLSTMModel'
-    model_class = 'deepsysid.models.switching.UnconstrainedSwitchingLSTMModel'
+    model_class = 'deepsysid.models.switching.switchrnn.UnconstrainedSwitchingLSTMModel'
     config = StableSwitchingLSTMModel.CONFIG(
         control_names=pipeline.get_control_names(),
         state_names=pipeline.get_state_names(),

@@ -525,7 +525,7 @@
     },
     {
       "model_base_name": "LSTM+StableSwitch",
-      "model_class": "deepsysid.models.switching.StableSwitchingLSTMModel",
+      "model_class": "deepsysid.models.switching.switchrnn.StableSwitchingLSTMModel",
       "static_parameters": {
         "dropout": 0.25,
         "sequence_length": 50,
