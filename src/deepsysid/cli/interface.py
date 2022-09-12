@@ -188,6 +188,20 @@ class DeepSysIdCommandLineInterface:
         self.download_pelican_parser.add_argument(
             'target', help='Target directory for dataset.'
         )
+        self.download_pelican_parser.add_argument(
+            '--train_fraction',
+            required=True,
+            action='store',
+            type=float,
+            help='Fraction of dataset used for training.',
+        )
+        self.download_pelican_parser.add_argument(
+            '--validation_fraction',
+            required=True,
+            action='store',
+            type=float,
+            help='Fraction of dataset used for validation.',
+        )
         self.download_pelican_parser.set_defaults(func=download_pelican)
 
     def run(self) -> None:
@@ -382,12 +396,18 @@ def download_4dof_sim_ship(args: argparse.Namespace) -> None:
 
 def download_pelican(args: argparse.Namespace) -> None:
     directory = args.target
+    train_fraction = args.train_fraction
+    validation_fraction = args.validation_fraction
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logger.addHandler(logging.StreamHandler(sys.stdout))
 
-    download_dataset_pelican_quadcopter(target_directory=directory)
+    download_dataset_pelican_quadcopter(
+        target_directory=directory,
+        train_fraction=train_fraction,
+        validation_fraction=validation_fraction,
+    )
 
 
 def add_parser_arguments(
