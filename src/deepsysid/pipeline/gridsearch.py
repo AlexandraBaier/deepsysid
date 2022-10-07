@@ -127,7 +127,10 @@ class ExperimentSessionManager(object):
                 self.session_report.validated_models
             )
             logger.info(f'Trained and validated: {model_name}.')
-            logger.info(f'Validation Progress: {n_unfinished_models}/{n_total_models}.')
+            logger.info(
+                'Validation Progress: '
+                f'{n_total_models - n_unfinished_models}/{n_total_models}.'
+            )
         return self.get_session_report()
 
     def _run_test_best(self) -> ExperimentSessionReport:
