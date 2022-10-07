@@ -1,35 +1,49 @@
 import numpy as np
 import pytest
 
-from deepsysid.pipeline.metrics import index_of_agreement
+from deepsysid.pipeline.metrics import (
+    IndexOfAgreementMetric,
+    IndexOfAgreementMetricConfig,
+)
 
 
 def test_index_of_agreement_empty_arrays():
+    metric = IndexOfAgreementMetric(
+        IndexOfAgreementMetricConfig(state_names=['1', '2'], sample_time=1.0, j=1)
+    )
+
     a1 = np.array([])
     a2 = np.array([])
 
     with pytest.raises(ValueError):
-        index_of_agreement(a1, a2, j=1)
+        metric.measure([a1], [a2])
 
 
 def test_index_of_agreement_mismatch_arrays():
+    metric = IndexOfAgreementMetric(
+        IndexOfAgreementMetricConfig(state_names=['1', '2'], sample_time=1.0, j=1)
+    )
+
     a1 = np.array([[1, 2], [3, 4]])
     a2 = np.array([[1, 2], [3, 4], [5, 6]])
 
     with pytest.raises(ValueError):
-        index_of_agreement(a1, a2, j=1)
+        metric.measure([a1], [a2])
 
 
 def test_index_of_agreement_incorrect_exponent():
-    a1 = np.array([[1, 2], [3, 4]])
-    a2 = np.array([[1, 2], [3, 4]])
-
     with pytest.raises(ValueError):
-        index_of_agreement(a1, a2, j=0)
+        IndexOfAgreementMetric(
+            IndexOfAgreementMetricConfig(state_names=['1', '2'], sample_time=1.0, j=0)
+        )
 
 
 def test_index_of_agreement_perfect_agreement():
+    metric = IndexOfAgreementMetric(
+        IndexOfAgreementMetricConfig(state_names=['1', '2'], sample_time=1.0, j=1)
+    )
+
     a1 = np.array([[1, 2], [3, 4]])
     a2 = np.array([[1, 2], [3, 4]])
 
-    assert index_of_agreement(a1, a2, j=1) == pytest.approx(1.0)
+    assert np.average(metric.measure([a1], [a2])[0]) == pytest.approx(1.0)
