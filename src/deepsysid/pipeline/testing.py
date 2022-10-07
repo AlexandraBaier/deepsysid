@@ -1,16 +1,20 @@
 import dataclasses
 import os
+import logging
 from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 
 import h5py
 import numpy as np
+import torch
 from numpy.typing import NDArray
 
 from ..models.base import DynamicIdentificationModel
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
+from ..models.recurrent import ConstrainedRnn, LSTMInitModel
 from ..pipeline.configuration import ExperimentConfiguration, initialize_model
 from .data_io import build_result_file_name, load_file_names, load_simulation_data
 from .model_io import load_model
+from ..models import utils
 
 
 @dataclasses.dataclass
@@ -21,6 +25,12 @@ class ModelTestResult:
     file_names: List[str]
     metadata: List[Dict[str, NDArray[np.float64]]]
 
+@dataclasses.dataclass
+class StabilityResult:
+    stability_gains: List[float]
+    stability_type: Literal['bibo', 'incremental']
+    pred_states: List[NDArray[np.float64]]
+    controls: List[NDArray[np.float64]]
 
 def test_model(
     configuration: ExperimentConfiguration,
@@ -72,6 +82,52 @@ def test_model(
                 threshold=threshold,
             )
 
+    if configuration.test and (isinstance(model, LSTMInitModel) or isinstance(model, ConstrainedRnn)):
+        if configuration.test.stability:
+            stability_result = test_stability(
+                simulations=simulations,
+                config=configuration,
+                model=model,
+                device_name=device_name
+            )
+
+            save_stability_results(
+                model_name=model_name,
+                stability_results=stability_result,
+                config=configuration,
+                result_directory=result_directory,
+                mode=mode
+            )
+
+
+def save_stability_results(
+    model_name: str,
+    stability_results: StabilityResult,
+    config: ExperimentConfiguration,
+    result_directory: str,
+    mode: Literal['train', 'validation', 'test']
+) -> None:
+    # Save true and predicted time series
+    result_directory = os.path.join(result_directory, model_name)
+    try:
+        os.mkdir(result_directory)
+    except FileExistsError:
+        pass
+
+    result_file_path = os.path.join(
+        result_directory,
+        f'stability-{mode}-w_{config.window_size}-h_{config.horizon_size}.hdf'
+    )
+    with h5py.File(result_file_path, 'w') as f:
+        write_stability_results_to_hdf5(
+            f,
+            control_names=config.control_names,
+            state_names=config.state_names,
+            stability_gains=stability_results.stability_gains,
+            stability_type=stability_results.stability_type,
+            pred_states=stability_results.pred_states,
+            controls=stability_results.controls
+        )
 
 def load_test_simulations(
     configuration: ExperimentConfiguration,
@@ -211,6 +267,31 @@ def split_simulations(
             yield initial_control, initial_state, true_control, true_state, file_name
 
 
+def write_stability_results_to_hdf5(
+    f: h5py.File,
+    control_names: List[str],
+    state_names: List[str],
+    stability_gains: List[float],
+    stability_type: Literal['bibo', 'incremental'],
+    pred_states: List[NDArray[np.float64]],
+    controls: List[NDArray[np.float64]]
+) -> None:
+    f.attrs['control_names'] = np.array([np.string_(name) for name in control_names])
+    f.attrs['state_names'] = np.array([np.string_(name) for name in state_names])
+    f.attrs['stability_type'] = np.string_(stability_type)
+
+    ctr_group = f.create_group('control')
+    pred_group = f.create_group('predicted')
+    stab_group = f.create_group('stability_gain')
+
+    for i, (control, pred_state, stability_gain) in enumerate(
+        zip(controls, pred_states, stability_gains)
+    ):
+        ctr_group.create_dataset(str(i), data=control)
+        pred_group.create_dataset(str(i), data=pred_state)
+        stab_group.create_dataset(str(i), data=stability_gain)
+
+
 def write_test_results_to_hdf5(
     f: h5py.File,
     control_names: List[str],
@@ -243,3 +324,89 @@ def write_test_results_to_hdf5(
             metadata_sub_grp = metadata_grp.create_group(name)
             for i, data in enumerate(md[name] for md in metadata):
                 metadata_sub_grp.create_dataset(str(i), data=data)
+
+
+def test_stability(
+    simulations: List[Tuple[NDArray[np.float64], NDArray[np.float64], str]],
+    config: ExperimentConfiguration,
+    model: DynamicIdentificationModel,
+    device_name: str
+) -> StabilityResult:
+    logger = logging.getLogger(__name__)
+    controls = []
+    pred_states = []
+    stability_gains = []
+    for (
+        idx_data,
+        (initial_control,
+        initial_state,
+        true_control,
+        _,
+        _,)
+    ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
+
+        # normalize data
+        u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
+        u_norm = utils.normalize(true_control, model.control_mean, model.control_std)
+        y_init_norm = utils.normalize(initial_state, model.state_mean, model.state_std)
+
+        # convert to tensors
+        u_init_norm = torch.from_numpy(np.hstack((u_init_norm[1:], y_init_norm[:-1]))).unsqueeze(0).float().to(device_name)
+        u_a = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
+
+        # disturb input
+        delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True)
+
+        # optimizer
+        opt = torch.optim.Adam([delta], lr=config.test.stability.optimization_lr, maximize = True)
+
+        for idx in range(config.test.stability.optimization_steps):
+
+            # calculate stability gain
+            def sequence_norm(x):
+                norm = torch.tensor(0).float().to(device_name)
+                for x_k in x:
+                    norm += (torch.linalg.norm(x_k)**2).float()
+                return norm
+
+            u_a = u_a + delta
+            if config.test.stability.type == 'incremental':
+                u_b = u_norm.clone()
+                # model prediction
+                _, hx = model.initializer(u_init_norm, return_state=True)
+                # TODO set initial state to zero should be good to find unstable sequences
+                hx = (torch.zeros_like(hx[0]), torch.zeros_like(hx[1]))
+                y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
+                y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
+
+                L = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
+                L.backward()
+                torch.nn.utils.clip_grad_norm_(delta, 10)
+                opt.step()
+
+                stability_gains.append(L.cpu().detach().numpy())
+                controls.append(utils.denormalize((u_a - u_b).cpu().detach().numpy().squeeze(), model.control_mean, model.control_std))
+                pred_states.append(utils.denormalize((y_hat_a - y_hat_b).cpu().detach().numpy(), model.state_mean, model.state_std))
+
+            elif config.test.stability.type == 'bibo':
+                # model prediction
+                _, hx = model.initializer(u_init_norm, return_state=True)
+                # TODO set initial state to zero should be good to find unstable sequences
+                hx = (torch.zeros_like(hx[0]), torch.zeros_like(hx[1]))
+                y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
+
+                L = sequence_norm(y_hat_a) / sequence_norm(u_a)
+                L.backward()
+                torch.nn.utils.clip_grad_norm_(delta, 10)
+                opt.step()
+
+                stability_gains.append(L.cpu().detach().numpy())
+                controls.append(utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std))
+                pred_states.append(utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std))
+            
+    return StabilityResult(
+        stability_gains=stability_gains,
+        stability_type=config.test.stability.type,
+        pred_states=pred_states,
+        controls=controls
+    )

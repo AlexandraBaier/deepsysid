@@ -1,15 +1,24 @@
 import itertools
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Literal, Optional, Type
 
 from pydantic import BaseModel
 
 from ..models.base import DynamicIdentificationModel
 
 
+class StabilitySetting(BaseModel):
+    type: Literal['incremental', 'bibo']
+    optimization_steps: int
+    optimization_lr: float
+    initial_mean_delta: float
+    initial_std_delta: float
+
+class TestSetting(BaseModel):
+    stability: Optional[StabilitySetting]
+
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
     parameters: Dict[str, Any]
-
 
 class ExperimentGridSearchSettings(BaseModel):
     train_fraction: float
@@ -20,6 +29,7 @@ class ExperimentGridSearchSettings(BaseModel):
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
+    test: Optional[TestSetting]
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -40,6 +50,7 @@ class ExperimentConfiguration(BaseModel):
     time_delta: float
     window_size: int
     horizon_size: int
+    test: Optional[TestSetting]
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
@@ -101,12 +112,12 @@ class ExperimentConfiguration(BaseModel):
             time_delta=template.settings.time_delta,
             window_size=template.settings.window_size,
             horizon_size=template.settings.horizon_size,
+            test=template.settings.test,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
             thresholds=template.settings.thresholds,
             models=models,
         )
-
 
 def initialize_model(
     experiment_config: ExperimentConfiguration, model_name: str, device_name: str

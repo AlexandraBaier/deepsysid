@@ -255,7 +255,10 @@ class LTIRnn(nn.Module):
         self.lambdas.data = torch.tensor(lambdas.value, dtype=dtype)
 
     def forward(
-        self, u_tilde: torch.Tensor, hx: Tuple[torch.Tensor, torch.Tensor]
+        self, 
+        u_tilde: torch.Tensor, 
+        hx: Tuple[torch.Tensor, torch.Tensor],
+        return_state: bool = False,
     ) -> torch.Tensor:
         n_batch, n_sample, _ = u_tilde.shape
 
@@ -272,8 +275,10 @@ class LTIRnn(nn.Module):
             x = (
                 self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
-
-        return y
+        if return_state:
+            return y, x
+        else:
+            return y
 
     def get_constraints(self) -> torch.Tensor:
         # state sizes
