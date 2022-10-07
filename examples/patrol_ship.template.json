@@ -36,7 +36,32 @@
       0.3,
       0.2,
       0.1
-    ]
+    ],
+    "target_metric": "trajectory_rmse",
+    "metrics": {
+      "rmse": {
+        "metric_class":  "deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric",
+        "parameters": {}
+      },
+      "mse": {
+        "metric_class":  "deepsysid.pipeline.metrics.MeanSquaredErrorMetric",
+        "parameters": {}
+      },
+      "mae": {
+        "metric_class":  "deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric",
+        "parameters": {}
+      },
+      "d1": {
+        "metric_class":  "deepsysid.pipeline.metrics.IndexOfAgreementMetric",
+        "parameters": {
+          "j": 1
+        }
+      },
+      "trajectory_rmse": {
+        "metric_class":  "deepsysid.pipeline.metrics.Trajectory4DOFRootMeanSquaredErrorMetric",
+        "parameters": {}
+      }
+    }
   },
   "models": [
     {

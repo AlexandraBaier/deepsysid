@@ -1,13 +1,24 @@
 import itertools
 from typing import Any, Dict, List, Optional, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
 
-from ..models.base import DynamicIdentificationModel
+from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
+from .metrics import BaseMetricConfig, retrieve_metric_class
 
 
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
+    parameters: DynamicIdentificationModelConfig
+
+
+class ExperimentMetricConfiguration(BaseModel):
+    metric_class: str
+    parameters: BaseMetricConfig
+
+
+class GridSearchMetricConfiguration(BaseModel):
+    metric_class: str
     parameters: Dict[str, Any]
 
 
@@ -20,6 +31,8 @@ class ExperimentGridSearchSettings(BaseModel):
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
+    target_metric: str
+    metrics: Dict[str, GridSearchMetricConfiguration]
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -43,7 +56,17 @@ class ExperimentConfiguration(BaseModel):
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
+    metrics: Dict[str, ExperimentMetricConfiguration]
+    target_metric: str
     models: Dict[str, ExperimentModelConfiguration]
+
+    @root_validator
+    def check_target_metric_in_metrics(cls, values):
+        target_metric = values.get('target_metric')
+        metrics = values.get('metrics')
+        if target_metric not in metrics:
+            raise ValueError('target_metric should be a metric in metrics.')
+        return values
 
     @classmethod
     def from_grid_search_template(
@@ -80,20 +103,32 @@ class ExperimentConfiguration(BaseModel):
                         else:
                             model_name += f'-{param_value}'.replace('.', '')
 
-                model_config = ExperimentModelConfiguration.parse_obj(
-                    dict(
-                        model_class=model_class_str,
-                        parameters=model_class.CONFIG.parse_obj(
-                            # Merge dictionaries
-                            {
-                                **base_model_params,
-                                **static_model_params,
-                                **flexible_model_params,
-                            }
-                        ),
-                    )
+                model_config = ExperimentModelConfiguration(
+                    model_class=model_class_str,
+                    parameters=model_class.CONFIG.parse_obj(
+                        # Merge dictionaries
+                        {
+                            **base_model_params,
+                            **static_model_params,
+                            **flexible_model_params,
+                        }
+                    ),
                 )
                 models[model_name] = model_config
+
+        metrics = dict()
+        base_metric_params = dict(
+            state_names=template.settings.state_names,
+            sample_time=template.settings.time_delta,
+        )
+        for name, metric in template.settings.metrics.items():
+            metric_class = retrieve_metric_class(metric.metric_class)
+            metrics[name] = ExperimentMetricConfiguration(
+                metric_class=metric.metric_class,
+                parameters=metric_class.CONFIG.parse_obj(
+                    {**metric.parameters, **base_metric_params}
+                ),
+            )
 
         return cls(
             train_fraction=template.settings.train_fraction,
@@ -105,6 +140,8 @@ class ExperimentConfiguration(BaseModel):
             state_names=template.settings.state_names,
             thresholds=template.settings.thresholds,
             models=models,
+            target_metric=template.settings.target_metric,
+            metrics=metrics,
         )
 
 
@@ -116,11 +153,9 @@ def initialize_model(
     model_class = retrieve_model_class(model_config.model_class)
 
     parameters = model_config.parameters
-    parameters['device_name'] = device_name
+    parameters.device_name = device_name
 
-    config = model_class.CONFIG.parse_obj(parameters)
-
-    model = model_class(config=config)
+    model = model_class(config=parameters)
 
     return model
 
