@@ -360,7 +360,7 @@ def test_stability(
         u_a = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
 
         # disturb input
-        delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True).to(device_name)
+        delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True, device=device_name)
 
         # optimizer
         opt = torch.optim.Adam([delta], lr=config.test.stability.optimization_lr, maximize = True)
