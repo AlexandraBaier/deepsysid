@@ -360,7 +360,7 @@ def test_stability(
         u_a = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
 
         # disturb input
-        delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True)
+        delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True).to(device_name)
 
         # optimizer
         opt = torch.optim.Adam([delta], lr=config.test.stability.optimization_lr, maximize = True)
@@ -380,7 +380,7 @@ def test_stability(
                 # model prediction
                 _, hx = model.initializer(u_init_norm, return_state=True)
                 # TODO set initial state to zero should be good to find unstable sequences
-                hx = (torch.zeros_like(hx[0]), torch.zeros_like(hx[1]))
+                hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
                 y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
                 y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
 
@@ -397,7 +397,7 @@ def test_stability(
                 # model prediction
                 _, hx = model.initializer(u_init_norm, return_state=True)
                 # TODO set initial state to zero should be good to find unstable sequences
-                hx = (torch.zeros_like(hx[0]), torch.zeros_like(hx[1]))
+                hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
                 y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
 
                 L = sequence_norm(y_hat_a) / sequence_norm(u_a)
