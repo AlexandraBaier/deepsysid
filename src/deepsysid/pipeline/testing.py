@@ -350,6 +350,8 @@ def test_stability(
     ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
         logger.info(f'Data idx: {idx_data}')
 
+        model.predictor.train()
+
         # normalize data
         u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
         u_norm = utils.normalize(true_control, model.control_mean, model.control_std)
