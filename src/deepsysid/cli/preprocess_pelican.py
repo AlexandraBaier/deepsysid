@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def main() -> None:
-    root_dir = os.environ['DATASET_DIRECTORY']
+    root_dir = os.path.expanduser(os.environ['DATASET_DIRECTORY'])
     raw_dir = os.path.join(root_dir, 'raw')
     processed_dir = os.path.join(root_dir, 'processed')
 
@@ -15,7 +15,7 @@ def main() -> None:
     except FileExistsError:
         pass
 
-    with open(os.environ['CONFIGURATION'], mode='r') as f:
+    with open(os.path.expanduser(os.environ['CONFIGURATION']), mode='r') as f:
         config = json.load(f)
 
     state_names = config['state_names']

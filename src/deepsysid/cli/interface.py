@@ -218,7 +218,7 @@ def build_configuration(args: argparse.Namespace) -> None:
         grid_search_template, 'cpu'
     )
 
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='w') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='w') as f:
         json.dump(configuration.dict(), f)
 
 
@@ -235,7 +235,7 @@ def train(args: argparse.Namespace) -> None:
     if not args.disable_stdout:
         logger.addHandler(logging.StreamHandler(sys.stdout))
 
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config = json.load(f)
     config = ExperimentConfiguration.parse_obj(config)
 
@@ -243,8 +243,8 @@ def train(args: argparse.Namespace) -> None:
         model_name=args.model,
         device_name=device_name,
         configuration=config,
-        dataset_directory=os.environ[DATASET_DIR_ENV_VAR],
-        models_directory=os.environ[MODELS_DIR_ENV_VAR],
+        dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
+        models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
     )
 
 
@@ -254,7 +254,11 @@ def test(args: argparse.Namespace) -> None:
     else:
         device_name = build_device_name(args.enable_cuda, None)
 
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config = json.load(f)
     config = ExperimentConfiguration.parse_obj(config)
 
@@ -263,14 +267,14 @@ def test(args: argparse.Namespace) -> None:
         device_name=device_name,
         mode=args.mode,
         configuration=config,
-        dataset_directory=os.environ[DATASET_DIR_ENV_VAR],
-        result_directory=os.environ[RESULT_DIR_ENV_VAR],
-        models_directory=os.environ[MODELS_DIR_ENV_VAR],
+        dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
+        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
+        models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
     )
 
 
 def evaluate(args: argparse.Namespace) -> None:
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config = json.load(f)
     config = ExperimentConfiguration.parse_obj(config)
 
@@ -278,7 +282,7 @@ def evaluate(args: argparse.Namespace) -> None:
         config=config,
         model_name=args.model,
         mode=args.mode,
-        result_directory=os.environ[RESULT_DIR_ENV_VAR],
+        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
     )
 
     model = initialize_model(config, args.model, device_name=build_device_name(False))
@@ -288,19 +292,19 @@ def evaluate(args: argparse.Namespace) -> None:
                 config=config,
                 model_name=args.model,
                 mode=args.mode,
-                result_directory=os.environ[RESULT_DIR_ENV_VAR],
+                result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
                 threshold=threshold,
             )
 
 
 def cli_evaluate_4dof_ship_trajectory(args: argparse.Namespace) -> None:
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config = json.load(f)
     config = ExperimentConfiguration.parse_obj(config)
 
     evaluate_4dof_ship_trajectory(
         configuration=config,
-        result_directory=os.environ[RESULT_DIR_ENV_VAR],
+        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
         model_name=args.model,
         mode=args.mode,
     )
@@ -313,14 +317,14 @@ def cli_evaluate_quadcopter_trajectory(args: argparse.Namespace) -> None:
 
     evaluate_quadcopter_trajectory(
         configuration=config,
-        result_directory=os.environ[RESULT_DIR_ENV_VAR],
+        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
         model_name=args.model,
         mode=args.mode,
     )
 
 
 def write_model_names(args: argparse.Namespace) -> None:
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config = json.load(f)
 
     config = ExperimentConfiguration.parse_obj(config)
@@ -367,9 +371,9 @@ def session(args: argparse.Namespace) -> None:
         config=config,
         device_name=device_name,
         session_action=session_action,
-        dataset_directory=os.environ[DATASET_DIR_ENV_VAR],
-        models_directory=os.environ[MODELS_DIR_ENV_VAR],
-        results_directory=os.environ[RESULT_DIR_ENV_VAR],
+        dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
+        models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
+        results_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
         session_report=report,
     )
 

@@ -118,6 +118,10 @@ def save_stability_results(
         result_directory,
         f'stability-{mode}-w_{config.window_size}-h_{config.horizon_size}.hdf'
     )
+
+    logger = logging.getLogger(__name__)   
+    logger.info(f'Save stability results to {result_file_path}') 
+
     with h5py.File(result_file_path, 'w') as f:
         write_stability_results_to_hdf5(
             f,
@@ -329,7 +333,7 @@ def write_test_results_to_hdf5(
 def test_stability(
     simulations: List[Tuple[NDArray[np.float64], NDArray[np.float64], str]],
     config: ExperimentConfiguration,
-    model: DynamicIdentificationModel,
+    model: Union[LSTMInitModel, ConstrainedRnn],
     device_name: str
 ) -> StabilityResult:
     logger = logging.getLogger(__name__)
@@ -344,6 +348,7 @@ def test_stability(
         _,
         _,)
     ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
+        logger.info(f'Data idx: {idx_data}')
 
         # normalize data
         u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
