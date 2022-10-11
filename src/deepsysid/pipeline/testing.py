@@ -116,7 +116,7 @@ def save_stability_results(
 
     result_file_path = os.path.join(
         result_directory,
-        f'stability-{mode}-w_{config.window_size}-h_{config.horizon_size}.hdf'
+        f'stability-{mode}-w_{config.window_size}-h_{config.horizon_size}.hdf5'
     )
 
     logger = logging.getLogger(__name__)   
