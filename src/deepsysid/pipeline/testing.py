@@ -391,9 +391,8 @@ def test_stability(
                 torch.nn.utils.clip_grad_norm_(delta, 10)
                 opt.step()
 
-                stability_gains.append(L.cpu().detach().numpy())
-                controls.append(utils.denormalize((u_a - u_b).cpu().detach().numpy().squeeze(), model.control_mean, model.control_std))
-                pred_states.append(utils.denormalize((y_hat_a - y_hat_b).cpu().detach().numpy(), model.state_mean, model.state_std))
+                control = utils.denormalize((u_a - u_b).cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
+                pred_state = utils.denormalize((y_hat_a - y_hat_b).cpu().detach().numpy(), model.state_mean, model.state_std)
 
             elif config.test.stability.type == 'bibo':
                 # model prediction
@@ -407,10 +406,13 @@ def test_stability(
                 torch.nn.utils.clip_grad_norm_(delta, 10)
                 opt.step()
 
-                stability_gains.append(L.cpu().detach().numpy())
-                controls.append(utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std))
-                pred_states.append(utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std))
-            
+                control = utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
+                pred_state = utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std)
+        
+        stability_gains.append(L.cpu().detach().numpy())
+        controls.append(control)
+        pred_states.append(pred_state)
+
     return StabilityResult(
         stability_gains=stability_gains,
         stability_type=config.test.stability.type,
