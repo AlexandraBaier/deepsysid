@@ -356,7 +356,7 @@ def test_stability(
         _,)
     ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
 
-        model.predictor.eval()
+        model.predictor.train()
 
         # normalize data
         u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
