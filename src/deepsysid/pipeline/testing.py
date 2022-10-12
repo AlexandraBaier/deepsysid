@@ -124,7 +124,7 @@ def save_stability_results(
 
     result_file_path = os.path.join(
         result_directory,
-        f'stability-{mode}-w_{config.window_size}-h_{config.horizon_size}.hdf5'
+        f'stability-{mode}-stability_type_{config.test.stability.type}-sequences_{config.test.stability.evaluation_sequence}-w_{config.window_size}-h_{config.horizon_size}.hdf5'
     )
 
     logger = logging.getLogger(__name__)   
@@ -347,78 +347,47 @@ def test_stability(
     controls = []
     pred_states = []
     stability_gains = []
-    for (
-        idx_data,
-        (initial_control,
-        initial_state,
-        true_control,
-        _,
-        _,)
-    ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
 
-        model.predictor.train()
 
-        # normalize data
-        u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
-        u_norm = utils.normalize(true_control, model.control_mean, model.control_std)
-        y_init_norm = utils.normalize(initial_state, model.state_mean, model.state_std)
+    if isinstance(config.test.stability.evaluation_sequence, int):
 
-        # convert to tensors
-        u_init_norm = torch.from_numpy(np.hstack((u_init_norm[1:], y_init_norm[:-1]))).unsqueeze(0).float().to(device_name)
-        u_norm = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
+        logger.info(f'Test stability for sequence number {config.test.stability.evaluation_sequence}')
+        dataset = [sequence for (sequence) in split_simulations(config.window_size, config.horizon_size, simulations)]
+        initial_control, initial_state, true_control,  _,  _, = dataset[config.test.stability.evaluation_sequence]
+        L, control, pred_state = optimize_input_disturbance(
+            model=model,
+            config=config,
+            device_name=device_name,
+            initial_control=initial_control,
+            initial_state=initial_state,
+            true_control=true_control
+        )
+        stability_gains.append(L)
+        controls.append(control)
+        pred_states.append(pred_state)
 
-        # disturb input
-        delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True, device=device_name)
+    elif config.test.stability.evaluation_sequence == 'all':
+        logger.info(f'Test stability for {config.test.stability.evaluation_sequence} sequences')
+        for (
+            idx_data,
+            (initial_control,
+            initial_state,
+            true_control,
+            _,
+            _,)
+        ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
 
-        # optimizer
-        opt = torch.optim.Adam([delta], lr=config.test.stability.optimization_lr, maximize = True)
+            logger.info(f'Sequence number: {idx_data}')
 
-        for step_idx in range(config.test.stability.optimization_steps):
+            L, control, pred_state = optimize_input_disturbance(
+                model=model,
+                config=config,
+                device_name=device_name,
+                initial_control=initial_control,
+                initial_state=initial_state,
+                true_control=true_control
+            )
 
-            # calculate stability gain
-            def sequence_norm(x):
-                norm = torch.tensor(0).float().to(device_name)
-                for x_k in x:
-                    norm += (torch.linalg.norm(x_k)**2).float()
-                return norm
-
-            u_a = u_norm + delta
-            if config.test.stability.type == 'incremental':
-                u_b = u_norm.clone()
-                # model prediction
-                _, hx = model.initializer(u_init_norm, return_state=True)
-                # TODO set initial state to zero should be good to find unstable sequences
-                hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
-                y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
-                y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
-
-                L = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
-                L.backward()
-                torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
-                opt.step()
-
-                control = utils.denormalize((u_a - u_b).cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
-                pred_state = utils.denormalize((y_hat_a - y_hat_b).cpu().detach().numpy(), model.state_mean, model.state_std)
-
-            elif config.test.stability.type == 'bibo':
-                # model prediction
-                _, hx = model.initializer(u_init_norm, return_state=True)
-                # TODO set initial state to zero should be good to find unstable sequences
-                hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
-                y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
-
-                L = sequence_norm(y_hat_a) / sequence_norm(u_a)
-                L.backward()
-                torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
-                opt.step()
-
-                control = utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
-                pred_state = utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std)
-            
-            L = np.sqrt(L.cpu().detach().numpy())
-            if step_idx % 100 == 0:
-                logger.info(f'step: {step_idx} \t L: {L:.3f} \t gradient norm: {torch.norm(delta.grad):.3f}')
-        
         stability_gains.append(L)
         controls.append(control)
         pred_states.append(pred_state)
@@ -429,3 +398,81 @@ def test_stability(
         pred_states=pred_states,
         controls=controls
     )
+
+def optimize_input_disturbance(
+    config: ExperimentConfiguration,
+    model: Union[LSTMInitModel, ConstrainedRnn],
+    device_name: str,
+    initial_control: NDArray[np.float64],
+    initial_state: NDArray[np.float64],
+    true_control: NDArray[np.float64]
+)-> Tuple[
+        np.float64, 
+        NDArray[np.float64], 
+        NDArray[np.float64]
+    ]:
+
+    model.predictor.train()
+
+    # normalize data
+    u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
+    u_norm = utils.normalize(true_control, model.control_mean, model.control_std)
+    y_init_norm = utils.normalize(initial_state, model.state_mean, model.state_std)
+
+    # convert to tensors
+    u_init_norm = torch.from_numpy(np.hstack((u_init_norm[1:], y_init_norm[:-1]))).unsqueeze(0).float().to(device_name)
+    u_norm = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
+
+    # disturb input
+    delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True, device=device_name)
+
+    # optimizer
+    opt = torch.optim.Adam([delta], lr=config.test.stability.optimization_lr, maximize = True)
+
+    for step_idx in range(config.test.stability.optimization_steps):
+
+        # calculate stability gain
+        def sequence_norm(x):
+            norm = torch.tensor(0).float().to(device_name)
+            for x_k in x:
+                norm += (torch.linalg.norm(x_k)**2).float()
+            return norm
+
+        u_a = u_norm + delta
+        if config.test.stability.type == 'incremental':
+            u_b = u_norm.clone()
+            # model prediction
+            _, hx = model.initializer(u_init_norm, return_state=True)
+            # TODO set initial state to zero should be good to find unstable sequences
+            hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
+            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
+            y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
+
+            L = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
+            L.backward()
+            torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
+            opt.step()
+
+            control = utils.denormalize((u_a - u_b).cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
+            pred_state = utils.denormalize((y_hat_a - y_hat_b).cpu().detach().numpy(), model.state_mean, model.state_std)
+
+        elif config.test.stability.type == 'bibo':
+            # model prediction
+            _, hx = model.initializer(u_init_norm, return_state=True)
+            # TODO set initial state to zero should be good to find unstable sequences
+            hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
+            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
+
+            L = sequence_norm(y_hat_a) / sequence_norm(u_a)
+            L.backward()
+            torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
+            opt.step()
+
+            control = utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
+            pred_state = utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std)
+        
+        L = np.sqrt(L.cpu().detach().numpy())
+        if step_idx % 100 == 0:
+            logger.info(f'step: {step_idx} \t L: {L:.3f} \t gradient norm: {torch.norm(delta.grad):.3f}')
+
+    return L, control, pred_state
