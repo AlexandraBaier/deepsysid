@@ -15,8 +15,7 @@ from . import base, utils
 from .base import DynamicIdentificationModelConfig
 from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger('deepsysid.pipeline.training')
 
 class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nx: int

@@ -16,6 +16,7 @@ from .data_io import build_result_file_name, load_file_names, load_simulation_da
 from .model_io import load_model
 from ..models import utils
 
+logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class ModelTestResult:
@@ -46,6 +47,12 @@ def test_model(
     )
     model = initialize_model(configuration, model_name, device_name)
     load_model(model, model_directory, model_name)
+
+    logger.addHandler(
+        logging.FileHandler(
+            filename=os.path.join(model_directory, 'testing.log'), mode='a'
+        )
+    )
 
     simulations = load_test_simulations(
         configuration=configuration,
@@ -84,6 +91,7 @@ def test_model(
 
     if configuration.test and (isinstance(model, LSTMInitModel) or isinstance(model, ConstrainedRnn)):
         if configuration.test.stability:
+            logger.info(f'{model_name}: {configuration.test.stability.type} stability test.')
             stability_result = test_stability(
                 simulations=simulations,
                 config=configuration,
@@ -336,7 +344,6 @@ def test_stability(
     model: Union[LSTMInitModel, ConstrainedRnn],
     device_name: str
 ) -> StabilityResult:
-    logger = logging.getLogger(__name__)
     controls = []
     pred_states = []
     stability_gains = []
@@ -348,9 +355,8 @@ def test_stability(
         _,
         _,)
     ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
-        logger.info(f'Data idx: {idx_data}')
 
-        model.predictor.train()
+        model.predictor.eval()
 
         # normalize data
         u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
@@ -359,7 +365,7 @@ def test_stability(
 
         # convert to tensors
         u_init_norm = torch.from_numpy(np.hstack((u_init_norm[1:], y_init_norm[:-1]))).unsqueeze(0).float().to(device_name)
-        u_a = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
+        u_norm = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
 
         # disturb input
         delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True, device=device_name)
@@ -367,7 +373,7 @@ def test_stability(
         # optimizer
         opt = torch.optim.Adam([delta], lr=config.test.stability.optimization_lr, maximize = True)
 
-        for idx in range(config.test.stability.optimization_steps):
+        for step_idx in range(config.test.stability.optimization_steps):
 
             # calculate stability gain
             def sequence_norm(x):
@@ -376,7 +382,7 @@ def test_stability(
                     norm += (torch.linalg.norm(x_k)**2).float()
                 return norm
 
-            u_a = u_a + delta
+            u_a = u_norm + delta
             if config.test.stability.type == 'incremental':
                 u_b = u_norm.clone()
                 # model prediction
@@ -388,7 +394,7 @@ def test_stability(
 
                 L = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
                 L.backward()
-                torch.nn.utils.clip_grad_norm_(delta, 10)
+                torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
                 opt.step()
 
                 control = utils.denormalize((u_a - u_b).cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
@@ -403,13 +409,17 @@ def test_stability(
 
                 L = sequence_norm(y_hat_a) / sequence_norm(u_a)
                 L.backward()
-                torch.nn.utils.clip_grad_norm_(delta, 10)
+                torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
                 opt.step()
 
                 control = utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
                 pred_state = utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std)
+            
+            L = np.sqrt(L.cpu().detach().numpy())
+            if step_idx % 100 == 0:
+                logger.info(f'step: {step_idx} \t L: {L:.3f} \t gradient norm: {torch.norm(delta.grad):.3f}')
         
-        stability_gains.append(L.cpu().detach().numpy())
+        stability_gains.append(L)
         controls.append(control)
         pred_states.append(pred_state)
 

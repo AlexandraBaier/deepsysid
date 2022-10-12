@@ -12,6 +12,7 @@ class StabilitySetting(BaseModel):
     optimization_lr: float
     initial_mean_delta: float
     initial_std_delta: float
+    clip_gradient_norm: float
 
 class TestSetting(BaseModel):
     stability: Optional[StabilitySetting]
