@@ -1,5 +1,5 @@
 import itertools
-from typing import Any, Dict, List, Literal, Optional, Type
+from typing import Any, Dict, List, Literal, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -13,6 +13,7 @@ class StabilitySetting(BaseModel):
     initial_mean_delta: float
     initial_std_delta: float
     clip_gradient_norm: float
+    evaluation_sequence: Union[Literal['all'], int]
 
 class TestSetting(BaseModel):
     stability: Optional[StabilitySetting]
