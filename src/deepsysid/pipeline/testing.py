@@ -448,7 +448,8 @@ def optimize_input_disturbance(
             y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
             y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
 
-            regularization = -config.test.stability.regularization_scale * torch.log(sequence_norm(u_a - u_b))
+            # use log to avoid zero in the denominator (goes to -inf) since we maximize this results in a punishment
+            regularization = config.test.stability.regularization_scale * torch.log(sequence_norm(u_a - u_b))
             gamma_2 = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
             L = gamma_2 + regularization
             L.backward()
@@ -465,7 +466,8 @@ def optimize_input_disturbance(
             hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
             y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
 
-            regularization = -config.test.stability.regularization_scale * torch.log(sequence_norm(u_a))
+            # use log to avoid zero in the denominator (goes to -inf) since we maximize this results in a punishment
+            regularization = config.test.stability.regularization_scale * torch.log(sequence_norm(u_a))
             gamma_2 = sequence_norm(y_hat_a) / sequence_norm(u_a)
             L = gamma_2 + regularization
             L.backward()
