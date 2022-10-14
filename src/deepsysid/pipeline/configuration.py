@@ -13,6 +13,7 @@ class StabilitySetting(BaseModel):
     initial_mean_delta: float
     initial_std_delta: float
     clip_gradient_norm: float
+    regularization_scale: float
     evaluation_sequence: Union[Literal['all'], int]
 
 class TestSetting(BaseModel):

@@ -354,7 +354,7 @@ def test_stability(
         logger.info(f'Test stability for sequence number {config.test.stability.evaluation_sequence}')
         dataset = [sequence for (sequence) in split_simulations(config.window_size, config.horizon_size, simulations)]
         initial_control, initial_state, true_control,  _,  _, = dataset[config.test.stability.evaluation_sequence]
-        L, control, pred_state = optimize_input_disturbance(
+        gamma_2, control, pred_state = optimize_input_disturbance(
             model=model,
             config=config,
             device_name=device_name,
@@ -362,7 +362,7 @@ def test_stability(
             initial_state=initial_state,
             true_control=true_control
         )
-        stability_gains.append(L)
+        stability_gains.append(gamma_2)
         controls.append(control)
         pred_states.append(pred_state)
 
@@ -379,7 +379,7 @@ def test_stability(
 
             logger.info(f'Sequence number: {idx_data}')
 
-            L, control, pred_state = optimize_input_disturbance(
+            gamma_2, control, pred_state = optimize_input_disturbance(
                 model=model,
                 config=config,
                 device_name=device_name,
@@ -388,9 +388,9 @@ def test_stability(
                 true_control=true_control
             )
 
-        stability_gains.append(L)
-        controls.append(control)
-        pred_states.append(pred_state)
+            stability_gains.append(gamma_2)
+            controls.append(control)
+            pred_states.append(pred_state)
 
     return StabilityResult(
         stability_gains=stability_gains,
@@ -448,7 +448,9 @@ def optimize_input_disturbance(
             y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
             y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
 
-            L = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
+            regularization = -config.test.stability.regularization_scale * torch.log(sequence_norm(u_a - u_b))
+            gamma_2 = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
+            L = gamma_2 + regularization
             L.backward()
             torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
             opt.step()
@@ -463,16 +465,19 @@ def optimize_input_disturbance(
             hx = (torch.zeros_like(hx[0]).to(device_name), torch.zeros_like(hx[1]).to(device_name))
             y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
 
-            L = sequence_norm(y_hat_a) / sequence_norm(u_a)
+            regularization = -config.test.stability.regularization_scale * torch.log(sequence_norm(u_a))
+            gamma_2 = sequence_norm(y_hat_a) / sequence_norm(u_a)
+            L = gamma_2 + regularization
             L.backward()
             torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
+            # torch.nn.utils.clip_grad_norm_(delta, 100)
             opt.step()
 
             control = utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
             pred_state = utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std)
         
-        L = np.sqrt(L.cpu().detach().numpy())
+        gamma_2 = gamma_2.cpu().detach().numpy()
         if step_idx % 100 == 0:
-            logger.info(f'step: {step_idx} \t L: {L:.3f} \t gradient norm: {torch.norm(delta.grad):.3f}')
+            logger.info(f'step: {step_idx} \t gamma_2: {gamma_2:.3f} \t gradient norm: {torch.norm(delta.grad):.3f} \t -log(norm(denominator)): {regularization:.3f}')
 
-    return L, control, pred_state
+    return gamma_2, control, pred_state
