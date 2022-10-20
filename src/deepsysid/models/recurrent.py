@@ -33,7 +33,7 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     loss: Literal['mse', 'msge']
-
+    log_min_max_real_eigenvalues: Optional[bool]
 
 class ConstrainedRnn(base.DynamicIdentificationModel):
     CONFIG = ConstrainedRnnConfig
@@ -62,6 +62,11 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.batch_size = config.batch_size
         self.epochs_initializer = config.epochs_initializer
         self.epochs_predictor = config.epochs_predictor
+
+        if config.log_min_max_real_eigenvalues:
+            self.log_min_max_real_eigenvalues = config.log_min_max_real_eigenvalues
+        else:
+            self.log_min_max_real_eigenvalues = False
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -200,12 +205,21 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 t = t * 1 / self.decay_rate
                 logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
 
+            min_ev = np.float64('inf')
+            max_ev = np.float64('inf')
+            if self.log_min_max_real_eigenvalues:
+                min_ev, max_ev = self.predictor.get_min_max_real_eigenvalues()
+
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
                 f'Total Loss (Predictor): {total_loss:1f} \t'
                 f'Barrier: {barrier:1f}\t'
                 f'Backtracking Line Search iteration: {bls_iter}\t'
-                f'Max accumulated gradient norm: {max_grad:1f}'
+                f'Max accumulated gradient norm: {max_grad:1f}\t'
+                f'Min eigenvalue: {min_ev:1f}\t'
+                f'Max eigenvalue: {max_ev:1f}'
+
+            
             )
 
         time_end_pred = time.time()

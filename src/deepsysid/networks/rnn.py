@@ -401,6 +401,10 @@ class LTIRnn(nn.Module):
 
         return b_satisfied
 
+    def get_min_max_real_eigenvalues(self) -> Tuple[np.float64, np.float64]:
+        M = self.get_constraints()
+        return (torch.min(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy(), torch.max(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy())
+
 
 class InitLSTM(nn.Module):
     def __init__(

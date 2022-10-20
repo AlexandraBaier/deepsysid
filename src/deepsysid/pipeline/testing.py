@@ -92,17 +92,13 @@ def test_model(
     if configuration.test and (isinstance(model, LSTMInitModel) or isinstance(model, ConstrainedRnn)):
         if configuration.test.stability:
             logger.info(f'{model_name}: {configuration.test.stability.type} stability test.')
-            stability_result = test_stability(
+
+            test_stability_and_save_reults(
                 simulations=simulations,
                 config=configuration,
                 model=model,
-                device_name=device_name
-            )
-
-            save_stability_results(
+                device_name=device_name,
                 model_name=model_name,
-                stability_results=stability_result,
-                config=configuration,
                 result_directory=result_directory,
                 mode=mode
             )
@@ -338,12 +334,15 @@ def write_test_results_to_hdf5(
                 metadata_sub_grp.create_dataset(str(i), data=data)
 
 
-def test_stability(
+def test_stability_and_save_reults(
     simulations: List[Tuple[NDArray[np.float64], NDArray[np.float64], str]],
     config: ExperimentConfiguration,
     model: Union[LSTMInitModel, ConstrainedRnn],
-    device_name: str
-) -> StabilityResult:
+    device_name: str,
+    model_name: str,
+    result_directory: str,
+    mode: Literal['train', 'validation', 'test'],
+) -> None:
     controls = []
     pred_states = []
     stability_gains = []
@@ -365,6 +364,19 @@ def test_stability(
         stability_gains.append(gamma_2)
         controls.append(control)
         pred_states.append(pred_state)
+
+        save_stability_results(
+            model_name=model_name,
+            stability_results=StabilityResult(
+                stability_gains=stability_gains,
+                stability_type=config.test.stability.type,
+                pred_states=pred_states,
+                controls=controls
+            ),
+            config=config,
+            result_directory=result_directory,
+            mode=mode
+        )
 
     elif config.test.stability.evaluation_sequence == 'all':
         logger.info(f'Test stability for {config.test.stability.evaluation_sequence} sequences')
@@ -392,12 +404,18 @@ def test_stability(
             controls.append(control)
             pred_states.append(pred_state)
 
-    return StabilityResult(
-        stability_gains=stability_gains,
-        stability_type=config.test.stability.type,
-        pred_states=pred_states,
-        controls=controls
-    )
+            save_stability_results(
+                model_name=model_name,
+                stability_results=StabilityResult(
+                    stability_gains=stability_gains,
+                    stability_type=config.test.stability.type,
+                    pred_states=pred_states,
+                    controls=controls
+                ),
+                config=config,
+                result_directory=result_directory,
+                mode=mode
+            )
 
 def optimize_input_disturbance(
     config: ExperimentConfiguration,
