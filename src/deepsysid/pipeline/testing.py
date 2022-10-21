@@ -1,6 +1,6 @@
 import dataclasses
-import os
 import logging
+import os
 from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 
 import h5py
@@ -8,15 +8,16 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 
+from ..models import utils
 from ..models.base import DynamicIdentificationModel
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
 from ..models.recurrent import ConstrainedRnn, LSTMInitModel
 from ..pipeline.configuration import ExperimentConfiguration, initialize_model
 from .data_io import build_result_file_name, load_file_names, load_simulation_data
 from .model_io import load_model
-from ..models import utils
 
 logger = logging.getLogger(__name__)
+
 
 @dataclasses.dataclass
 class ModelTestResult:
@@ -26,12 +27,14 @@ class ModelTestResult:
     file_names: List[str]
     metadata: List[Dict[str, NDArray[np.float64]]]
 
+
 @dataclasses.dataclass
 class StabilityResult:
-    stability_gains: List[float]
+    stability_gains: List[np.float64]
     stability_type: Literal['bibo', 'incremental']
     pred_states: List[NDArray[np.float64]]
     controls: List[NDArray[np.float64]]
+
 
 def test_model(
     configuration: ExperimentConfiguration,
@@ -89,9 +92,13 @@ def test_model(
                 threshold=threshold,
             )
 
-    if configuration.test and (isinstance(model, LSTMInitModel) or isinstance(model, ConstrainedRnn)):
+    if configuration.test and (
+        isinstance(model, LSTMInitModel) or isinstance(model, ConstrainedRnn)
+    ):
         if configuration.test.stability:
-            logger.info(f'{model_name}: {configuration.test.stability.type} stability test.')
+            logger.info(
+                f'{model_name}: {configuration.test.stability.type} stability test.'
+            )
 
             test_stability_and_save_reults(
                 simulations=simulations,
@@ -100,7 +107,7 @@ def test_model(
                 device_name=device_name,
                 model_name=model_name,
                 result_directory=result_directory,
-                mode=mode
+                mode=mode,
             )
 
 
@@ -109,7 +116,7 @@ def save_stability_results(
     stability_results: StabilityResult,
     config: ExperimentConfiguration,
     result_directory: str,
-    mode: Literal['train', 'validation', 'test']
+    mode: Literal['train', 'validation', 'test'],
 ) -> None:
     # Save true and predicted time series
     result_directory = os.path.join(result_directory, model_name)
@@ -120,11 +127,11 @@ def save_stability_results(
 
     result_file_path = os.path.join(
         result_directory,
-        f'stability-{mode}-stability_type_{config.test.stability.type}-sequences_{config.test.stability.evaluation_sequence}-w_{config.window_size}-h_{config.horizon_size}.hdf5'
+        f'stability-{mode}-stability_type_{config.test.stability.type}-sequences_{config.test.stability.evaluation_sequence}-w_{config.window_size}-h_{config.horizon_size}.hdf5',
     )
 
-    logger = logging.getLogger(__name__)   
-    logger.info(f'Save stability results to {result_file_path}') 
+    logger = logging.getLogger(__name__)
+    logger.info(f'Save stability results to {result_file_path}')
 
     with h5py.File(result_file_path, 'w') as f:
         write_stability_results_to_hdf5(
@@ -134,8 +141,9 @@ def save_stability_results(
             stability_gains=stability_results.stability_gains,
             stability_type=stability_results.stability_type,
             pred_states=stability_results.pred_states,
-            controls=stability_results.controls
+            controls=stability_results.controls,
         )
+
 
 def load_test_simulations(
     configuration: ExperimentConfiguration,
@@ -279,10 +287,10 @@ def write_stability_results_to_hdf5(
     f: h5py.File,
     control_names: List[str],
     state_names: List[str],
-    stability_gains: List[float],
+    stability_gains: List[np.float64],
     stability_type: Literal['bibo', 'incremental'],
     pred_states: List[NDArray[np.float64]],
-    controls: List[NDArray[np.float64]]
+    controls: List[NDArray[np.float64]],
 ) -> None:
     f.attrs['control_names'] = np.array([np.string_(name) for name in control_names])
     f.attrs['state_names'] = np.array([np.string_(name) for name in state_names])
@@ -347,19 +355,31 @@ def test_stability_and_save_reults(
     pred_states = []
     stability_gains = []
 
-
     if isinstance(config.test.stability.evaluation_sequence, int):
 
-        logger.info(f'Test stability for sequence number {config.test.stability.evaluation_sequence}')
-        dataset = [sequence for (sequence) in split_simulations(config.window_size, config.horizon_size, simulations)]
-        initial_control, initial_state, true_control,  _,  _, = dataset[config.test.stability.evaluation_sequence]
+        logger.info(
+            f'Test stability for sequence number {config.test.stability.evaluation_sequence}'
+        )
+        dataset = [
+            sequence
+            for (sequence) in split_simulations(
+                config.window_size, config.horizon_size, simulations
+            )
+        ]
+        (
+            initial_control,
+            initial_state,
+            true_control,
+            _,
+            _,
+        ) = dataset[config.test.stability.evaluation_sequence]
         gamma_2, control, pred_state = optimize_input_disturbance(
             model=model,
             config=config,
             device_name=device_name,
             initial_control=initial_control,
             initial_state=initial_state,
-            true_control=true_control
+            true_control=true_control,
         )
         stability_gains.append(gamma_2)
         controls.append(control)
@@ -371,23 +391,29 @@ def test_stability_and_save_reults(
                 stability_gains=stability_gains,
                 stability_type=config.test.stability.type,
                 pred_states=pred_states,
-                controls=controls
+                controls=controls,
             ),
             config=config,
             result_directory=result_directory,
-            mode=mode
+            mode=mode,
         )
 
     elif config.test.stability.evaluation_sequence == 'all':
-        logger.info(f'Test stability for {config.test.stability.evaluation_sequence} sequences')
+        logger.info(
+            f'Test stability for {config.test.stability.evaluation_sequence} sequences'
+        )
         for (
             idx_data,
-            (initial_control,
-            initial_state,
-            true_control,
-            _,
-            _,)
-        ) in enumerate(split_simulations(config.window_size, config.horizon_size, simulations)):
+            (
+                initial_control,
+                initial_state,
+                true_control,
+                _,
+                _,
+            ),
+        ) in enumerate(
+            split_simulations(config.window_size, config.horizon_size, simulations)
+        ):
 
             logger.info(f'Sequence number: {idx_data}')
 
@@ -397,7 +423,7 @@ def test_stability_and_save_reults(
                 device_name=device_name,
                 initial_control=initial_control,
                 initial_state=initial_state,
-                true_control=true_control
+                true_control=true_control,
             )
 
             stability_gains.append(gamma_2)
@@ -410,12 +436,13 @@ def test_stability_and_save_reults(
                     stability_gains=stability_gains,
                     stability_type=config.test.stability.type,
                     pred_states=pred_states,
-                    controls=controls
+                    controls=controls,
                 ),
                 config=config,
                 result_directory=result_directory,
-                mode=mode
+                mode=mode,
             )
+
 
 def optimize_input_disturbance(
     config: ExperimentConfiguration,
@@ -423,29 +450,40 @@ def optimize_input_disturbance(
     device_name: str,
     initial_control: NDArray[np.float64],
     initial_state: NDArray[np.float64],
-    true_control: NDArray[np.float64]
-)-> Tuple[
-        np.float64, 
-        NDArray[np.float64], 
-        NDArray[np.float64]
-    ]:
+    true_control: NDArray[np.float64],
+) -> Tuple[np.float64, NDArray[np.float64], NDArray[np.float64]]:
 
     model.predictor.train()
 
     # normalize data
-    u_init_norm = utils.normalize(initial_control, model.control_mean, model.control_std)
+    u_init_norm = utils.normalize(
+        initial_control, model.control_mean, model.control_std
+    )
     u_norm = utils.normalize(true_control, model.control_mean, model.control_std)
     y_init_norm = utils.normalize(initial_state, model.state_mean, model.state_std)
 
     # convert to tensors
-    u_init_norm = torch.from_numpy(np.hstack((u_init_norm[1:], y_init_norm[:-1]))).unsqueeze(0).float().to(device_name)
+    u_init_norm = (
+        torch.from_numpy(np.hstack((u_init_norm[1:], y_init_norm[:-1])))
+        .unsqueeze(0)
+        .float()
+        .to(device_name)
+    )
     u_norm = torch.from_numpy(u_norm).unsqueeze(0).float().to(device_name)
 
     # disturb input
-    delta = torch.normal(config.test.stability.initial_mean_delta, config.test.stability.initial_std_delta, size=(config.horizon_size, model.control_dim), requires_grad=True, device=device_name)
+    delta = torch.normal(
+        config.test.stability.initial_mean_delta,
+        config.test.stability.initial_std_delta,
+        size=(config.horizon_size, model.control_dim),
+        requires_grad=True,
+        device=device_name,
+    )
 
     # optimizer
-    opt = torch.optim.Adam([delta], lr=config.test.stability.optimization_lr, maximize = True)
+    opt = torch.optim.Adam(
+        [delta], lr=config.test.stability.optimization_lr, maximize=True
+    )
 
     for step_idx in range(config.test.stability.optimization_steps):
 
@@ -453,7 +491,7 @@ def optimize_input_disturbance(
         def sequence_norm(x):
             norm = torch.tensor(0).float().to(device_name)
             for x_k in x:
-                norm += (torch.linalg.norm(x_k)**2).float()
+                norm += (torch.linalg.norm(x_k) ** 2).float()
             return norm
 
         u_a = u_norm + delta
@@ -467,15 +505,27 @@ def optimize_input_disturbance(
             y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf) since we maximize this results in a punishment
-            regularization = config.test.stability.regularization_scale * torch.log(sequence_norm(u_a - u_b))
+            regularization = config.test.stability.regularization_scale * torch.log(
+                sequence_norm(u_a - u_b)
+            )
             gamma_2 = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
             L = gamma_2 + regularization
             L.backward()
-            torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
+            torch.nn.utils.clip_grad_norm_(
+                delta, config.test.stability.clip_gradient_norm
+            )
             opt.step()
 
-            control = utils.denormalize((u_a - u_b).cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
-            pred_state = utils.denormalize((y_hat_a - y_hat_b).cpu().detach().numpy(), model.state_mean, model.state_std)
+            control = utils.denormalize(
+                (u_a - u_b).cpu().detach().numpy().squeeze(),
+                model.control_mean,
+                model.control_std,
+            )
+            pred_state = utils.denormalize(
+                (y_hat_a - y_hat_b).cpu().detach().numpy(),
+                model.state_mean,
+                model.state_std,
+            )
 
         elif config.test.stability.type == 'bibo':
             # model prediction
@@ -485,19 +535,31 @@ def optimize_input_disturbance(
             y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf) since we maximize this results in a punishment
-            regularization = config.test.stability.regularization_scale * torch.log(sequence_norm(u_a))
+            regularization = config.test.stability.regularization_scale * torch.log(
+                sequence_norm(u_a)
+            )
             gamma_2 = sequence_norm(y_hat_a) / sequence_norm(u_a)
             L = gamma_2 + regularization
             L.backward()
-            torch.nn.utils.clip_grad_norm_(delta, config.test.stability.clip_gradient_norm)
+            torch.nn.utils.clip_grad_norm_(
+                delta, config.test.stability.clip_gradient_norm
+            )
             # torch.nn.utils.clip_grad_norm_(delta, 100)
             opt.step()
 
-            control = utils.denormalize(u_a.cpu().detach().numpy().squeeze(), model.control_mean, model.control_std)
-            pred_state = utils.denormalize(y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std)
-        
+            control = utils.denormalize(
+                u_a.cpu().detach().numpy().squeeze(),
+                model.control_mean,
+                model.control_std,
+            )
+            pred_state = utils.denormalize(
+                y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std
+            )
+
         gamma_2 = gamma_2.cpu().detach().numpy()
         if step_idx % 100 == 0:
-            logger.info(f'step: {step_idx} \t gamma_2: {gamma_2:.3f} \t gradient norm: {torch.norm(delta.grad):.3f} \t -log(norm(denominator)): {regularization:.3f}')
+            logger.info(
+                f'step: {step_idx} \t gamma_2: {gamma_2:.3f} \t gradient norm: {torch.norm(delta.grad):.3f} \t -log(norm(denominator)): {regularization:.3f}'
+            )
 
     return gamma_2, control, pred_state

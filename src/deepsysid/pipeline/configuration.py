@@ -122,6 +122,7 @@ class ExperimentConfiguration(BaseModel):
             models=models,
         )
 
+
 def initialize_model(
     experiment_config: ExperimentConfiguration, model_name: str, device_name: str
 ) -> DynamicIdentificationModel:

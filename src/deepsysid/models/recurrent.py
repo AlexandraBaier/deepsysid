@@ -17,6 +17,7 @@ from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
+
 class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nx: int
     recurrent_dim: int
@@ -33,7 +34,8 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     loss: Literal['mse', 'msge']
-    log_min_max_real_eigenvalues: Optional[bool]
+    log_min_max_real_eigenvalues: bool = False
+
 
 class ConstrainedRnn(base.DynamicIdentificationModel):
     CONFIG = ConstrainedRnnConfig
@@ -87,7 +89,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.initializer = rnn.BasicLSTM(
             input_dim=self.control_dim + self.state_dim,
             recurrent_dim=self.nx,
-            num_recurrent_layers = self.num_recurrent_layers_init,
+            num_recurrent_layers=self.num_recurrent_layers_init,
             output_dim=[self.state_dim],
             dropout=self.dropout,
         ).to(self.device)
@@ -119,7 +121,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.control_mean, self.control_std = utils.mean_stddev(us)
         self.state_mean, self.state_std = utils.mean_stddev(ys)
 
-        us = [utils.normalize(control, self.control_mean, self.control_std) for control in us]
+        us = [
+            utils.normalize(control, self.control_mean, self.control_std)
+            for control in us
+        ]
         ys = [utils.normalize(state, self.state_mean, self.state_std) for state in ys]
 
         initializer_dataset = RecurrentInitializerDataset(us, ys, self.sequence_length)
@@ -218,8 +223,6 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 f'Max accumulated gradient norm: {max_grad:1f}\t'
                 f'Min eigenvalue: {min_ev:1f}\t'
                 f'Max eigenvalue: {max_ev:1f}'
-
-            
             )
 
         time_end_pred = time.time()

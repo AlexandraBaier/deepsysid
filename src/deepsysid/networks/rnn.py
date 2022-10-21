@@ -255,11 +255,11 @@ class LTIRnn(nn.Module):
         self.lambdas.data = torch.tensor(lambdas.value, dtype=dtype)
 
     def forward(
-        self, 
-        u_tilde: torch.Tensor, 
+        self,
+        u_tilde: torch.Tensor,
         hx: Tuple[torch.Tensor, torch.Tensor],
         return_state: bool = False,
-    ) -> torch.Tensor:
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         n_batch, n_sample, _ = u_tilde.shape
 
         Y_inv = self.Y.inverse()
@@ -375,7 +375,7 @@ class LTIRnn(nn.Module):
                 ]
             )
 
-        return 0.5 * (M + M.T)
+        return 0.5*(M+M.T)
 
     def get_barrier(self, t: float) -> torch.Tensor:
         M = self.get_constraints()
@@ -403,7 +403,10 @@ class LTIRnn(nn.Module):
 
     def get_min_max_real_eigenvalues(self) -> Tuple[np.float64, np.float64]:
         M = self.get_constraints()
-        return (torch.min(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy(), torch.max(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy())
+        return (
+            torch.min(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy(),
+            torch.max(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy(),
+        )
 
 
 class InitLSTM(nn.Module):

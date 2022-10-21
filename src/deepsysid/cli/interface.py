@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+import time
 from typing import Optional
 
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
@@ -258,6 +259,8 @@ def test(args: argparse.Namespace) -> None:
     logger.setLevel(logging.INFO)
     logger.addHandler(logging.StreamHandler(sys.stdout))
 
+    time_start = time.time()
+
     with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config = json.load(f)
     config = ExperimentConfiguration.parse_obj(config)
@@ -271,6 +274,9 @@ def test(args: argparse.Namespace) -> None:
         result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
         models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
     )
+
+    time_end = time.time()
+    logger.info(f'Testing time: {time_end - time_start:1f}')
 
 
 def evaluate(args: argparse.Namespace) -> None:

@@ -20,4 +20,4 @@ def denormalize(x: TensorType, mean: TensorType, stddev: TensorType) -> TensorTy
 
 
 def normalize(x: TensorType, mean: TensorType, stddev: TensorType) -> TensorType:
-    return (x - mean) / stddev
+    return (x-mean)/stddev
