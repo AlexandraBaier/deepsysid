@@ -34,7 +34,7 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     loss: Literal['mse', 'msge']
-    log_min_max_real_eigenvalues: bool = False
+    log_min_max_real_eigenvalues: Optional[bool] = False
 
 
 class ConstrainedRnn(base.DynamicIdentificationModel):
@@ -65,10 +65,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.epochs_initializer = config.epochs_initializer
         self.epochs_predictor = config.epochs_predictor
 
-        if config.log_min_max_real_eigenvalues:
-            self.log_min_max_real_eigenvalues = config.log_min_max_real_eigenvalues
-        else:
-            self.log_min_max_real_eigenvalues = False
+        self.log_min_max_real_eigenvalues = config.log_min_max_real_eigenvalues
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -165,7 +162,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                     batch['x0'].float().to(self.device), return_state=True
                 )
                 # Predict and optimize
-                y = self.predictor.forward(
+                y = self.predictor.forward(  # type: ignore
                     batch['x'].float().to(self.device), hx=hx
                 ).to(self.device)
                 barrier = self.predictor.get_barrier(t).to(self.device)

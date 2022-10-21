@@ -375,7 +375,7 @@ class LTIRnn(nn.Module):
                 ]
             )
 
-        return 0.5*(M+M.T)
+        return 0.5 * (M + M.T)
 
     def get_barrier(self, t: float) -> torch.Tensor:
         M = self.get_constraints()

@@ -16,12 +16,15 @@ class StabilitySetting(BaseModel):
     regularization_scale: float
     evaluation_sequence: Union[Literal['all'], int]
 
+
 class TestSetting(BaseModel):
     stability: Optional[StabilitySetting]
+
 
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
     parameters: Dict[str, Any]
+
 
 class ExperimentGridSearchSettings(BaseModel):
     train_fraction: float

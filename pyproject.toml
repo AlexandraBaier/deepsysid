@@ -15,7 +15,7 @@ pydantic = "^1.9.1"
 scikit-learn = "^1.1.1"
 h5py = "^3.7.0"
 pandas = "^1.4.2"
-torch = { version="^1.11.0", optional = true }
+torch = "^1.11.0"
 cvxpy = "^1.2.1"
 pyDataverse = "^0.3.1"
 requests = "^2.28.1"

@@ -132,7 +132,7 @@ def get_stability() -> StabilitySetting:
         initial_std_delta=1e-3,
         evaluation_sequence=1,
         clip_gradient_norm=100,
-        regularization_scale=0.25
+        regularization_scale=0.25,
     )
 
 
