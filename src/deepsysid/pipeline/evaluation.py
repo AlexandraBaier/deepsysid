@@ -1,4 +1,3 @@
-import dataclasses
 import os
 from typing import Dict, List, Literal, Optional, Tuple
 
@@ -15,25 +14,6 @@ from .metrics import retrieve_metric_class
 class ReadableEvaluationScores(BaseModel):
     state_names: List[str]
     scores_per_horizon: Dict[int, Dict[str, List[float]]]
-
-
-@dataclasses.dataclass
-class EvaluationResult:
-    file_names: List[str]
-    steps: List[int]
-    scores_per_step: Dict[str, NDArray[np.float64]]
-    average_scores: Dict[str, List[float]]
-    horizon_size: int
-
-
-@dataclasses.dataclass
-class TrajectoryResult:
-    file_names: List[str]
-    rmse_mean: float
-    rmse_stddev: float
-    n_samples: int
-    rmse_per_step: List[NDArray[np.float64]]
-    horizon_size: int
 
 
 def evaluate_model(
