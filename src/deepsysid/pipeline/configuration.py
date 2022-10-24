@@ -1,10 +1,25 @@
 import itertools
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Literal, Optional, Type, Union
 
 from pydantic import BaseModel, root_validator
 
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
 from .metrics import BaseMetricConfig, retrieve_metric_class
+
+
+class StabilitySetting(BaseModel):
+    type: Literal['incremental', 'bibo']
+    optimization_steps: int
+    optimization_lr: float
+    initial_mean_delta: float
+    initial_std_delta: float
+    clip_gradient_norm: float
+    regularization_scale: float
+    evaluation_sequence: Union[Literal['all'], int]
+
+
+class TestSetting(BaseModel):
+    stability: Optional[StabilitySetting]
 
 
 class ExperimentModelConfiguration(BaseModel):
@@ -31,6 +46,7 @@ class ExperimentGridSearchSettings(BaseModel):
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
+    test: Optional[TestSetting]
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
 
@@ -53,6 +69,7 @@ class ExperimentConfiguration(BaseModel):
     time_delta: float
     window_size: int
     horizon_size: int
+    test: Optional[TestSetting]
     control_names: List[str]
     state_names: List[str]
     thresholds: Optional[List[float]]
@@ -136,6 +153,7 @@ class ExperimentConfiguration(BaseModel):
             time_delta=template.settings.time_delta,
             window_size=template.settings.window_size,
             horizon_size=template.settings.horizon_size,
+            test=template.settings.test,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
             thresholds=template.settings.thresholds,

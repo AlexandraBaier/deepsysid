@@ -15,18 +15,18 @@ from . import base, utils
 from .base import DynamicIdentificationModelConfig
 from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('deepsysid.pipeline.training')
 
 
 class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nx: int
-    nw: int
+    recurrent_dim: int
     gamma: float
     beta: float
     initial_decay_parameter: float
     decay_rate: float
     epochs_with_const_decay: int
-    num_recurrent_layers: int
+    num_recurrent_layers_init: int
     dropout: float
     sequence_length: int
     learning_rate: float
@@ -34,6 +34,7 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     loss: Literal['mse', 'msge']
+    log_min_max_real_eigenvalues: Optional[bool] = False
 
 
 class ConstrainedRnn(base.DynamicIdentificationModel):
@@ -46,16 +47,16 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.device = torch.device(self.device_name)
 
         self.nx = config.nx
-        self.nu = len(config.control_names)
-        self.ny = len(config.state_names)
-        self.nw = config.nw
+        self.control_dim = len(config.control_names)
+        self.state_dim = len(config.state_names)
+        self.recurrent_dim = config.recurrent_dim
 
         self.initial_decay_parameter = config.initial_decay_parameter
         self.decay_rate = config.decay_rate
         self.epochs_with_const_decay = config.epochs_with_const_decay
 
-        self.nw = config.nw
-        self.num_recurrent_layers = config.num_recurrent_layers
+        self.recurrent_dim = config.recurrent_dim
+        self.num_recurrent_layers_init = config.num_recurrent_layers_init
         self.dropout = config.dropout
 
         self.sequence_length = config.sequence_length
@@ -63,6 +64,8 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.batch_size = config.batch_size
         self.epochs_initializer = config.epochs_initializer
         self.epochs_predictor = config.epochs_predictor
+
+        self.log_min_max_real_eigenvalues = config.log_min_max_real_eigenvalues
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -73,18 +76,18 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
         self.predictor = rnn.LTIRnn(
             nx=self.nx,
-            nu=self.nu,
-            ny=self.ny,
-            nw=self.nw,
+            nu=self.control_dim,
+            ny=self.state_dim,
+            nw=self.recurrent_dim,
             gamma=config.gamma,
             beta=config.beta,
         ).to(self.device)
 
         self.initializer = rnn.BasicLSTM(
-            input_dim=self.nu + self.ny,
+            input_dim=self.control_dim + self.state_dim,
             recurrent_dim=self.nx,
-            num_recurrent_layers=self.num_recurrent_layers,
-            output_dim=[self.ny],
+            num_recurrent_layers=self.num_recurrent_layers_init,
+            output_dim=[self.state_dim],
             dropout=self.dropout,
         ).to(self.device)
 
@@ -95,10 +98,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             self.initializer.parameters(), lr=self.learning_rate
         )
 
-        self.y_mean: Optional[NDArray[np.float64]] = None
-        self.y_stddev: Optional[NDArray[np.float64]] = None
-        self.u_mean: Optional[NDArray[np.float64]] = None
-        self.u_stddev: Optional[NDArray[np.float64]] = None
+        self.state_mean: Optional[NDArray[np.float64]] = None
+        self.state_std: Optional[NDArray[np.float64]] = None
+        self.control_mean: Optional[NDArray[np.float64]] = None
+        self.control_std: Optional[NDArray[np.float64]] = None
 
     def train(
         self,
@@ -112,11 +115,14 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self.predictor.train()
         self.initializer.train()
 
-        self.u_mean, self.u_stddev = utils.mean_stddev(us)
-        self.y_mean, self.y_stddev = utils.mean_stddev(ys)
+        self.control_mean, self.control_std = utils.mean_stddev(us)
+        self.state_mean, self.state_std = utils.mean_stddev(ys)
 
-        us = [utils.normalize(control, self.u_mean, self.u_stddev) for control in us]
-        ys = [utils.normalize(state, self.y_mean, self.y_stddev) for state in ys]
+        us = [
+            utils.normalize(control, self.control_mean, self.control_std)
+            for control in us
+        ]
+        ys = [utils.normalize(state, self.state_mean, self.state_std) for state in ys]
 
         initializer_dataset = RecurrentInitializerDataset(us, ys, self.sequence_length)
 
@@ -156,7 +162,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                     batch['x0'].float().to(self.device), return_state=True
                 )
                 # Predict and optimize
-                y = self.predictor.forward(
+                y = self.predictor.forward(  # type: ignore
                     batch['x'].float().to(self.device), hx=hx
                 ).to(self.device)
                 barrier = self.predictor.get_barrier(t).to(self.device)
@@ -201,12 +207,19 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 t = t * 1 / self.decay_rate
                 logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
 
+            min_ev = np.float64('inf')
+            max_ev = np.float64('inf')
+            if self.log_min_max_real_eigenvalues:
+                min_ev, max_ev = self.predictor.get_min_max_real_eigenvalues()
+
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
                 f'Total Loss (Predictor): {total_loss:1f} \t'
                 f'Barrier: {barrier:1f}\t'
                 f'Backtracking Line Search iteration: {bls_iter}\t'
-                f'Max accumulated gradient norm: {max_grad:1f}'
+                f'Max accumulated gradient norm: {max_grad:1f}\t'
+                f'Min eigenvalue: {min_ev:1f}\t'
+                f'Max eigenvalue: {max_ev:1f}'
             )
 
         time_end_pred = time.time()
@@ -224,10 +237,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         control: NDArray[np.float64],
     ) -> NDArray[np.float64]:
         if (
-            self.u_mean is None
-            or self.u_stddev is None
-            or self.y_mean is None
-            or self.y_stddev is None
+            self.control_mean is None
+            or self.control_std is None
+            or self.state_mean is None
+            or self.state_std is None
         ):
             raise ValueError('Model has not been trained and cannot simulate.')
 
@@ -238,9 +251,9 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         initial_y = initial_state
         u = control
 
-        initial_u = utils.normalize(initial_u, self.u_mean, self.u_stddev)
-        initial_y = utils.normalize(initial_y, self.y_mean, self.y_stddev)
-        u = utils.normalize(u, self.u_mean, self.u_stddev)
+        initial_u = utils.normalize(initial_u, self.control_mean, self.control_std)
+        initial_y = utils.normalize(initial_y, self.state_mean, self.state_std)
+        u = utils.normalize(u, self.control_mean, self.control_std)
 
         with torch.no_grad():
             init_x = (
@@ -262,15 +275,15 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             else:
                 y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
 
-        y_np = utils.denormalize(y_np, self.y_mean, self.y_stddev)
+        y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
     def save(self, file_path: Tuple[str, ...]) -> None:
         if (
-            self.y_mean is None
-            or self.y_stddev is None
-            or self.u_mean is None
-            or self.u_stddev is None
+            self.state_mean is None
+            or self.state_std is None
+            or self.control_mean is None
+            or self.control_std is None
         ):
             raise ValueError('Model has not been trained and cannot be saved.')
 
@@ -279,10 +292,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         with open(file_path[2], mode='w') as f:
             json.dump(
                 {
-                    'y_mean': self.y_mean.tolist(),
-                    'y_stddev': self.y_stddev.tolist(),
-                    'u_mean': self.u_mean.tolist(),
-                    'u_stddev': self.u_stddev.tolist(),
+                    'state_mean': self.state_mean.tolist(),
+                    'state_std': self.state_std.tolist(),
+                    'control_mean': self.control_mean.tolist(),
+                    'control_std': self.control_std.tolist(),
                 },
                 f,
             )
@@ -296,10 +309,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
-        self.y_mean = np.array(norm['y_mean'], dtype=np.float64)
-        self.y_stddev = np.array(norm['y_stddev'], dtype=np.float64)
-        self.u_mean = np.array(norm['u_mean'], dtype=np.float64)
-        self.u_stddev = np.array(norm['u_stddev'], dtype=np.float64)
+        self.state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self.state_std = np.array(norm['state_std'], dtype=np.float64)
+        self.control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self.control_std = np.array(norm['control_std'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return 'initializer.pth', 'predictor.pth', 'json'

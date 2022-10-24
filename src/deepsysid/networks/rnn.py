@@ -255,8 +255,11 @@ class LTIRnn(nn.Module):
         self.lambdas.data = torch.tensor(lambdas.value, dtype=dtype)
 
     def forward(
-        self, u_tilde: torch.Tensor, hx: Tuple[torch.Tensor, torch.Tensor]
-    ) -> torch.Tensor:
+        self,
+        u_tilde: torch.Tensor,
+        hx: Tuple[torch.Tensor, torch.Tensor],
+        return_state: bool = False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         n_batch, n_sample, _ = u_tilde.shape
 
         Y_inv = self.Y.inverse()
@@ -272,8 +275,10 @@ class LTIRnn(nn.Module):
             x = (
                 self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
-
-        return y
+        if return_state:
+            return y, x
+        else:
+            return y
 
     def get_constraints(self) -> torch.Tensor:
         # state sizes
@@ -395,6 +400,13 @@ class LTIRnn(nn.Module):
                 b_satisfied = True
 
         return b_satisfied
+
+    def get_min_max_real_eigenvalues(self) -> Tuple[np.float64, np.float64]:
+        M = self.get_constraints()
+        return (
+            torch.min(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy(),
+            torch.max(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy(),
+        )
 
 
 class InitLSTM(nn.Module):

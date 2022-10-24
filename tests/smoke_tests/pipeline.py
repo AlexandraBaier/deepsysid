@@ -5,6 +5,7 @@ from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
     ExperimentMetricConfiguration,
+    StabilitySetting,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.metrics import (
@@ -132,6 +133,19 @@ def get_validation_fraction() -> float:
     return 0.3
 
 
+def get_stability() -> StabilitySetting:
+    return StabilitySetting(
+        type='bibo',
+        optimization_steps=3,
+        optimization_lr=1e-3,
+        initial_mean_delta=0,
+        initial_std_delta=1e-3,
+        evaluation_sequence=1,
+        clip_gradient_norm=100,
+        regularization_scale=0.25,
+    )
+
+
 def prepare_directories(
     base_path: pathlib.Path,
 ) -> Dict[str, pathlib.Path]:
@@ -186,6 +200,7 @@ def run_pipeline(
         control_names=get_control_names(),
         state_names=get_state_names(),
         thresholds=get_thresholds(),
+        test=dict(stability=get_stability()),
         models={
             model_name: dict(
                 model_class=model_class,
