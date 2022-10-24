@@ -70,7 +70,7 @@ class ExperimentConfiguration(BaseModel):
 
     @classmethod
     def from_grid_search_template(
-        cls, template: ExperimentGridSearchTemplate, device_name: str
+        cls, template: ExperimentGridSearchTemplate, device_name: str = 'cpu'
     ) -> 'ExperimentConfiguration':
         models: Dict[str, ExperimentModelConfiguration] = dict()
         for model_template in template.models:

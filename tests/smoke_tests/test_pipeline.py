@@ -38,7 +38,7 @@ def test_linear_lag(tmp_path: pathlib.Path):
         state_names=pipeline.get_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
-        window_size=pipeline.get_window_size(),
+        lag=pipeline.get_window_size(),
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
@@ -51,7 +51,7 @@ def test_quadratic_control_lag(tmp_path: pathlib.Path):
         state_names=pipeline.get_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
-        window_size=pipeline.get_window_size(),
+        lag=pipeline.get_window_size(),
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 

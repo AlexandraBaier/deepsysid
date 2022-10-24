@@ -144,7 +144,7 @@ class LinearModel(DynamicIdentificationModel):
 
 
 class LinearLagConfig(DynamicIdentificationModelConfig):
-    window_size: int
+    lag: int
 
 
 class LinearLag(FixedWindowModel):
@@ -159,7 +159,7 @@ class LinearLag(FixedWindowModel):
 
     def __init__(self, config: LinearLagConfig) -> None:
         super().__init__(
-            window_size=config.window_size,
+            window_size=config.lag,
             regressor=LinearRegression(fit_intercept=True),
         )
 

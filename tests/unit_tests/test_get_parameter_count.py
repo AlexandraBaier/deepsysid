@@ -48,10 +48,10 @@ def test_linear_lag():
     batch_size = 10
     control_dim = 3
     state_dim = 2
-    window_size = 3
+    lag = 3
 
     parameter_count = (
-        state_dim * (control_dim + window_size * (control_dim + state_dim)) + state_dim
+        state_dim * (control_dim + lag * (control_dim + state_dim)) + state_dim
     )
 
     model = LinearLag(
@@ -59,7 +59,7 @@ def test_linear_lag():
             control_names=get_control_names(control_dim),
             state_names=get_state_names(state_dim),
             time_delta=get_time_delta(),
-            window_size=window_size,
+            lag=lag,
         )
     )
     assert model.get_parameter_count() == parameter_count
@@ -77,11 +77,10 @@ def test_quadratic_control_lag():
     batch_size = 10
     control_dim = 3
     state_dim = 2
-    window_size = 3
+    lag = 3
 
     parameter_count = (
-        state_dim * (2 * control_dim + window_size * (2 * control_dim + state_dim))
-        + state_dim
+        state_dim * (2 * control_dim + lag * (2 * control_dim + state_dim)) + state_dim
     )
 
     model = QuadraticControlLag(
@@ -89,7 +88,7 @@ def test_quadratic_control_lag():
             control_names=get_control_names(control_dim),
             state_names=get_state_names(state_dim),
             time_delta=get_time_delta(),
-            window_size=window_size,
+            lag=lag,
         )
     )
     assert model.get_parameter_count() == parameter_count
