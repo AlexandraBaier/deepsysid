@@ -12,11 +12,7 @@ from ..pipeline.configuration import (
     ExperimentGridSearchTemplate,
     initialize_model,
 )
-from ..pipeline.evaluation import (
-    evaluate_4dof_ship_trajectory,
-    evaluate_model,
-    evaluate_quadcopter_trajectory,
-)
+from ..pipeline.evaluation import evaluate_model
 from ..pipeline.gridsearch import (
     ExperimentSessionManager,
     ExperimentSessionReport,
@@ -88,39 +84,6 @@ class DeepSysIdCommandLineInterface:
             self.evaluate_parser, model_argument=True, mode_argument=True
         )
         self.evaluate_parser.set_defaults(func=evaluate)
-
-        self.evaluate_4dof_ship_trajectory_parser = self.subparsers.add_parser(
-            name='evaluate_4dof_ship_trajectory',
-            help=(
-                'Evaluate the trajectory of a 4-DOF ship model, '
-                'such as the 4-DOF ship motion dataset found at '
-                'https://darus.uni-stuttgart.de/dataset.xhtml'
-                '?persistentId=doi:10.18419/darus-2905.'
-            ),
-        )
-        add_parser_arguments(
-            self.evaluate_4dof_ship_trajectory_parser,
-            model_argument=True,
-            mode_argument=True,
-        )
-        self.evaluate_4dof_ship_trajectory_parser.set_defaults(
-            func=cli_evaluate_4dof_ship_trajectory
-        )
-
-        self.evaluate_quadcopter_parser = self.subparsers.add_parser(
-            name='evaluate_quadcopter_trajectory',
-            help=(
-                'Evaluate the trajectory of a 6-DOF quadcopter model, '
-                'such as the quadcopter motion dataset found at '
-                'https://github.com/wavelab/pelican_dataset.'
-            ),
-        )
-        add_parser_arguments(
-            self.evaluate_quadcopter_parser, model_argument=True, mode_argument=True
-        )
-        self.evaluate_quadcopter_parser.set_defaults(
-            func=cli_evaluate_quadcopter_trajectory
-        )
 
         self.write_model_names_parser = self.subparsers.add_parser(
             name='write_model_names',
@@ -301,32 +264,6 @@ def evaluate(args: argparse.Namespace) -> None:
                 result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
                 threshold=threshold,
             )
-
-
-def cli_evaluate_4dof_ship_trajectory(args: argparse.Namespace) -> None:
-    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
-        config = json.load(f)
-    config = ExperimentConfiguration.parse_obj(config)
-
-    evaluate_4dof_ship_trajectory(
-        configuration=config,
-        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
-        model_name=args.model,
-        mode=args.mode,
-    )
-
-
-def cli_evaluate_quadcopter_trajectory(args: argparse.Namespace) -> None:
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
-        config = json.load(f)
-    config = ExperimentConfiguration.parse_obj(config)
-
-    evaluate_quadcopter_trajectory(
-        configuration=config,
-        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
-        model_name=args.model,
-        mode=args.mode,
-    )
 
 
 def write_model_names(args: argparse.Namespace) -> None:

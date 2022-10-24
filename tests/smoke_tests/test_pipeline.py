@@ -27,7 +27,7 @@ def test_linear_model_cpu(tmp_path: pathlib.Path):
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_linear_lag(tmp_path: pathlib.Path):
@@ -40,7 +40,7 @@ def test_linear_lag(tmp_path: pathlib.Path):
         time_delta=pipeline.get_time_delta(),
         window_size=pipeline.get_window_size(),
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_quadratic_control_lag(tmp_path: pathlib.Path):
@@ -53,7 +53,7 @@ def test_quadratic_control_lag(tmp_path: pathlib.Path):
         time_delta=pipeline.get_time_delta(),
         window_size=pipeline.get_window_size(),
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_narx(tmp_path: pathlib.Path):
@@ -71,7 +71,7 @@ def test_narx(tmp_path: pathlib.Path):
         layers=[5, 10, 5],
         dropout=0.25,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_lstm_init_model(tmp_path: pathlib.Path):
@@ -92,7 +92,7 @@ def test_lstm_init_model(tmp_path: pathlib.Path):
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_constrained_rnn(tmp_path: pathlib.Path):
@@ -119,7 +119,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path):
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_constrained_rnn_stable(tmp_path: pathlib.Path):
@@ -146,7 +146,7 @@ def test_constrained_rnn_stable(tmp_path: pathlib.Path):
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path):
@@ -189,7 +189,7 @@ def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path):
         gm=4,
         g=9.81,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path):
@@ -238,7 +238,7 @@ def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path):
         ly=4,
         lz=3,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_hybrid_linear_model(tmp_path: pathlib.Path):
@@ -260,7 +260,7 @@ def test_hybrid_linear_model(tmp_path: pathlib.Path):
         epochs_feedback=3,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_hybrid_blanke_model(tmp_path: pathlib.Path):
@@ -282,7 +282,7 @@ def test_hybrid_blanke_model(tmp_path: pathlib.Path):
         epochs_feedback=3,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_lstm_combined_init_model(tmp_path: pathlib.Path):
@@ -302,7 +302,7 @@ def test_lstm_combined_init_model(tmp_path: pathlib.Path):
         epochs=2,
         loss='msge',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_stable_switching_lstm_model(tmp_path: pathlib.Path):
@@ -323,7 +323,7 @@ def test_stable_switching_lstm_model(tmp_path: pathlib.Path):
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
 def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path):
@@ -344,4 +344,4 @@ def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path):
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, config=config)
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)

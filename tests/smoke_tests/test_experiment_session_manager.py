@@ -4,6 +4,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
     ExperimentGridSearchSettings,
     ExperimentGridSearchTemplate,
+    GridSearchMetricConfiguration,
     ModelGridSearchTemplate,
 )
 from deepsysid.pipeline.gridsearch import ExperimentSessionManager, SessionAction
@@ -43,6 +44,13 @@ def test_experiment_session_manager_new_and_test_best_successful(
             control_names=get_control_names(),
             state_names=get_state_names(),
             thresholds=get_thresholds(),
+            target_metric='d1',
+            metrics=dict(
+                d1=GridSearchMetricConfiguration(
+                    metric_class='deepsysid.pipeline.metrics.IndexOfAgreementMetric',
+                    parameters=dict(j=1),
+                )
+            ),
         ),
         models=[
             ModelGridSearchTemplate(

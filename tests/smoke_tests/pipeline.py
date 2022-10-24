@@ -2,8 +2,18 @@ import pathlib
 from typing import Dict, List, Literal
 
 from deepsysid.models.base import DynamicIdentificationModelConfig
-from deepsysid.pipeline.configuration import ExperimentConfiguration, StabilitySetting
-from deepsysid.pipeline.evaluation import evaluate_4dof_ship_trajectory, evaluate_model
+from deepsysid.pipeline.configuration import (
+    ExperimentConfiguration,
+    ExperimentMetricConfiguration,
+    StabilitySetting,
+)
+from deepsysid.pipeline.evaluation import evaluate_model
+from deepsysid.pipeline.metrics import (
+    MeanAbsoluteErrorMetric,
+    MeanSquaredErrorMetric,
+    RootMeanSquaredErrorMetric,
+    Trajectory4DOFRootMeanSquaredErrorMetric,
+)
 from deepsysid.pipeline.testing import test_model as run_model
 from deepsysid.pipeline.training import train_model
 
@@ -175,13 +185,13 @@ def run_pipeline(
     base_path: pathlib.Path,
     model_name: str,
     model_class: str,
-    config: DynamicIdentificationModelConfig,
+    model_config: DynamicIdentificationModelConfig,
 ):
     # Define and create temporary file paths and directories.
     paths = prepare_directories(base_path)
 
     # Setup configuration file.
-    configuration_dict = dict(
+    config = ExperimentConfiguration(
         train_fraction=get_train_fraction(),
         validation_fraction=get_validation_fraction(),
         time_delta=get_time_delta(),
@@ -194,11 +204,38 @@ def run_pipeline(
         models={
             model_name: dict(
                 model_class=model_class,
-                parameters=config.dict(),
+                parameters=model_config,
             )
         },
+        metrics=dict(
+            rmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric',
+                parameters=RootMeanSquaredErrorMetric.CONFIG(
+                    state_names=get_state_names(), sample_time=get_time_delta()
+                ),
+            ),
+            trajectory_rmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics'
+                '.Trajectory4DOFRootMeanSquaredErrorMetric',
+                parameters=Trajectory4DOFRootMeanSquaredErrorMetric.CONFIG(
+                    state_names=get_state_names(), sample_time=get_time_delta()
+                ),
+            ),
+            mse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.MeanSquaredErrorMetric',
+                parameters=MeanSquaredErrorMetric.CONFIG(
+                    state_names=get_state_names(), sample_time=get_time_delta()
+                ),
+            ),
+            mae=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric',
+                parameters=MeanAbsoluteErrorMetric.CONFIG(
+                    state_names=get_state_names(), sample_time=get_time_delta()
+                ),
+            ),
+        ),
+        target_metric='rmse',
     )
-    config = ExperimentConfiguration.parse_obj(configuration_dict)
 
     # Setup dataset directory.
     paths['train'].joinpath('train-0.csv').write_text(data=get_data(0))
@@ -232,11 +269,4 @@ def run_pipeline(
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
         threshold=None,
-    )
-
-    evaluate_4dof_ship_trajectory(
-        configuration=config,
-        result_directory=str(paths['result']),
-        model_name=model_name,
-        mode=get_evaluation_mode(),
     )

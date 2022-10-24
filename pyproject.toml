@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "deepsysid"
-version = "0.1.0"
+version = "0.1.1"
 description = "A system identification toolkit for multistep prediction using deep learning and hybrid methods."
-authors = ["Alexandra Baier <alx.baier@gmail.com>", "Daniel Frank "]
+authors = ["Alexandra Baier <alx.baier@gmail.com>", "Daniel Frank <daniel@familiefrank.eu>"]
 readme = "README.md"
 packages = [{include = "deepsysid", from = "src"}]
 license = "MIT"
@@ -49,6 +49,7 @@ profile = "black"
 
 [tool.mypy]
 ignore_missing_imports = true
+plugins = "numpy.typing.mypy_plugin"
 
 [tool.pytest.ini_options]
 testpaths = "tests"

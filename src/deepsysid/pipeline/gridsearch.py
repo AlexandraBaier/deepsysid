@@ -55,7 +55,6 @@ class ExperimentSessionManager(object):
         self.dataset_directory = dataset_directory
         self.models_directory = models_directory
         self.results_directory = results_directory
-        self.target_metric = 'rmse'
 
         if session_action == SessionAction.NEW and session_report is not None:
             raise ValueError('Cannot start New session with existing session report.')
@@ -128,7 +127,10 @@ class ExperimentSessionManager(object):
                 self.session_report.validated_models
             )
             logger.info(f'Trained and validated: {model_name}.')
-            logger.info(f'Validation Progress: {n_unfinished_models}/{n_total_models}.')
+            logger.info(
+                'Validation Progress: '
+                f'{n_total_models - n_unfinished_models}/{n_total_models}.'
+            )
         return self.get_session_report()
 
     def _run_test_best(self) -> ExperimentSessionReport:
@@ -219,12 +221,12 @@ class ExperimentSessionManager(object):
             scores: ReadableEvaluationScores = ReadableEvaluationScores.parse_obj(
                 json.load(f)
             )
-        try:
-            validation_score = sum(
-                scores.scores_per_horizon[self.config.settings.horizon_size].rmse
-            )
-        except KeyError:
-            raise ValueError(f'Target metric {self.target_metric} could not be found.')
+        validation_score = sum(
+            scores.scores_per_horizon[self.config.settings.horizon_size][
+                self.experiment_config.target_metric
+            ]
+        )
+
         return validation_score
 
     def _run_test_eval(
