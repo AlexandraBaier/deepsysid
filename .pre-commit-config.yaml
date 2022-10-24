@@ -13,7 +13,7 @@ repos:
         pass_filenames: false
       - id: poetry-install
         name: poetry-install
-        entry: poetry install
+        entry: poetry install --extras torch-cpu
         language: system
         pass_filenames: false
       - id: mypy
