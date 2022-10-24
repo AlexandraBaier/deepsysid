@@ -71,10 +71,13 @@ We are working on continuously adding new datasets. Run ```deepsysid download```
 
 ### Configuration
 
-We mainly use a gridsearch template JSON for our experiment and model configuration management.
+We use a JSON file for our experiment and model configuration management. 
+The configuration at its core defines a gridsearch for various models.
 Our configuration are defined as a pydantic model called ```deepsysid.pipeline.configuration.ExperimentGridSearchTemplate```.
-You can find an example template under ```examples/patrol_ship.template.json```.
-A gridsearch template will have the following format:
+You can find an example template under ```examples/patrolship.json```. 
+The configuration file should be placed under the path specified by `CONFIGURATION`.
+We can validate the configuration file with ```deepsysid validate_configuration```.
+A JSON configuration will have the following format:
 ```json
 {
   "settings": {
@@ -111,35 +114,29 @@ A gridsearch template will have the following format:
 }
 ```
 
-From this grid-search template, we can do two things.
 First, we can run `deepsysid session` on it to perform an automatic hyperparameter search as shown at the top of the README.
 
-Second, we can generate a configuration file from it that we can then use to manually train/test/evaluate specific models.
-We can generate this configuration file with ```deepsysid build_configuration <path to template>```.
-The resulting file will be written to the path specified by `CONFIGURATION`.
-Calling `build_configuration` will make sure that all settings and model parameters are complete.
+Second, we can use it to manually train/test/evaluate specific models. 
+To get a list of all model names use `deepsysid write_model_names <output text>`. 
+You can then, for example, run `deepsysid train <model_name>` on a chosen model.
+
 
 ### Command Line Interface
 
 The `deepsysid` package exposes a command-line interface. 
 Run `deepsysid` or `deepsysid --help` to access the list of available subcommands:
 ```
-usage: Command line interface for the deepsysid package. [-h]
-                                                         {build_configuration,train,test,evaluate,write_model_names,session,download}
-                                                         ...
+usage: Command line interface for the deepsysid package. [-h] {validate_configuration,train,test,evaluate,write_model_names,session,download} ...
 
 positional arguments:
-  {build_configuration,train,test,evaluate,write_model_names,session,download}
-    build_configuration
-                        Build configuration file given grid-search configuration template. Resulting
-                        configuration is written to CONFIGURATION.
+  {validate_configuration,train,test,evaluate,write_model_names,session,download}
+    validate_configuration
+                        Validate configuration file defined in CONFIGURATION.
     train               Train a model.
     test                Test a model.
     evaluate            Evaluate a model.
     write_model_names   Write all model names from the configuration to a text file.
-    session             Run a full experiment given a grid-search session template. State of the session can
-                        be loaded from and is saved to disk. This allows stopping and continuing a session at
-                        any point.
+    session             Run a full experiment given the configuration JSON. State of the session can be loaded from and is saved to disk. This allows stopping and continuing a session at any point.
     download            Download and prepare datasets.
 
 optional arguments:

@@ -45,17 +45,11 @@ class DeepSysIdCommandLineInterface:
 
         self.subparsers = self.parser.add_subparsers()
 
-        self.build_configuration_parser = self.subparsers.add_parser(
-            name='build_configuration',
-            help=(
-                'Build configuration file given grid-search configuration template. '
-                'Resulting configuration is written to CONFIGURATION.'
-            ),
+        self.validate_configuration_parser = self.subparsers.add_parser(
+            name='validate_configuration',
+            help=('Validate configuration file defined in CONFIGURATION. '),
         )
-        self.build_configuration_parser.add_argument(
-            'template', help='path to grid-search template JSON'
-        )
-        self.build_configuration_parser.set_defaults(func=build_configuration)
+        self.validate_configuration_parser.set_defaults(func=validate_configuration)
 
         self.train_parser = self.subparsers.add_parser(
             name='train', help='Train a model.'
@@ -97,13 +91,10 @@ class DeepSysIdCommandLineInterface:
         self.session_parser = self.subparsers.add_parser(
             name='session',
             help=(
-                'Run a full experiment given a grid-search session template. '
+                'Run a full experiment given the configuration JSON. '
                 'State of the session can be loaded from and is saved to disk. '
                 'This allows stopping and continuing a session at any point.'
             ),
-        )
-        self.session_parser.add_argument(
-            'template', help='Path to grid-search template JSON.'
         )
         self.session_parser.add_argument(
             'reportout', help='Output path for session report JSON.'
@@ -173,17 +164,12 @@ class DeepSysIdCommandLineInterface:
         args.func(args)
 
 
-def build_configuration(args: argparse.Namespace) -> None:
-    with open(os.path.expanduser(args.template), mode='r') as f:
+def validate_configuration(_: argparse.Namespace) -> None:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         template = json.load(f)
 
     grid_search_template = ExperimentGridSearchTemplate.parse_obj(template)
-    configuration = ExperimentConfiguration.from_grid_search_template(
-        grid_search_template, 'cpu'
-    )
-
-    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='w') as f:
-        json.dump(configuration.dict(), f)
+    ExperimentConfiguration.from_grid_search_template(grid_search_template)
 
 
 def train(args: argparse.Namespace) -> None:
@@ -199,9 +185,11 @@ def train(args: argparse.Namespace) -> None:
     if not args.disable_stdout:
         logger.addHandler(logging.StreamHandler(sys.stdout))
 
-    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
-        config = json.load(f)
-    config = ExperimentConfiguration.parse_obj(config)
+    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+        config_dict = json.load(f)
+    config = ExperimentConfiguration.from_grid_search_template(
+        ExperimentGridSearchTemplate.parse_obj(config_dict), device_name=device_name
+    )
 
     train_model(
         model_name=args.model,
@@ -218,15 +206,16 @@ def test(args: argparse.Namespace) -> None:
     else:
         device_name = build_device_name(args.enable_cuda, None)
 
+    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+        config_dict = json.load(f)
+    config = ExperimentConfiguration.from_grid_search_template(
+        ExperimentGridSearchTemplate.parse_obj(config_dict), device_name=device_name
+    )
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logger.addHandler(logging.StreamHandler(sys.stdout))
 
     time_start = time.time()
-
-    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
-        config = json.load(f)
-    config = ExperimentConfiguration.parse_obj(config)
 
     test_model(
         model_name=args.model,
@@ -243,9 +232,11 @@ def test(args: argparse.Namespace) -> None:
 
 
 def evaluate(args: argparse.Namespace) -> None:
-    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
-        config = json.load(f)
-    config = ExperimentConfiguration.parse_obj(config)
+    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+        config_dict = json.load(f)
+    config = ExperimentConfiguration.from_grid_search_template(
+        ExperimentGridSearchTemplate.parse_obj(config_dict)
+    )
 
     evaluate_model(
         config=config,
@@ -287,7 +278,7 @@ def session(args: argparse.Namespace) -> None:
     else:
         device_name = build_device_name(args.enable_cuda, None)
 
-    with open(os.path.expanduser(args.template), mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         template_obj = json.load(f)
     config = ExperimentGridSearchTemplate.parse_obj(template_obj)
 
