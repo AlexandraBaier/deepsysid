@@ -107,7 +107,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-    ) -> None:
+    ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
         self.predictor.initialize_lmi()
@@ -126,6 +126,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
         initializer_dataset = RecurrentInitializerDataset(us, ys, self.sequence_length)
 
+        initializer_loss = []
         time_start_init = time.time()
         for i in range(self.epochs_initializer):
             data_loader = data.DataLoader(
@@ -144,11 +145,19 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 f'Epoch {i + 1}/{self.epochs_initializer}\t'
                 f'Epoch Loss (Initializer): {total_loss}'
             )
+            initializer_loss.append(total_loss)
         time_end_init = time.time()
         predictor_dataset = RecurrentPredictorDataset(us, ys, self.sequence_length)
 
         time_start_pred = time.time()
         t = self.initial_decay_parameter
+        predictor_loss: List[np.float64] = []
+        min_eigenvalue: List[np.float64] = []
+        max_eigenvalue: List[np.float64] = []
+        barrier_value: List[np.float64] = []
+        gradient_norm: List[np.float64] = []
+        backtracking_iter: List[np.float64] = []
+
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
@@ -199,7 +208,16 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                             f'{(torch.max(torch.real(torch.linalg.eig(M)[0]))):1f}\t'
                             f'Backtracking line search exceeded maximum iteration.'
                         )
-                        return
+                        return dict(
+                            index=np.asarray(i),
+                            initializer_loss=np.asarray(initializer_loss),
+                            predictor_loss=np.asarray(predictor_loss),
+                            barrier_value=np.asarray(barrier_value),
+                            backtracking_iter=np.asarray(backtracking_iter),
+                            gradient_norm=np.asarray(gradient_norm),
+                            max_eigenvalue=np.asarray(max_eigenvalue),
+                            min_eigenvalue=np.asarray(min_eigenvalue),
+                        )
                     bls_iter += 1
 
             # decay t following the idea of interior point methods
@@ -217,10 +235,14 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 f'Total Loss (Predictor): {total_loss:1f} \t'
                 f'Barrier: {barrier:1f}\t'
                 f'Backtracking Line Search iteration: {bls_iter}\t'
-                f'Max accumulated gradient norm: {max_grad:1f}\t'
-                f'Min eigenvalue: {min_ev:1f}\t'
-                f'Max eigenvalue: {max_ev:1f}'
+                f'Max accumulated gradient norm: {max_grad:1f}'
             )
+            predictor_loss.append(np.float64(total_loss))
+            barrier_value.append(barrier.cpu().detach().numpy())
+            backtracking_iter.append(np.float64(bls_iter))
+            gradient_norm.append(np.float64(max_grad))
+            max_eigenvalue.append(np.float64(max_ev))
+            min_eigenvalue.append(np.float64(min_ev))
 
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
@@ -228,6 +250,17 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         logger.info(
             f'Training time for initializer {time_total_init}s '
             f'and for predictor {time_total_pred}s'
+        )
+
+        return dict(
+            index=np.asarray(i),
+            initializer_loss=np.asarray(initializer_loss),
+            predictor_loss=np.asarray(predictor_loss),
+            barrier_value=np.asarray(barrier_value),
+            backtracking_iter=np.asarray(backtracking_iter),
+            gradient_norm=np.asarray(gradient_norm),
+            max_eigenvalue=np.asarray(max_eigenvalue),
+            min_eigenvalue=np.asarray(min_eigenvalue),
         )
 
     def simulate(
