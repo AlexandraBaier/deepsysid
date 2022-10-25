@@ -18,7 +18,6 @@ from ..pipeline.gridsearch import (
     ExperimentSessionReport,
     SessionAction,
 )
-from ..pipeline.testing import test_model
 from ..pipeline.training import train_model
 from .download import (
     download_dataset_4_dof_simulated_ship,
@@ -217,15 +216,15 @@ def test(args: argparse.Namespace) -> None:
 
     time_start = time.time()
 
-    test_model(
-        model_name=args.model,
-        device_name=device_name,
-        mode=args.mode,
-        configuration=config,
-        dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
-        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
-        models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
-    )
+    # test_model(
+    #     model_name=args.model,
+    #     device_name=device_name,
+    #     mode=args.mode,
+    #     configuration=config,
+    #     dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
+    #     result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
+    #     models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
+    # )
 
     time_end = time.time()
     logger.info(f'Testing time: {time_end - time_start:1f}')

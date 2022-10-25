@@ -5,8 +5,8 @@ from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
     ExperimentMetricConfiguration,
-    StabilitySetting,
 )
+from deepsysid.pipeline.testing.stability import StabilitySetting
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.metrics import (
     MeanAbsoluteErrorMetric,
@@ -14,7 +14,7 @@ from deepsysid.pipeline.metrics import (
     RootMeanSquaredErrorMetric,
     Trajectory4DOFRootMeanSquaredErrorMetric,
 )
-from deepsysid.pipeline.testing import test_model as run_model
+from deepsysid.pipeline.testing.inference import test_model as run_model
 from deepsysid.pipeline.training import train_model
 
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from .configuration import ExperimentConfiguration, ExperimentGridSearchTemplate
 from .data_io import build_score_file_name
 from .evaluation import ReadableEvaluationScores, evaluate_model
-from .testing import test_model
+from .testing.inference import test_model
 from .training import train_model
 
 logger = logging.getLogger(__name__)
