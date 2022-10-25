@@ -151,7 +151,7 @@ class LtiRnnInit(base.DynamicIdentificationModel):
                 y, _ = self.predictor.forward(  # type: ignore
                     batch['x'].float().to(self.device), hx=hx
                 )
-                y.to(self.device)
+                y = y.to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
@@ -440,7 +440,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 y, _ = self.predictor.forward(  # type: ignore
                     batch['x'].float().to(self.device), hx=hx
                 )
-                y.to(self.device)
+                y = y.to(self.device)
                 barrier = self.predictor.get_barrier(t).to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
@@ -528,6 +528,8 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             gradient_norm=np.asarray(gradient_norm),
             max_eigenvalue=np.asarray(max_eigenvalue),
             min_eigenvalue=np.asarray(min_eigenvalue),
+            training_time_init=np.asarray(time_total_init),
+            training_time_pred=np.asarray(time_total_pred),
         )
 
     def simulate(
