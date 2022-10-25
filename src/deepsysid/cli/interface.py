@@ -259,9 +259,11 @@ def evaluate(args: argparse.Namespace) -> None:
 
 def write_model_names(args: argparse.Namespace) -> None:
     with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
-        config = json.load(f)
+        config_dict = json.load(f)
 
-    config = ExperimentConfiguration.parse_obj(config)
+    config = ExperimentConfiguration.from_grid_search_template(
+        ExperimentGridSearchTemplate.parse_obj(config_dict)
+    )
     model_names = list(config.models.keys())
 
     with open(args.output, mode='w') as f:
