@@ -185,7 +185,7 @@ def train(args: argparse.Namespace) -> None:
     if not args.disable_stdout:
         logger.addHandler(logging.StreamHandler(sys.stdout))
 
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config_dict = json.load(f)
     config = ExperimentConfiguration.from_grid_search_template(
         ExperimentGridSearchTemplate.parse_obj(config_dict), device_name=device_name
@@ -206,7 +206,7 @@ def test(args: argparse.Namespace) -> None:
     else:
         device_name = build_device_name(args.enable_cuda, None)
 
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config_dict = json.load(f)
     config = ExperimentConfiguration.from_grid_search_template(
         ExperimentGridSearchTemplate.parse_obj(config_dict), device_name=device_name
@@ -232,7 +232,7 @@ def test(args: argparse.Namespace) -> None:
 
 
 def evaluate(args: argparse.Namespace) -> None:
-    with open(os.environ[CONFIGURATION_ENV_VAR], mode='r') as f:
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config_dict = json.load(f)
     config = ExperimentConfiguration.from_grid_search_template(
         ExperimentGridSearchTemplate.parse_obj(config_dict)

@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from ..models import utils
 from ..models.base import DynamicIdentificationModel
 from ..models.hybrid.bounded_residual import HybridResidualLSTMModel
-from ..models.recurrent import ConstrainedRnn, LSTMInitModel
+from ..models.recurrent import ConstrainedRnn, LSTMInitModel, LtiRnnInit
 from ..pipeline.configuration import (
     ExperimentConfiguration,
     StabilitySetting,
@@ -97,7 +97,9 @@ def test_model(
             )
 
     if configuration.test and (
-        isinstance(model, LSTMInitModel) or isinstance(model, ConstrainedRnn)
+        isinstance(model, LSTMInitModel)
+        or isinstance(model, ConstrainedRnn)
+        or isinstance(model, LtiRnnInit)
     ):
         if configuration.test.stability:
             logger.info(
@@ -364,7 +366,7 @@ def test_stability_and_save_reults(
     horizon_size: int,
     state_names: List[str],
     control_names: List[str],
-    model: Union[LSTMInitModel, ConstrainedRnn],
+    model: Union[LSTMInitModel, ConstrainedRnn, LtiRnnInit],
     device_name: str,
     model_name: str,
     result_directory: str,
@@ -472,7 +474,7 @@ def test_stability_and_save_reults(
 def optimize_input_disturbance(
     stability_config: StabilitySetting,
     horizon_size: int,
-    model: Union[LSTMInitModel, ConstrainedRnn],
+    model: Union[LSTMInitModel, ConstrainedRnn, LtiRnnInit],
     device_name: str,
     initial_control: NDArray[np.float64],
     initial_state: NDArray[np.float64],
@@ -534,14 +536,16 @@ def optimize_input_disturbance(
         if stability_config.type == 'incremental':
             u_b = u_norm.clone()
             # model prediction
-            _, hx = model.initializer(u_init_norm, return_state=True)
+            _, hx = model.initializer(u_init_norm)
             # TODO set initial state to zero should be good to find unstable sequences
             hx = (
                 torch.zeros_like(hx[0]).to(device_name),
                 torch.zeros_like(hx[1]).to(device_name),
             )
-            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
-            y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
+            y_hat_a, _ = model.predictor(u_a, hx=hx)
+            y_hat_b, _ = model.predictor(u_b, hx=hx)
+            y_hat_a = y_hat_a.squeeze()
+            y_hat_b = y_hat_b.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
@@ -567,13 +571,14 @@ def optimize_input_disturbance(
 
         elif stability_config.type == 'bibo':
             # model prediction
-            _, hx = model.initializer(u_init_norm, return_state=True)
+            _, hx = model.initializer(u_init_norm)
             # TODO set initial state to zero should be good to find unstable sequences
             hx = (
                 torch.zeros_like(hx[0]).to(device_name),
                 torch.zeros_like(hx[1]).to(device_name),
             )
-            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
+            y_hat_a, _ = model.predictor(u_a, hx=hx)
+            y_hat_a = y_hat_a.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
