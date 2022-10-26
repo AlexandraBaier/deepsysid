@@ -109,7 +109,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
-                y = self.initializer.forward(batch['x'].float().to(self.device))
+                y, _ = self.initializer.forward(batch['x'].float().to(self.device))
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
@@ -134,9 +134,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
             for batch_idx, batch in enumerate(data_loader):
                 self.predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self.initializer.forward(
-                    batch['x0'].float().to(self.device), return_state=True
-                )
+                _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
                 yhat, _, _, _ = self.predictor.forward(
                     batch['x'].float().to(self.device),
@@ -207,7 +205,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
             y0 = (
                 torch.from_numpy(initial_state[-1]).unsqueeze(0).float().to(self.device)
             )
-            _, hx = self.initializer.forward(init_x, return_state=True)
+            _, hx = self.initializer.forward(init_x)
             y, _, A, B = self.predictor.forward(pred_x, y0, hx=hx)
             y_np = y.cpu().detach().squeeze().numpy()
 
