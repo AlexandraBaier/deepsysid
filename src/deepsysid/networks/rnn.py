@@ -134,14 +134,18 @@ class LtiRnn(nn.Module):
 
         self.nl = torch.tanh
 
-        self.A = torch.nn.Linear(self.nx, self.nx, bias=False)
-        self.B1 = torch.nn.Linear(self.nu, self.nx, bias=False)
-        self.B2 = torch.nn.Linear(self.nw, self.nx, bias=False)
+        self.Y = torch.nn.Parameter(torch.eye(self.nx))
+
+        self.A_tilde = torch.nn.Linear(self.nx, self.nx, bias=False)
+        self.B1_tilde = torch.nn.Linear(self.nu, self.nx, bias=False)
+        self.B2_tilde = torch.nn.Linear(self.nw, self.nx, bias=False)
         self.C1 = torch.nn.Linear(self.nx, self.ny, bias=False)
         self.D11 = torch.nn.Linear(self.nu, self.ny, bias=False)
         self.D12 = torch.nn.Linear(self.nw, self.ny, bias=False)
-        self.C2 = torch.nn.Linear(self.nx, self.nz, bias=False)
-        self.D21 = torch.nn.Linear(self.nu, self.nz, bias=False)
+        self.C2_tilde = torch.nn.Linear(self.nx, self.nz, bias=False)
+        self.D21_tilde = torch.nn.Linear(self.nu, self.nz, bias=False)
+
+        self.lambdas = torch.nn.Parameter(torch.ones((self.nw, 1)))
 
     def forward(
         self,
@@ -150,15 +154,20 @@ class LtiRnn(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         n_batch, n_sample, _ = u_tilde.shape
 
+        Y_inv = self.Y.inverse()
+        T_inv = torch.diag(1 / torch.squeeze(self.lambdas))
+
         # initialize output
         y = torch.zeros((n_batch, n_sample, self.ny))
 
         x = hx[0][1]
         for k in range(n_sample):
-            z = self.C2(x) + self.D21(u_tilde[:, k, :])
+            z = (self.C2_tilde(x) + self.D21_tilde(u_tilde[:, k, :])) @ T_inv
             w = self.nl(z)
             y[:, k, :] = self.C1(x) + self.D11(u_tilde[:, k, :]) + self.D12(w)
-            x = self.A(x) + self.B1(u_tilde[:, k, :]) + self.B2(w)
+            x = (
+                self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
+            ) @ Y_inv
 
         return y, x
 
