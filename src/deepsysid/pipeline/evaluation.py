@@ -41,10 +41,16 @@ def evaluate_model(
     true = []
 
     with h5py.File(test_file_path, 'r') as f:
-        file_names = [fn.decode('UTF-8') for fn in f['file_names'][:].tolist()]
+        file_names = [
+            fn.decode('UTF-8') for fn in f['main']['metadata']['file_names'][:].tolist()
+        ]
         for i in range(len(file_names)):
-            pred.append(f['predicted'][str(i)][:].astype(np.float64))
-            true.append(f['true'][str(i)][:].astype(np.float64))
+            pred.append(
+                f['main'][str(i)]['outputs']['pred_state'][:].astype(np.float64)
+            )
+            true.append(
+                f['main'][str(i)]['outputs']['true_state'][:].astype(np.float64)
+            )
 
     # Load metrics.
     metrics = dict()

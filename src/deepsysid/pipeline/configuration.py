@@ -1,11 +1,11 @@
 import itertools
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Type
 
 from pydantic import BaseModel, root_validator
 
-from .testing import BaseTestConfig
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
 from .metrics import BaseMetricConfig, retrieve_metric_class
+from .testing.base import BaseTestConfig, retrieve_test_class
 
 
 class ExperimentModelConfiguration(BaseModel):
@@ -41,8 +41,7 @@ class ExperimentGridSearchSettings(BaseModel):
     horizon_size: int
     control_names: List[str]
     state_names: List[str]
-    thresholds: Optional[List[float]] = None
-    tests: Optional[Dict[str, GridSearchTestConfiguration]] = None
+    additional_tests: Dict[str, GridSearchTestConfiguration]
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
 
@@ -67,10 +66,9 @@ class ExperimentConfiguration(BaseModel):
     horizon_size: int
     control_names: List[str]
     state_names: List[str]
-    thresholds: Optional[List[float]]
     metrics: Dict[str, ExperimentMetricConfiguration]
     target_metric: str
-    tests: Dict[str, ExperimentTestConfiguration]
+    additional_tests: Dict[str, ExperimentTestConfiguration]
     models: Dict[str, ExperimentModelConfiguration]
 
     @root_validator
@@ -143,6 +141,22 @@ class ExperimentConfiguration(BaseModel):
                 ),
             )
 
+        tests = dict()
+        base_test_params = dict(
+            control_names=template.settings.control_names,
+            state_names=template.settings.state_names,
+            window_size=template.settings.window_size,
+            horizon_size=template.settings.horizon_size,
+        )
+        for name, test in template.settings.additional_tests.items():
+            test_class = retrieve_test_class(test.test_class)
+            tests[name] = ExperimentTestConfiguration(
+                test_class=test.test_class,
+                parameters=test_class.CONFIG.parse_obj(
+                    {**test.parameters, **base_test_params}
+                ),
+            )
+
         return cls(
             train_fraction=template.settings.train_fraction,
             validation_fraction=template.settings.validation_fraction,
@@ -151,10 +165,10 @@ class ExperimentConfiguration(BaseModel):
             horizon_size=template.settings.horizon_size,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
-            thresholds=template.settings.thresholds,
             models=models,
             target_metric=template.settings.target_metric,
             metrics=metrics,
+            additional_tests=tests,
         )
 
 

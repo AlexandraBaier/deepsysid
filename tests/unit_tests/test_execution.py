@@ -39,7 +39,6 @@ def test_experiment_configuration_from_grid_search_template_successful():
             horizon_size=20,
             control_names=['u1', 'u2'],
             state_names=['x1', 'x2', 'x3'],
-            thresholds=[0.1],
             target_metric='d1',
             metrics=dict(
                 d1=GridSearchMetricConfiguration(
@@ -47,6 +46,7 @@ def test_experiment_configuration_from_grid_search_template_successful():
                     parameters=dict(j=1),
                 )
             ),
+            additional_tests=dict(),
         ),
         models=[
             ModelGridSearchTemplate(
