@@ -6,6 +6,16 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 from torch import nn
+from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
+from deepsysid.models.recurrent import (
+    RnnInit,
+    LtiRnnInit,
+    ConstrainedRnn,
+    LSTMCombinedInitModel,
+    LSTMInitModel,
+)
+
+from deepsysid.networks.switching import StableSwitchingLSTM
 
 from ...models import utils
 from ...models.base import DynamicIdentificationModel
@@ -27,7 +37,7 @@ class SupportsRNNForward(Protocol):
         self,
         x_pred: torch.Tensor,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        return_state: bool = False,
+        y_init: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         pass
 
@@ -44,8 +54,8 @@ class SupportsStabilityTest(Protocol):
     state_std: NDArray[np.float64]
     control_mean: NDArray[np.float64]
     control_std: NDArray[np.float64]
-    initializer: SupportsRNNForwardModule
-    predictor: SupportsRNNForwardModule
+    initializer: SupportsRNNForward
+    predictor: SupportsRNNForward
 
 
 class SupportsStabilityTestDynamicIdentificationModel(
@@ -79,7 +89,9 @@ class StabilityTest(BaseTest):
     def test(
         self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
     ) -> TestResult:
-        if not isinstance(model, SupportsStabilityTestDynamicIdentificationModel):
+        # if not isinstance(model, SupportsStabilityTestDynamicIdentificationModel):
+        #     return TestResult(list(), dict())
+        if not (any((isinstance(model, RnnInit),isinstance(model, LtiRnnInit),isinstance(model, ConstrainedRnn),isinstance(model, LSTMInitModel)))):
             return TestResult(list(), dict())
 
         controls = []
@@ -142,7 +154,7 @@ class StabilityTest(BaseTest):
 
 def optimize_input_disturbance(
     config: StabilityTestConfig,
-    model: SupportsStabilityTestDynamicIdentificationModel,
+    model: Union[RnnInit, LtiRnnInit, LSTMInitModel, ConstrainedRnn],
     initial_control: NDArray[np.float64],
     initial_state: NDArray[np.float64],
     true_control: NDArray[np.float64],
@@ -197,14 +209,16 @@ def optimize_input_disturbance(
         if config.type == 'incremental':
             u_b = u_norm.clone()
             # model prediction
-            _, hx = model.initializer(u_init_norm, return_state=True)
+            _, hx = model.initializer(u_init_norm)
             # TODO set initial state to zero should be good to find unstable sequences
             hx = (
                 torch.zeros_like(hx[0]).to(model.device_name),
                 torch.zeros_like(hx[1]).to(model.device_name),
             )
-            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
-            y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
+            y_hat_a, _ = model.predictor(u_a, hx=hx)
+            y_hat_b, _ = model.predictor(u_b, hx=hx)
+            y_hat_a = y_hat_a.squeeze()
+            y_hat_b = y_hat_b.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
@@ -230,13 +244,14 @@ def optimize_input_disturbance(
 
         elif config.type == 'bibo':
             # model prediction
-            _, hx = model.initializer(u_init_norm, return_state=True)
+            _, hx = model.initializer(u_init_norm)
             # TODO set initial state to zero should be good to find unstable sequences
             hx = (
                 torch.zeros_like(hx[0]).to(model.device_name),
                 torch.zeros_like(hx[1]).to(model.device_name),
             )
-            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
+            y_hat_a, _ = model.predictor(u_a, hx=hx)
+            y_hat_a = y_hat_a.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment

@@ -103,9 +103,9 @@ class BasicRnn(nn.Module):
     def forward(
         self,
         u: torch.Tensor,
-        hx: torch.Tensor,
+        hx: Tuple[torch.Tensor, torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        h, _ = self.predictor_rnn(u, hx)
+        h, _ = self.predictor_rnn(u, hx[0])
         return self.out(h), h
 
 
@@ -202,9 +202,7 @@ class LtiRnn(nn.Module):
             z = (self.C2_tilde(x) + self.D21_tilde(u[:, k, :])) @ T_inv
             w = self.nl(z)
             y[:, k, :] = self.C1(x) + self.D11(u[:, k, :]) + self.D12(w)
-            x = (
-                self.A_tilde(x) + self.B1_tilde(u[:, k, :]) + self.B2_tilde(w)
-            ) @ Y_inv
+            x = (self.A_tilde(x) + self.B1_tilde(u[:, k, :]) + self.B2_tilde(w)) @ Y_inv
 
         return y, x
 

@@ -49,7 +49,21 @@ def test_experiment_session_manager_new_and_test_best_successful(
                     parameters=dict(j=1),
                 )
             ),
-            additional_tests=dict(),
+            additional_tests=dict(
+                stability=dict(
+                    test_class='deepsysid.pipeline.testing.stability.StabilityTest',
+                    parameters=dict(
+                        type='bibo',
+                        optimization_steps=10,
+                        optimization_lr=1e-3,
+                        initial_mean_delta=0.0,
+                        initial_std_delta=1e-3,
+                        evaluation_sequence=1,
+                        clip_gradient_norm=100.0,
+                        regularization_scale=0.25,
+                    ),
+                )
+            ),
         ),
         models=[
             ModelGridSearchTemplate(
