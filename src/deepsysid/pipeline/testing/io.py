@@ -4,20 +4,11 @@ from typing import Dict, Iterator, List, Literal
 
 import h5py
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 
-from deepsysid.pipeline.configuration import ExperimentConfiguration
-from deepsysid.pipeline.data_io import (
-    build_result_file_name,
-    load_file_names,
-    load_simulation_data,
-)
-from deepsysid.pipeline.testing.base import (
-    TestResult,
-    TestResultMetadata,
-    TestSequenceResult,
-    TestSimulation,
-)
+from ..configuration import ExperimentConfiguration
+from ..data_io import build_result_file_name, load_file_names, load_simulation_data
+from .base import TestResult, TestResultMetadata, TestSequenceResult, TestSimulation
 
 
 def load_test_simulations(
