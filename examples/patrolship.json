@@ -20,45 +20,65 @@
       "alpha_x",
       "alpha_y"
     ],
-    "thresholds": [
-      10.0,
-      8.0,
-      6.0,
-      5.0,
-      4.0,
-      3.0,
-      2.0,
-      1.5,
-      1.0,
-      0.75,
-      0.5,
-      0.4,
-      0.3,
-      0.2,
-      0.1
-    ],
+    "additional_tests": {
+      "stability": {
+        "test_class": "deepsysid.pipeline.testing.stability.StabilityTest",
+        "parameters": {
+          "type": "bibo",
+          "optimization_steps": 100,
+          "optimization_lr": 1e-3,
+          "initial_mean_delta": 0.0,
+          "initial_std_delta": 1e-3,
+          "evaluation_sequence": 1,
+          "clip_gradient_norm": 100.0,
+          "regularization_scale": 0.25
+        }
+      },
+      "bounded_residual": {
+        "test_class": "deepsysid.pipeline.testing.bounded_residual.BoundedResidualInferenceTest",
+        "parameters": {
+          "thresholds": [
+            10.0,
+            8.0,
+            6.0,
+            5.0,
+            4.0,
+            3.0,
+            2.0,
+            1.5,
+            1.0,
+            0.75,
+            0.5,
+            0.4,
+            0.3,
+            0.2,
+            0.1
+          ]
+        }
+      }
+    },
     "target_metric": "trajectory_rmse",
     "metrics": {
       "rmse": {
-        "metric_class":  "deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric",
+        "metric_class": "deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric",
         "parameters": {}
       },
       "mse": {
-        "metric_class":  "deepsysid.pipeline.metrics.MeanSquaredErrorMetric",
+        "metric_class": "deepsysid.pipeline.metrics.MeanSquaredErrorMetric",
         "parameters": {}
       },
       "mae": {
-        "metric_class":  "deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric",
+        "metric_class": "deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric",
         "parameters": {}
       },
       "d1": {
-        "metric_class":  "deepsysid.pipeline.metrics.IndexOfAgreementMetric",
+        "metric_class": "deepsysid.pipeline.metrics.IndexOfAgreementMetric",
         "parameters": {
           "j": 1
         }
       },
       "trajectory_rmse": {
-        "metric_class":  "deepsysid.pipeline.metrics.Trajectory4DOFRootMeanSquaredErrorMetric",
+        "metric_class": "deepsysid.pipeline.metrics.Trajectory4DOFRootMeanSquaredErrorMetric",
         "parameters": {}
       }
     }
@@ -496,14 +516,14 @@
         "log_min_max_real_eigenvalues": true,
         "num_recurrent_layers_init": 2,
         "loss": "mse",
-        "beta":1.0,
+        "beta": 1.0,
         "time_delta": 1.0,
         "dropout": 0.25,
         "sequence_length": 50,
         "batch_size": 128,
         "epochs_initializer": 50,
         "epochs_predictor": 500,
-        "initial_decay_parameter":1e-3,
+        "initial_decay_parameter": 1e-3,
         "decay_rate": 10,
         "epochs_with_const_decay": 100,
         "recurrent_dim": 64,
@@ -511,11 +531,11 @@
         "learning_rate": 0.0025
       },
       "flexible_parameters": {
-        "gamma":[
-	        5.0,
+        "gamma": [
+          5.0,
           20.0,
-	        40.0,
-	        100.0
+          40.0,
+          100.0
         ]
       }
     },

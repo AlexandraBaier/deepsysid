@@ -45,7 +45,7 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
         self.state_dim = state_dim
         self.recurrent_dim = recurrent_dim
 
-        self.lstm = LSTM(  # type: ignore
+        self.lstm = LSTM(
             input_size=control_dim,
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
@@ -120,7 +120,7 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         self.state_dim = state_dim
         self.recurrent_dim = recurrent_dim
 
-        self.lstm = LSTM(  # type: ignore
+        self.lstm = LSTM(
             input_size=control_dim,
             hidden_size=recurrent_dim,
             num_layers=num_recurrent_layers,
@@ -128,7 +128,7 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
             batch_first=True,
         )
 
-        self.T = nn.Parameter(  # type: ignore
+        self.T = nn.Parameter(
             torch.from_numpy(np.random.normal(0, 1, (state_dim, state_dim))).float(),
             requires_grad=True,
         )

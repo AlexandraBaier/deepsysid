@@ -5,7 +5,7 @@ from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
     ExperimentMetricConfiguration,
-    StabilitySetting,
+    ExperimentTestConfiguration,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.metrics import (
@@ -14,7 +14,11 @@ from deepsysid.pipeline.metrics import (
     RootMeanSquaredErrorMetric,
     Trajectory4DOFRootMeanSquaredErrorMetric,
 )
-from deepsysid.pipeline.testing import test_model as run_model
+from deepsysid.pipeline.testing.bounded_residual import (
+    BoundedResidualInferenceTestConfig,
+)
+from deepsysid.pipeline.testing.runner import test_model as run_model
+from deepsysid.pipeline.testing.stability import StabilityTestConfig
 from deepsysid.pipeline.training import train_model
 
 
@@ -121,29 +125,12 @@ def get_evaluation_mode() -> Literal['train', 'validation', 'test']:
     return 'test'
 
 
-def get_thresholds() -> List[float]:
-    return [1.0, 0.5, 0.1]
-
-
 def get_train_fraction() -> float:
     return 0.6
 
 
 def get_validation_fraction() -> float:
     return 0.3
-
-
-def get_stability() -> StabilitySetting:
-    return StabilitySetting(
-        type='bibo',
-        optimization_steps=3,
-        optimization_lr=1e-3,
-        initial_mean_delta=0,
-        initial_std_delta=1e-3,
-        evaluation_sequence=1,
-        clip_gradient_norm=100,
-        regularization_scale=0.25,
-    )
 
 
 def prepare_directories(
@@ -186,7 +173,7 @@ def run_pipeline(
     model_name: str,
     model_class: str,
     model_config: DynamicIdentificationModelConfig,
-):
+) -> None:
     # Define and create temporary file paths and directories.
     paths = prepare_directories(base_path)
 
@@ -199,8 +186,36 @@ def run_pipeline(
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
         state_names=get_state_names(),
-        thresholds=get_thresholds(),
-        test=dict(stability=get_stability()),
+        additional_tests=dict(
+            stability=ExperimentTestConfiguration(
+                test_class='deepsysid.pipeline.testing.stability.StabilityTest',
+                parameters=StabilityTestConfig(
+                    control_names=get_control_names(),
+                    state_names=get_state_names(),
+                    window_size=get_window_size(),
+                    horizon_size=get_horizon_size(),
+                    type='bibo',
+                    optimization_steps=3,
+                    optimization_lr=1e-3,
+                    initial_mean_delta=0,
+                    initial_std_delta=1e-3,
+                    evaluation_sequence=1,
+                    clip_gradient_norm=100,
+                    regularization_scale=0.25,
+                ),
+            ),
+            bounded_residual=ExperimentTestConfiguration(
+                test_class='deepsysid.pipeline.testing'
+                '.bounded_residual.BoundedResidualInferenceTest',
+                parameters=BoundedResidualInferenceTestConfig(
+                    control_names=get_control_names(),
+                    state_names=get_state_names(),
+                    window_size=get_window_size(),
+                    horizon_size=get_horizon_size(),
+                    thresholds=[0.5, 1.0],
+                ),
+            ),
+        ),
         models={
             model_name: dict(
                 model_class=model_class,

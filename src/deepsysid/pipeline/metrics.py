@@ -96,28 +96,38 @@ class IndexOfAgreementMetric(AverageOverSequenceMetric):
         partial_diff_sum = np.sum(
             np.power(partial_diff_true + partial_diff_pred, self.j), axis=0
         )
-        return 1 - (error_sum / partial_diff_sum)
+        score: NDArray[np.float64] = 1 - (error_sum / partial_diff_sum)
+        return score
 
 
 class MeanSquaredErrorMetric(AverageOverSequenceMetric):
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        return mean_squared_error(y_true, y_pred, multioutput='raw_values')
+        score: NDArray[np.float64] = mean_squared_error(
+            y_true, y_pred, multioutput='raw_values'
+        )
+        return score
 
 
 class RootMeanSquaredErrorMetric(AverageOverSequenceMetric):
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        return np.sqrt(mean_squared_error(y_true, y_pred, multioutput='raw_values'))
+        score: NDArray[np.float64] = np.sqrt(
+            mean_squared_error(y_true, y_pred, multioutput='raw_values')
+        )
+        return score
 
 
 class MeanAbsoluteErrorMetric(AverageOverSequenceMetric):
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        return mean_absolute_error(y_true, y_pred, multioutput='raw_values')
+        score: NDArray[np.float64] = mean_absolute_error(
+            y_true, y_pred, multioutput='raw_values'
+        )
+        return score
 
 
 class Trajectory4DOFRootMeanSquaredErrorMetric(BaseMetric):

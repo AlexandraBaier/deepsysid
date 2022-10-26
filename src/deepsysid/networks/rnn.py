@@ -26,7 +26,7 @@ class BasicLSTM(nn.Module):
         self.recurrent_dim = recurrent_dim
 
         with warnings.catch_warnings():
-            self.predictor_lstm = nn.LSTM(  # type: ignore
+            self.predictor_lstm = nn.LSTM(
                 input_size=input_dim,
                 hidden_size=recurrent_dim,
                 num_layers=num_recurrent_layers,
@@ -124,7 +124,7 @@ class LinearOutputLSTM(nn.Module):
         self.recurrent_dim = recurrent_dim
 
         with warnings.catch_warnings():
-            self.predictor_lstm = nn.LSTM(  # type: ignore
+            self.predictor_lstm = nn.LSTM(
                 input_size=input_dim,
                 hidden_size=recurrent_dim,
                 num_layers=num_recurrent_layers,
@@ -171,14 +171,18 @@ class LtiRnn(nn.Module):
 
         self.nl = torch.tanh
 
-        self.A = torch.nn.Linear(self.nx, self.nx, bias=False)
-        self.B1 = torch.nn.Linear(self.nu, self.nx, bias=False)
-        self.B2 = torch.nn.Linear(self.nw, self.nx, bias=False)
+        self.Y = torch.nn.Parameter(torch.eye(self.nx))
+
+        self.A_tilde = torch.nn.Linear(self.nx, self.nx, bias=False)
+        self.B1_tilde = torch.nn.Linear(self.nu, self.nx, bias=False)
+        self.B2_tilde = torch.nn.Linear(self.nw, self.nx, bias=False)
         self.C1 = torch.nn.Linear(self.nx, self.ny, bias=False)
         self.D11 = torch.nn.Linear(self.nu, self.ny, bias=False)
         self.D12 = torch.nn.Linear(self.nw, self.ny, bias=False)
-        self.C2 = torch.nn.Linear(self.nx, self.nz, bias=False)
-        self.D21 = torch.nn.Linear(self.nu, self.nz, bias=False)
+        self.C2_tilde = torch.nn.Linear(self.nx, self.nz, bias=False)
+        self.D21_tilde = torch.nn.Linear(self.nu, self.nz, bias=False)
+
+        self.lambdas = torch.nn.Parameter(torch.ones((self.nw, 1)))
 
     def forward(
         self,
@@ -187,15 +191,20 @@ class LtiRnn(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         n_batch, n_sample, _ = u.shape
 
+        Y_inv = self.Y.inverse()
+        T_inv = torch.diag(1 / torch.squeeze(self.lambdas))
+
         # initialize output
         y = torch.zeros((n_batch, n_sample, self.ny))
 
         x = hx[0][1]
         for k in range(n_sample):
-            z = self.C2(x) + self.D21(u[:, k, :])
+            z = (self.C2_tilde(x) + self.D21_tilde(u[:, k, :])) @ T_inv
             w = self.nl(z)
             y[:, k, :] = self.C1(x) + self.D11(u[:, k, :]) + self.D12(w)
-            x = self.A(x) + self.B1(u[:, k, :]) + self.B2(w)
+            x = (
+                self.A_tilde(x) + self.B1_tilde(u[:, k, :]) + self.B2_tilde(w)
+            ) @ Y_inv
 
         return y, x
 
@@ -216,7 +225,7 @@ class LtiRnnConvConstr(nn.Module):
         self.beta = beta
         self.nl = torch.tanh
 
-        self.Y = torch.nn.Parameter(torch.zeros((self.nx, self.nx)))  # type: ignore
+        self.Y = torch.nn.Parameter(torch.zeros((self.nx, self.nx)))
         self.A_tilde = torch.nn.Linear(self.nx, self.nx, bias=False)
         self.B1_tilde = torch.nn.Linear(self.nu, self.nx, bias=False)
         self.B2_tilde = torch.nn.Linear(self.nw, self.nx, bias=False)
@@ -225,32 +234,32 @@ class LtiRnnConvConstr(nn.Module):
         self.D12 = torch.nn.Linear(self.nw, self.ny, bias=False)
         self.C2_tilde = torch.nn.Linear(self.nx, self.nz, bias=False)
         self.D21_tilde = torch.nn.Linear(self.nu, self.nz, bias=False)
-        self.lambdas = torch.nn.Parameter(torch.zeros((self.nw, 1)))  # type: ignore
+        self.lambdas = torch.nn.Parameter(torch.zeros((self.nw, 1)))
 
     def initialize_lmi(self) -> None:
         # storage function
-        Y = cp.Variable((self.nx, self.nx), 'Y')  # type: ignore
+        Y = cp.Variable((self.nx, self.nx), 'Y')
         # hidden state
-        A_tilde = cp.Variable((self.nx, self.nx), 'A_tilde')  # type: ignore
-        B1_tilde = cp.Variable((self.nx, self.nu), 'B1_tilde')  # type: ignore
-        B2_tilde = cp.Variable((self.nx, self.nw), 'B2_tilde')  # type: ignore
+        A_tilde = cp.Variable((self.nx, self.nx), 'A_tilde')
+        B1_tilde = cp.Variable((self.nx, self.nu), 'B1_tilde')
+        B2_tilde = cp.Variable((self.nx, self.nw), 'B2_tilde')
         # output
-        C1 = cp.Variable((self.ny, self.nx), 'C1')  # type: ignore
-        D11 = cp.Variable((self.ny, self.nu), 'D11')  # type: ignore
-        D12 = cp.Variable((self.ny, self.nw), 'D12')  # type: ignore
+        C1 = cp.Variable((self.ny, self.nx), 'C1')
+        D11 = cp.Variable((self.ny, self.nu), 'D11')
+        D12 = cp.Variable((self.ny, self.nw), 'D12')
         # disturbance
         C2 = np.random.normal(0, 1 / np.sqrt(self.nw), size=(self.nz, self.nx))
         D21 = np.random.normal(0, 1 / np.sqrt(self.nw), size=(self.nz, self.nu))
         # multipliers
-        lambdas = cp.Variable((self.nw, 1), 'tau', nonneg=True)  # type: ignore
-        T = cp.diag(lambdas)  # type: ignore
+        lambdas = cp.Variable((self.nw, 1), 'tau', nonneg=True)
+        T = cp.diag(lambdas)
 
         C2_tilde = T @ C2
         D21_tilde = T @ D21
 
         if self.ga == 0:
             # lmi that ensures finite l2 gain
-            M = cp.bmat(  # type: ignore
+            M = cp.bmat(
                 [
                     [-Y, self.beta * C2_tilde.T, A_tilde.T],
                     [self.beta * C2_tilde, -2 * T, B2_tilde.T],
@@ -259,7 +268,7 @@ class LtiRnnConvConstr(nn.Module):
             )
         else:
             # lmi that ensures l2 gain gamma
-            M = cp.bmat(  # type: ignore
+            M = cp.bmat(
                 [
                     [
                         -Y,
@@ -293,13 +302,13 @@ class LtiRnnConvConstr(nn.Module):
         tol = 1e-4
         # rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
         # objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
-        objective = cp.Minimize(None)  # type: ignore
-        problem = cp.Problem(objective, [M << -tol * np.eye(nM)])  # type: ignore
+        objective = cp.Minimize(None)
+        problem = cp.Problem(objective, [M << -tol * np.eye(nM)])
 
         logger.info(
             'Initialize Parameter by values that satisfy LMI constraints, solve SDP ...'
         )
-        problem.solve(solver=cp.SCS)  # type: ignore
+        problem.solve(solver=cp.SCS)
         # check if t is negative
         # max_eig_lmi = np.max(np.real(np.linalg.eig(M.value)[0]))
 
@@ -495,7 +504,7 @@ class InitLSTM(nn.Module):
         self.recurrent_dim = recurrent_dim
 
         with warnings.catch_warnings():
-            self.init_lstm = nn.LSTM(  # type: ignore
+            self.init_lstm = nn.LSTM(
                 input_size=input_dim + output_dim,
                 hidden_size=recurrent_dim,
                 num_layers=num_recurrent_layers,
@@ -503,7 +512,7 @@ class InitLSTM(nn.Module):
                 batch_first=True,
             )
 
-            self.predictor_lstm = nn.LSTM(  # type: ignore
+            self.predictor_lstm = nn.LSTM(
                 input_size=input_dim,
                 hidden_size=recurrent_dim,
                 num_layers=num_recurrent_layers,
