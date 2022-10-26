@@ -599,6 +599,37 @@
           192
         ]
       }
+    },
+    {
+      "model_base_name": "RnnInit",
+      "model_class": "deepsysid.models.recurrent.RnnInit",
+      "static_parameters": {
+        "time_delta": 1.0,
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 128,
+        "epochs_initializer": 400,
+        "epochs_predictor": 2000,
+        "learning_rate": 0.0025,
+        "bias": false
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "loss": [
+          "mse",
+          "msge"
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
+        ]
+      }
     }
   ]
 }

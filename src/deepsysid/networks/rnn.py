@@ -72,6 +72,43 @@ class BasicLSTM(nn.Module):
         return x, (h0, c0)
 
 
+class BasicRnn(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: int,
+        dropout: float,
+        bias: bool,
+    ) -> None:
+        super().__init__()
+
+        self.num_recurrent_layers = num_recurrent_layers
+        self.recurrent_dim = recurrent_dim
+
+        self.predictor_rnn = nn.RNN(
+            input_size=input_dim,
+            hidden_size=recurrent_dim,
+            num_layers=num_recurrent_layers,
+            dropout=dropout,
+            bias=bias,
+            batch_first=True,
+        )
+
+        self.out = nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=bias
+        )
+
+    def forward(
+        self,
+        u: torch.Tensor,
+        hx: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        h, _ = self.predictor_rnn(u, hx)
+        return self.out(h), h
+
+
 class LinearOutputLSTM(nn.Module):
     def __init__(
         self,
@@ -145,20 +182,20 @@ class LtiRnn(nn.Module):
 
     def forward(
         self,
-        u_tilde: torch.Tensor,
+        u: torch.Tensor,
         hx: Tuple[torch.Tensor, torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        n_batch, n_sample, _ = u_tilde.shape
+        n_batch, n_sample, _ = u.shape
 
         # initialize output
         y = torch.zeros((n_batch, n_sample, self.ny))
 
         x = hx[0][1]
         for k in range(n_sample):
-            z = self.C2(x) + self.D21(u_tilde[:, k, :])
+            z = self.C2(x) + self.D21(u[:, k, :])
             w = self.nl(z)
-            y[:, k, :] = self.C1(x) + self.D11(u_tilde[:, k, :]) + self.D12(w)
-            x = self.A(x) + self.B1(u_tilde[:, k, :]) + self.B2(w)
+            y[:, k, :] = self.C1(x) + self.D11(u[:, k, :]) + self.D12(w)
+            x = self.A(x) + self.B1(u[:, k, :]) + self.B2(w)
 
         return y, x
 
@@ -295,10 +332,10 @@ class LtiRnnConvConstr(nn.Module):
 
     def forward(
         self,
-        u_tilde: torch.Tensor,
+        u: torch.Tensor,
         hx: Tuple[torch.Tensor, torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        n_batch, n_sample, _ = u_tilde.shape
+        n_batch, n_sample, _ = u.shape
 
         Y_inv = self.Y.inverse()
         T_inv = torch.diag(1 / torch.squeeze(self.lambdas))
@@ -307,12 +344,10 @@ class LtiRnnConvConstr(nn.Module):
 
         x = hx[0][1]
         for k in range(n_sample):
-            z = (self.C2_tilde(x) + self.D21_tilde(u_tilde[:, k, :])) @ T_inv
+            z = (self.C2_tilde(x) + self.D21_tilde(u[:, k, :])) @ T_inv
             w = self.nl(z)
-            y[:, k, :] = self.C1(x) + self.D11(u_tilde[:, k, :]) + self.D12(w)
-            x = (
-                self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
-            ) @ Y_inv
+            y[:, k, :] = self.C1(x) + self.D11(u[:, k, :]) + self.D12(w)
+            x = (self.A_tilde(x) + self.B1_tilde(u[:, k, :]) + self.B2_tilde(w)) @ Y_inv
 
         return y, x
 
