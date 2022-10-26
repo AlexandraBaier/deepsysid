@@ -1,7 +1,7 @@
 import abc
 import json
 import logging
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -270,7 +270,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
-                y = self.initializer.forward(batch['x'].float().to(self.device))
+                y, _ = self.initializer.forward(batch['x'].float().to(self.device))
                 # This type error is ignored, since we know that y will not be a tuple.
                 batch_loss = mse_loss(
                     y, batch['y'].float().to(self.device)  # type: ignore
@@ -341,9 +341,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     (batch['x_pred'].float().to(self.device), y_whitebox), dim=2
                 )  # serial connection
 
-                _, hx_init = self.initializer.forward(x_init, return_state=True)
+                _, hx_init = self.initializer.forward(x_init)
 
-                y_blackbox = self.blackbox_forward(x_pred, y_whitebox, hx=hx_init)
+                y_blackbox, _ = self.blackbox_forward(x_pred, y_whitebox, hx=hx_init)
                 y = y_blackbox + y_whitebox
 
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
@@ -381,7 +381,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 )
 
                 x_init = batch['x_init'].float().to(self.device)
-                _, hx_init = self.initializer.forward(x_init, return_state=True)
+                _, hx_init = self.initializer.forward(x_init)
 
                 for time in range(self.sequence_length):
                     y_whitebox = (
@@ -415,7 +415,6 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                         ),
                         y_whitebox.unsqueeze(1),
                         hx=hx_init,
-                        return_state=True,
                     )
                     current_state = y_blackbox.squeeze(1) + y_whitebox
                     y_est[:, time, :] = current_state
@@ -502,7 +501,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 .to(self.device)
             )
             _, hx = self.initializer.forward(
-                x_init, return_state=True
+                x_init
             )  # hx is hidden state of predictor LSTM
 
             x_control_un = (
@@ -540,7 +539,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     (x_pred[:, time, :], y_whitebox), dim=1
                 ).unsqueeze(1)
                 y_blackbox, hx = self.blackbox_forward(
-                    x_blackbox, None, hx=hx, return_state=True
+                    x_blackbox,
+                    None,
+                    hx=hx,
                 )
                 y_blackbox = torch.clamp(y_blackbox, -threshold, threshold)
                 y_est = y_blackbox.squeeze(1) + y_whitebox
@@ -618,12 +619,11 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         x_pred: torch.Tensor,
         y_wb: Optional[torch.Tensor],
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        return_state: bool = False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         # TODO: x_pred should instead be x_control.
         # TODO: I don't remember the purpose of this function.
         #  Probably to generalize the code in some way?
-        return self.blackbox.forward(x_pred, hx=hx, return_state=return_state)
+        return self.blackbox.forward(x_pred, hx=hx)
 
 
 class HybridMinimalManeuveringModel(HybridResidualLSTMModel):

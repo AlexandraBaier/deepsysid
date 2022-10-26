@@ -18,6 +18,280 @@ from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 logger = logging.getLogger('deepsysid.pipeline.training')
 
 
+class LtiRnnInitConfig(DynamicIdentificationModelConfig):
+    nx: int
+    recurrent_dim: int
+    num_recurrent_layers_init: int
+    dropout: float
+    sequence_length: int
+    learning_rate: float
+    batch_size: int
+    epochs_initializer: int
+    epochs_predictor: int
+    clip_gradient_norm: float
+    loss: Literal['mse', 'msge']
+
+
+class LtiRnnInit(base.DynamicIdentificationModel):
+    CONFIG = LtiRnnInitConfig
+
+    def __init__(self, config: LtiRnnInitConfig):
+        super().__init__(config)
+
+        self.device_name = config.device_name
+        self.device = torch.device(self.device_name)
+
+        self.nx = config.nx
+        self.control_dim = len(config.control_names)
+        self.state_dim = len(config.state_names)
+        self.recurrent_dim = config.recurrent_dim
+
+        self.recurrent_dim = config.recurrent_dim
+        self.num_recurrent_layers_init = config.num_recurrent_layers_init
+        self.dropout = config.dropout
+
+        self.sequence_length = config.sequence_length
+        self.learning_rate = config.learning_rate
+        self.batch_size = config.batch_size
+        self.epochs_initializer = config.epochs_initializer
+        self.epochs_predictor = config.epochs_predictor
+
+        self.clip_gradient_norm = config.clip_gradient_norm
+
+        if config.loss == 'mse':
+            self.loss: nn.Module = nn.MSELoss().to(self.device)
+        elif config.loss == 'msge':
+            self.loss = loss.MSGELoss().to(self.device)
+        else:
+            raise ValueError('loss can only be "mse" or "msge"')
+
+        self.predictor = rnn.LtiRnn(
+            nx=self.nx,
+            nu=self.control_dim,
+            ny=self.state_dim,
+            nw=self.recurrent_dim,
+        ).to(self.device)
+
+        self.initializer = rnn.BasicLSTM(
+            input_dim=self.control_dim + self.state_dim,
+            recurrent_dim=self.nx,
+            num_recurrent_layers=self.num_recurrent_layers_init,
+            output_dim=[self.state_dim],
+            dropout=self.dropout,
+        ).to(self.device)
+
+        self.optimizer_pred = optim.Adam(
+            self.predictor.parameters(), lr=self.learning_rate
+        )
+        self.optimizer_init = optim.Adam(
+            self.initializer.parameters(), lr=self.learning_rate
+        )
+
+        self.state_mean: Optional[NDArray[np.float64]] = None
+        self.state_std: Optional[NDArray[np.float64]] = None
+        self.control_mean: Optional[NDArray[np.float64]] = None
+        self.control_std: Optional[NDArray[np.float64]] = None
+
+    def train(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Dict[str, NDArray[np.float64]]:
+        us = control_seqs
+        ys = state_seqs
+        self.predictor.train()
+        self.initializer.train()
+
+        self.control_mean, self.control_std = utils.mean_stddev(us)
+        self.state_mean, self.state_std = utils.mean_stddev(ys)
+
+        us = [
+            utils.normalize(control, self.control_mean, self.control_std)
+            for control in us
+        ]
+        ys = [utils.normalize(state, self.state_mean, self.state_std) for state in ys]
+
+        initializer_dataset = RecurrentInitializerDataset(us, ys, self.sequence_length)
+
+        initializer_loss = []
+        time_start_init = time.time()
+        for i in range(self.epochs_initializer):
+            data_loader = data.DataLoader(
+                initializer_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
+            total_loss = 0.0
+            for batch_idx, batch in enumerate(data_loader):
+                self.initializer.zero_grad()
+                y, _ = self.initializer.forward(batch['x'].float().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                total_loss += batch_loss.item()
+                batch_loss.backward()
+                self.optimizer_init.step()
+
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_initializer}\t'
+                f'Epoch Loss (Initializer): {total_loss}'
+            )
+            initializer_loss.append(total_loss)
+        time_end_init = time.time()
+
+        predictor_dataset = RecurrentPredictorDataset(us, ys, self.sequence_length)
+
+        time_start_pred = time.time()
+        predictor_loss: List[np.float64] = []
+        gradient_norm: List[np.float64] = []
+        for i in range(self.epochs_predictor):
+            data_loader = data.DataLoader(
+                predictor_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
+            total_loss = 0
+            max_grad = 0
+            for batch_idx, batch in enumerate(data_loader):
+                self.predictor.zero_grad()
+                # Initialize predictor with state of initializer network
+                _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
+                # Predict and optimize
+                y, _ = self.predictor.forward(  # type: ignore
+                    batch['x'].float().to(self.device), hx=hx
+                )
+                y = y.to(self.device)
+                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                total_loss += batch_loss.item()
+                batch_loss.backward()
+
+                # gradient infos
+                grads_norm = [
+                    torch.linalg.norm(p.grad) for p in self.predictor.parameters()
+                ]
+                max_grad += max(grads_norm)
+                torch.nn.utils.clip_grad_norm_(
+                    self.predictor.parameters(), self.clip_gradient_norm
+                )
+                self.optimizer_pred.step()
+
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_predictor}\t'
+                f'Total Loss (Predictor): {total_loss:1f} \t'
+                f'Max accumulated gradient norm: {max_grad:1f}'
+            )
+            predictor_loss.append(np.float64(total_loss))
+            gradient_norm.append(np.float64(max_grad))
+
+        time_end_pred = time.time()
+        time_total_init = time_end_init - time_start_init
+        time_total_pred = time_end_pred - time_start_pred
+        logger.info(
+            f'Training time for initializer {time_total_init}s '
+            f'and for predictor {time_total_pred}s'
+        )
+
+        return dict(
+            index=np.asarray(i),
+            initializer_loss=np.asarray(initializer_loss),
+            predictor_loss=np.asarray(predictor_loss),
+            gradient_norm=np.asarray(gradient_norm),
+            training_time_init=np.asarray(time_total_init),
+            training_time_pred=np.asarray(time_total_pred),
+        )
+
+    def simulate(
+        self,
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        if (
+            self.control_mean is None
+            or self.control_std is None
+            or self.state_mean is None
+            or self.state_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
+        self.initializer.eval()
+        self.predictor.eval()
+
+        initial_u = initial_control
+        initial_y = initial_state
+        u = control
+
+        initial_u = utils.normalize(initial_u, self.control_mean, self.control_std)
+        initial_y = utils.normalize(initial_y, self.state_mean, self.state_std)
+        u = utils.normalize(u, self.control_mean, self.control_std)
+
+        with torch.no_grad():
+            init_x = (
+                torch.from_numpy(np.hstack((initial_u[1:], initial_y[:-1])))
+                .unsqueeze(0)
+                .float()
+                .to(self.device)
+            )
+            pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
+
+            _, hx = self.initializer.forward(init_x)
+            y, _ = self.predictor.forward(pred_x, hx=hx)
+            # We do this just to get proper type hints.
+            # Option 1 should always execute until we change the signature.
+            if isinstance(y, torch.Tensor):
+                y_np: NDArray[np.float64] = (
+                    y.cpu().detach().squeeze().numpy().astype(np.float64)
+                )
+            else:
+                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
+
+        y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
+        return y_np
+
+    def save(self, file_path: Tuple[str, ...]) -> None:
+        if (
+            self.state_mean is None
+            or self.state_std is None
+            or self.control_mean is None
+            or self.control_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot be saved.')
+
+        torch.save(self.initializer.state_dict(), file_path[0])
+        torch.save(self.predictor.state_dict(), file_path[1])
+        with open(file_path[2], mode='w') as f:
+            json.dump(
+                {
+                    'state_mean': self.state_mean.tolist(),
+                    'state_std': self.state_std.tolist(),
+                    'control_mean': self.control_mean.tolist(),
+                    'control_std': self.control_std.tolist(),
+                },
+                f,
+            )
+
+    def load(self, file_path: Tuple[str, ...]) -> None:
+        self.initializer.load_state_dict(
+            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
+        )
+        self.predictor.load_state_dict(
+            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
+        )
+        with open(file_path[2], mode='r') as f:
+            norm = json.load(f)
+        self.state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self.state_std = np.array(norm['state_std'], dtype=np.float64)
+        self.control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self.control_std = np.array(norm['control_std'], dtype=np.float64)
+
+    def get_file_extension(self) -> Tuple[str, ...]:
+        return 'initializer.pth', 'predictor.pth', 'json'
+
+    def get_parameter_count(self) -> int:
+        # technically parameter counts of both networks are equal
+        init_count = sum(
+            p.numel() for p in self.initializer.parameters() if p.requires_grad
+        )
+        predictor_count = sum(
+            p.numel() for p in self.predictor.parameters() if p.requires_grad
+        )
+        return init_count + predictor_count
+
+
 class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nx: int
     recurrent_dim: int
@@ -74,7 +348,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
         else:
             raise ValueError('loss can only be "mse" or "msge"')
 
-        self.predictor = rnn.LTIRnn(
+        self.predictor = rnn.LtiRnnConvConstr(
             nx=self.nx,
             nu=self.control_dim,
             ny=self.state_dim,
@@ -135,7 +409,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
-                y = self.initializer.forward(batch['x'].float().to(self.device))
+                y, _ = self.initializer.forward(batch['x'].float().to(self.device))
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
@@ -167,13 +441,12 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             for batch_idx, batch in enumerate(data_loader):
                 self.predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self.initializer.forward(
-                    batch['x0'].float().to(self.device), return_state=True
-                )
+                _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
-                y = self.predictor.forward(  # type: ignore
+                y, _ = self.predictor.forward(  # type: ignore
                     batch['x'].float().to(self.device), hx=hx
-                ).to(self.device)
+                )
+                y = y.to(self.device)
                 barrier = self.predictor.get_barrier(t).to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
@@ -261,6 +534,8 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             gradient_norm=np.asarray(gradient_norm),
             max_eigenvalue=np.asarray(max_eigenvalue),
             min_eigenvalue=np.asarray(min_eigenvalue),
+            training_time_init=np.asarray(time_total_init),
+            training_time_pred=np.asarray(time_total_pred),
         )
 
     def simulate(
@@ -297,8 +572,8 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
             )
             pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
 
-            _, hx = self.initializer.forward(init_x, return_state=True)
-            y = self.predictor.forward(pred_x, hx=hx)
+            _, hx = self.initializer.forward(init_x)
+            y, _ = self.predictor.forward(pred_x, hx=hx)
             # We do this just to get proper type hints.
             # Option 1 should always execute until we change the signature.
             if isinstance(y, torch.Tensor):
@@ -465,7 +740,7 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
-                y = self.initializer.forward(batch['x'].float().to(self.device))
+                y, _ = self.initializer.forward(batch['x'].float().to(self.device))
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
@@ -491,11 +766,9 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             for batch_idx, batch in enumerate(data_loader):
                 self.predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self.initializer.forward(
-                    batch['x0'].float().to(self.device), return_state=True
-                )
+                _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
-                y = self.predictor.forward(batch['x'].float().to(self.device), hx=hx)
+                y, _ = self.predictor.forward(batch['x'].float().to(self.device), hx=hx)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
@@ -554,8 +827,8 @@ class LSTMInitModel(base.DynamicIdentificationModel):
             )
             pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
 
-            _, hx = self.initializer.forward(init_x, return_state=True)
-            y = self.predictor.forward(pred_x, hx=hx, return_state=False)
+            _, hx = self.initializer.forward(init_x)
+            y, _ = self.predictor.forward(pred_x, hx=hx)
             # We do this just to get proper type hints.
             # Option 1 should always execute until we change the signature.
             if isinstance(y, torch.Tensor):
@@ -719,7 +992,6 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
                 y, h0 = self.predictor.forward(
                     batch_pred['x'].float().to(self.device),
                     x0=batch_init['x'].float().to(self.device),
-                    return_init=True,
                 )
 
                 batch_loss_init = self.loss.forward(
@@ -786,7 +1058,7 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
             )
             pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
 
-            y = self.predictor.forward(pred_x, x0=init_x)
+            y, _ = self.predictor.forward(pred_x, x0=init_x)
             # We do this just to get proper type hints.
             # Option 1 should always execute until we change the signature.
             if isinstance(y, torch.Tensor):

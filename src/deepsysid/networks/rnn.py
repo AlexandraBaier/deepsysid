@@ -1,6 +1,6 @@
 import logging
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import cvxpy as cp
 import numpy as np
@@ -54,8 +54,7 @@ class BasicLSTM(nn.Module):
         x_pred: torch.Tensor,
         y_init: Optional[torch.Tensor] = None,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        return_state: bool = False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         if y_init is not None:
             h0 = y_init.new_zeros(
                 (self.num_recurrent_layers, y_init.shape[0], self.recurrent_dim)
@@ -70,10 +69,7 @@ class BasicLSTM(nn.Module):
             x = F.relu(layer(x))
         x = self.out[-1](x)
 
-        if return_state:
-            return x, (h0, c0)
-        else:
-            return x  # type: ignore
+        return x, (h0, c0)
 
 
 class LinearOutputLSTM(nn.Module):
@@ -113,22 +109,65 @@ class LinearOutputLSTM(nn.Module):
         self,
         x_pred: torch.Tensor,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        return_state: bool = False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         x, (h0, c0) = self.predictor_lstm.forward(x_pred, hx)
         x = self.out.forward(x)
 
-        if return_state:
-            return x, (h0, c0)
-        else:
-            return x
+        return x, (h0, c0)
 
 
-class LTIRnn(nn.Module):
+class LtiRnn(nn.Module):
+    def __init__(
+        self,
+        nx: int,
+        nu: int,
+        ny: int,
+        nw: int,
+    ) -> None:
+        super(LtiRnn, self).__init__()
+
+        self.nx = nx  # number of states
+        self.nu = nu  # number of performance (external) input
+        self.nw = nw  # number of disturbance input
+        self.ny = ny  # number of performance output
+        self.nz = nw  # number of disturbance output, always equal to size of w
+
+        self.nl = torch.tanh
+
+        self.A = torch.nn.Linear(self.nx, self.nx, bias=False)
+        self.B1 = torch.nn.Linear(self.nu, self.nx, bias=False)
+        self.B2 = torch.nn.Linear(self.nw, self.nx, bias=False)
+        self.C1 = torch.nn.Linear(self.nx, self.ny, bias=False)
+        self.D11 = torch.nn.Linear(self.nu, self.ny, bias=False)
+        self.D12 = torch.nn.Linear(self.nw, self.ny, bias=False)
+        self.C2 = torch.nn.Linear(self.nx, self.nz, bias=False)
+        self.D21 = torch.nn.Linear(self.nu, self.nz, bias=False)
+
+    def forward(
+        self,
+        u_tilde: torch.Tensor,
+        hx: Tuple[torch.Tensor, torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        n_batch, n_sample, _ = u_tilde.shape
+
+        # initialize output
+        y = torch.zeros((n_batch, n_sample, self.ny))
+
+        x = hx[0][1]
+        for k in range(n_sample):
+            z = self.C2(x) + self.D21(u_tilde[:, k, :])
+            w = self.nl(z)
+            y[:, k, :] = self.C1(x) + self.D11(u_tilde[:, k, :]) + self.D12(w)
+            x = self.A(x) + self.B1(u_tilde[:, k, :]) + self.B2(w)
+
+        return y, x
+
+
+class LtiRnnConvConstr(nn.Module):
     def __init__(
         self, nx: int, nu: int, ny: int, nw: int, gamma: float, beta: float
     ) -> None:
-        super(LTIRnn, self).__init__()
+        super(LtiRnnConvConstr, self).__init__()
 
         self.nx = nx  # number of states
         self.nu = nu  # number of performance (external) input
@@ -258,8 +297,7 @@ class LTIRnn(nn.Module):
         self,
         u_tilde: torch.Tensor,
         hx: Tuple[torch.Tensor, torch.Tensor],
-        return_state: bool = False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         n_batch, n_sample, _ = u_tilde.shape
 
         Y_inv = self.Y.inverse()
@@ -275,10 +313,8 @@ class LTIRnn(nn.Module):
             x = (
                 self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
-        if return_state:
-            return y, x
-        else:
-            return y
+
+        return y, x
 
     def get_constraints(self) -> torch.Tensor:
         # state sizes
@@ -456,11 +492,11 @@ class InitLSTM(nn.Module):
                 nn.init.xavier_normal_(param)
 
     def forward(
-        self, input: torch.Tensor, x0: torch.Tensor, return_init: bool = False
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
+        self,
+        input: torch.Tensor,
+        x0: torch.Tensor,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         h_init, (h0_init, c0_init) = self.init_lstm(x0)
         h, (_, _) = self.predictor_lstm(input, (h0_init, c0_init))
-        if return_init:
-            return self.output_layer(h), self.init_layer(h_init)
-        else:
-            return self.output_layer(h)  # type: ignore
+
+        return self.output_layer(h), self.init_layer(h_init)

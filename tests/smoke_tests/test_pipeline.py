@@ -12,6 +12,7 @@ from deepsysid.models.recurrent import (
     ConstrainedRnn,
     LSTMCombinedInitModel,
     LSTMInitModel,
+    LtiRnnInit,
 )
 from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
 
@@ -145,6 +146,29 @@ def test_constrained_rnn_stable(tmp_path: pathlib.Path):
         epochs_initializer=2,
         epochs_predictor=2,
         loss='mse',
+    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+
+
+def test_lti_rnn_init(tmp_path: pathlib.Path):
+    model_name = 'LtiRnnInit'
+    model_class = 'deepsysid.models.recurrent.LtiRnnInit'
+    config = LtiRnnInit.CONFIG(
+        control_names=pipeline.get_control_names(),
+        state_names=pipeline.get_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        nx=2,
+        recurrent_dim=3,
+        num_recurrent_layers_init=3,
+        dropout=0.25,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+        clip_gradient_norm=10,
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
