@@ -15,7 +15,6 @@ from .pipeline import (
     get_data,
     get_horizon_size,
     get_state_names,
-    get_thresholds,
     get_time_delta,
     get_train_fraction,
     get_validation_fraction,
@@ -43,7 +42,6 @@ def test_experiment_session_manager_new_and_test_best_successful(
             horizon_size=get_horizon_size(),
             control_names=get_control_names(),
             state_names=get_state_names(),
-            thresholds=get_thresholds(),
             target_metric='d1',
             metrics=dict(
                 d1=GridSearchMetricConfiguration(
@@ -51,6 +49,7 @@ def test_experiment_session_manager_new_and_test_best_successful(
                     parameters=dict(j=1),
                 )
             ),
+            additional_tests=dict(),
         ),
         models=[
             ModelGridSearchTemplate(

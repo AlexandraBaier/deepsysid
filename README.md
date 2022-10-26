@@ -74,7 +74,6 @@ We are working on continuously adding new datasets. Run ```deepsysid download```
 We use a JSON file for our experiment and model configuration management. 
 The configuration at its core defines a gridsearch for various models.
 Our configuration are defined as a pydantic model called ```deepsysid.pipeline.configuration.ExperimentGridSearchTemplate```.
-You can find an example template under ```examples/patrolship.json```. 
 The configuration file should be placed under the path specified by `CONFIGURATION`.
 We can validate the configuration file with ```deepsysid validate_configuration```.
 A JSON configuration will have the following format:
@@ -95,6 +94,14 @@ A JSON configuration will have the following format:
         "metric_class": "str, metrics (MSE, MAE, ...) executed during the evaluation.",
         "parameters": {
           "parameter name": "parameter value, metrics might additional require settings."
+        }
+      }
+    },
+    "additional_tests": {
+      "name of test": {
+        "test_class": "str, tests performed when calling test in addition to inference on dataset.",
+        "parameters": {
+          "parameter name": "parameter value, some tests require additional settings."
         }
       }
     }

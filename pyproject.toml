@@ -25,10 +25,10 @@ types-requests = "^2.28.10"
 torch-cpu = ["torch"]
 
 [tool.poetry.dev-dependencies]
-black = "22.6.0"
-mypy = "^0.961"
-isort = "5.10.1"
-flake8 = "4.0.1"
+black = "^22.6.0"
+mypy = "^0.982"
+isort = "^5.10.1"
+flake8 = "^4.0.1"
 pytest = "^7.1.2"
 pre-commit = "^2.20.0"
 coverage = "^6.4.3"
@@ -50,6 +50,7 @@ profile = "black"
 [tool.mypy]
 ignore_missing_imports = true
 plugins = "numpy.typing.mypy_plugin"
+enable_recursive_aliases = true
 
 [tool.pytest.ini_options]
 testpaths = "tests"

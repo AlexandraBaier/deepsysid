@@ -1,25 +1,11 @@
 import itertools
-from typing import Any, Dict, List, Literal, Optional, Type, Union
+from typing import Any, Dict, List, Type
 
 from pydantic import BaseModel, root_validator
 
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
 from .metrics import BaseMetricConfig, retrieve_metric_class
-
-
-class StabilitySetting(BaseModel):
-    type: Literal['incremental', 'bibo']
-    optimization_steps: int
-    optimization_lr: float
-    initial_mean_delta: float
-    initial_std_delta: float
-    clip_gradient_norm: float
-    regularization_scale: float
-    evaluation_sequence: Union[Literal['all'], int]
-
-
-class TestSetting(BaseModel):
-    stability: Optional[StabilitySetting]
+from .testing.base import BaseTestConfig, retrieve_test_class
 
 
 class ExperimentModelConfiguration(BaseModel):
@@ -32,8 +18,18 @@ class ExperimentMetricConfiguration(BaseModel):
     parameters: BaseMetricConfig
 
 
+class ExperimentTestConfiguration(BaseModel):
+    test_class: str
+    parameters: BaseTestConfig
+
+
 class GridSearchMetricConfiguration(BaseModel):
     metric_class: str
+    parameters: Dict[str, Any]
+
+
+class GridSearchTestConfiguration(BaseModel):
+    test_class: str
     parameters: Dict[str, Any]
 
 
@@ -45,8 +41,7 @@ class ExperimentGridSearchSettings(BaseModel):
     horizon_size: int
     control_names: List[str]
     state_names: List[str]
-    thresholds: Optional[List[float]]
-    test: Optional[TestSetting]
+    additional_tests: Dict[str, GridSearchTestConfiguration]
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
 
@@ -69,12 +64,11 @@ class ExperimentConfiguration(BaseModel):
     time_delta: float
     window_size: int
     horizon_size: int
-    test: Optional[TestSetting]
     control_names: List[str]
     state_names: List[str]
-    thresholds: Optional[List[float]]
     metrics: Dict[str, ExperimentMetricConfiguration]
     target_metric: str
+    additional_tests: Dict[str, ExperimentTestConfiguration]
     models: Dict[str, ExperimentModelConfiguration]
 
     @root_validator
@@ -147,19 +141,34 @@ class ExperimentConfiguration(BaseModel):
                 ),
             )
 
+        tests = dict()
+        base_test_params = dict(
+            control_names=template.settings.control_names,
+            state_names=template.settings.state_names,
+            window_size=template.settings.window_size,
+            horizon_size=template.settings.horizon_size,
+        )
+        for name, test in template.settings.additional_tests.items():
+            test_class = retrieve_test_class(test.test_class)
+            tests[name] = ExperimentTestConfiguration(
+                test_class=test.test_class,
+                parameters=test_class.CONFIG.parse_obj(
+                    {**test.parameters, **base_test_params}
+                ),
+            )
+
         return cls(
             train_fraction=template.settings.train_fraction,
             validation_fraction=template.settings.validation_fraction,
             time_delta=template.settings.time_delta,
             window_size=template.settings.window_size,
             horizon_size=template.settings.horizon_size,
-            test=template.settings.test,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
-            thresholds=template.settings.thresholds,
             models=models,
             target_metric=template.settings.target_metric,
             metrics=metrics,
+            additional_tests=tests,
         )
 
 
