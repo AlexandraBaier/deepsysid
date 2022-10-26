@@ -250,10 +250,10 @@ class RnnInit(DynamicIdentificationModel):
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self.initializer.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name) 
+            torch.load(file_path[0], map_location=self.device_name)
         )
         self.predictor.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name) 
+            torch.load(file_path[1], map_location=self.device_name)
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)

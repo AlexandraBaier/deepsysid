@@ -25,6 +25,7 @@ from .base import (
     TestResult,
     TestSequenceResult,
     TestSimulation,
+    StabilityTestConfig,
 )
 from .io import split_simulations
 
@@ -64,18 +65,7 @@ class SupportsStabilityTestDynamicIdentificationModel(
     pass
 
 
-class StabilityTestConfig(BaseTestConfig):
-    type: Literal['incremental', 'bibo']
-    optimization_steps: int
-    optimization_lr: float
-    initial_mean_delta: float
-    initial_std_delta: float
-    clip_gradient_norm: float
-    regularization_scale: float
-    evaluation_sequence: Union[Literal['all'], int]
-
-
-class StabilityTest(BaseTest):
+class BiboStabilityTest(BaseTest):
     CONFIG = StabilityTestConfig
 
     def __init__(self, config: StabilityTestConfig) -> None:
@@ -91,7 +81,16 @@ class StabilityTest(BaseTest):
     ) -> TestResult:
         # if not isinstance(model, SupportsStabilityTestDynamicIdentificationModel):
         #     return TestResult(list(), dict())
-        if not (any((isinstance(model, RnnInit),isinstance(model, LtiRnnInit),isinstance(model, ConstrainedRnn),isinstance(model, LSTMInitModel)))):
+        if not (
+            any(
+                (
+                    isinstance(model, RnnInit),
+                    isinstance(model, LtiRnnInit),
+                    isinstance(model, ConstrainedRnn),
+                    isinstance(model, LSTMInitModel),
+                )
+            )
+        ):
             return TestResult(list(), dict())
 
         controls = []
@@ -101,7 +100,7 @@ class StabilityTest(BaseTest):
 
         if isinstance(self.evaluation_sequence, int):
             logger.info(
-                f'Test stability for sequence number {self.evaluation_sequence}'
+                f'Test bibo stability for sequence number {self.evaluation_sequence}'
             )
             dataset = list(
                 split_simulations(self.window_size, self.horizon_size, simulations)
@@ -121,7 +120,7 @@ class StabilityTest(BaseTest):
             true_states.append(sim.true_state)
 
         elif self.evaluation_sequence == 'all':
-            logger.info(f'Test stability for {self.evaluation_sequence} sequences')
+            logger.info(f'Test bibo stability for {self.evaluation_sequence} sequences')
             for idx_data, sim in enumerate(
                 split_simulations(self.window_size, self.horizon_size, simulations)
             ):
@@ -206,72 +205,36 @@ def optimize_input_disturbance(
     pred_state: Optional[NDArray[np.float64]] = None
     for step_idx in range(config.optimization_steps):
         u_a = u_norm + delta
-        if config.type == 'incremental':
-            u_b = u_norm.clone()
-            # model prediction
-            _, hx = model.initializer(u_init_norm)
-            # TODO set initial state to zero should be good to find unstable sequences
-            hx = (
-                torch.zeros_like(hx[0]).to(model.device_name),
-                torch.zeros_like(hx[1]).to(model.device_name),
-            )
-            y_hat_a, _ = model.predictor(u_a, hx=hx)
-            y_hat_b, _ = model.predictor(u_b, hx=hx)
-            y_hat_a = y_hat_a.squeeze()
-            y_hat_b = y_hat_b.squeeze()
 
-            # use log to avoid zero in the denominator (goes to -inf)
-            # since we maximize this results in a punishment
-            regularization = config.regularization_scale * torch.log(
-                sequence_norm(u_a - u_b)
-            )
-            gamma_2_torch = sequence_norm(y_hat_a - y_hat_b) / sequence_norm(u_a - u_b)
-            L = gamma_2_torch + regularization
-            L.backward()
-            torch.nn.utils.clip_grad_norm_(delta, config.clip_gradient_norm)
-            opt.step()
+        # model prediction
+        _, hx = model.initializer(u_init_norm)
+        # TODO set initial state to zero should be good to find unstable sequences
+        hx = (
+            torch.zeros_like(hx[0]).to(model.device_name),
+            torch.zeros_like(hx[1]).to(model.device_name),
+        )
+        y_hat_a, _ = model.predictor(u_a, hx=hx)
+        y_hat_a = y_hat_a.squeeze()
 
-            control = utils.denormalize(
-                (u_a - u_b).cpu().detach().numpy().squeeze(),
-                model.control_mean,
-                model.control_std,
-            )
-            pred_state = utils.denormalize(
-                (y_hat_a - y_hat_b).cpu().detach().numpy(),
-                model.state_mean,
-                model.state_std,
-            )
+        # use log to avoid zero in the denominator (goes to -inf)
+        # since we maximize this results in a punishment
+        regularization = config.regularization_scale * torch.log(
+            utils.sequence_norm(u_a)
+        )
+        gamma_2_torch = utils.sequence_norm(y_hat_a) / utils.sequence_norm(u_a)
+        L = gamma_2_torch + regularization
+        L.backward()
+        torch.nn.utils.clip_grad_norm_(delta, config.clip_gradient_norm)
+        opt.step()
 
-        elif config.type == 'bibo':
-            # model prediction
-            _, hx = model.initializer(u_init_norm)
-            # TODO set initial state to zero should be good to find unstable sequences
-            hx = (
-                torch.zeros_like(hx[0]).to(model.device_name),
-                torch.zeros_like(hx[1]).to(model.device_name),
-            )
-            y_hat_a, _ = model.predictor(u_a, hx=hx)
-            y_hat_a = y_hat_a.squeeze()
-
-            # use log to avoid zero in the denominator (goes to -inf)
-            # since we maximize this results in a punishment
-            regularization = config.regularization_scale * torch.log(sequence_norm(u_a))
-            gamma_2_torch = sequence_norm(y_hat_a) / sequence_norm(u_a)
-            L = gamma_2_torch + regularization
-            L.backward()
-            torch.nn.utils.clip_grad_norm_(delta, config.clip_gradient_norm)
-            opt.step()
-
-            control = utils.denormalize(
-                u_a.cpu().detach().numpy().squeeze(),
-                model.control_mean,
-                model.control_std,
-            )
-            pred_state = utils.denormalize(
-                y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std
-            )
-        else:
-            raise ValueError(f'Stability type {config.type} does not exist.')
+        control = utils.denormalize(
+            u_a.cpu().detach().numpy().squeeze(),
+            model.control_mean,
+            model.control_std,
+        )
+        pred_state = utils.denormalize(
+            y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std
+        )
 
         gamma_2 = gamma_2_torch.cpu().detach().numpy()
         if step_idx % 100 == 0:
@@ -290,10 +253,3 @@ def optimize_input_disturbance(
         )
 
     return gamma_2, control, pred_state
-
-
-def sequence_norm(x: torch.Tensor) -> torch.Tensor:
-    norm = torch.tensor(0, device=x.device).float()
-    for x_k in x:
-        norm += (torch.linalg.norm(x_k) ** 2).float()
-    return norm

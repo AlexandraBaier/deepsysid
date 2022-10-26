@@ -21,10 +21,21 @@
       "alpha_y"
     ],
     "additional_tests": {
-      "stability": {
-        "test_class": "deepsysid.pipeline.testing.stability.StabilityTest",
+      "bibo_stability": {
+        "test_class": "deepsysid.pipeline.testing.bibo_stability.BiboStabilityTest",
         "parameters": {
-          "type": "bibo",
+          "optimization_steps": 100,
+          "optimization_lr": 1e-3,
+          "initial_mean_delta": 0.0,
+          "initial_std_delta": 1e-3,
+          "evaluation_sequence": 1,
+          "clip_gradient_norm": 100.0,
+          "regularization_scale": 0.25
+        }
+      },
+      "incremental_stability": {
+        "test_class": "deepsysid.pipeline.testing.incremental_stability.IncrementalStabilityTest",
+        "parameters": {
           "optimization_steps": 100,
           "optimization_lr": 1e-3,
           "initial_mean_delta": 0.0,

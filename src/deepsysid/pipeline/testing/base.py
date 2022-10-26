@@ -1,6 +1,6 @@
 import abc
 import dataclasses
-from typing import Dict, List, Type, Union
+from typing import Dict, List, Type, Union, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,6 +36,16 @@ class BaseTestConfig(BaseModel):
     state_names: List[str]
     window_size: int
     horizon_size: int
+
+
+class StabilityTestConfig(BaseTestConfig):
+    optimization_steps: int
+    optimization_lr: float
+    initial_mean_delta: float
+    initial_std_delta: float
+    clip_gradient_norm: float
+    regularization_scale: float
+    evaluation_sequence: Union[Literal['all'], int]
 
 
 class BaseTest(metaclass=abc.ABCMeta):
