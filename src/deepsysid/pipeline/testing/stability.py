@@ -28,7 +28,7 @@ class SupportsRNNForward(Protocol):
         x_pred: torch.Tensor,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         return_state: bool = False,
-    ):
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         pass
 
 

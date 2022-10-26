@@ -143,7 +143,7 @@ class MinimalManeuveringEquations(nn.Module):
         )
         m_a = build_4dof_added_mass_matrix(config)
         # transpose for correct multiplication with batch
-        self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())  # type: ignore
+        self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())
         self.inv_mass.requires_grad = False
 
         self.coriolis_rb = RigidBodyCoriolis4DOF(mass=mass, cog=cog)
@@ -192,7 +192,7 @@ class PropulsionManeuveringEquations(nn.Module):
         )
         m_a = build_4dof_added_mass_matrix(config)
         # transpose for correct multiplication with batch
-        self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())  # type: ignore
+        self.inv_mass = nn.Parameter(torch.inverse(m_rb + m_a).t())
         self.inv_mass.requires_grad = False
 
         self.coriolis_rb = RigidBodyCoriolis4DOF(mass=mass, cog=cog)
@@ -330,7 +330,7 @@ class RigidBodyCoriolis4DOF(nn.Module):
         zg = cog[2]
 
         # transpose for correct multiplication with batch
-        self.crb = nn.Parameter(  # type: ignore
+        self.crb = nn.Parameter(
             torch.tensor(
                 [
                     [0.0, -m, m * zg, -m * xg],
@@ -360,7 +360,7 @@ class Buoyancy(nn.Module):
     ):
         super().__init__()
 
-        self.G = nn.Parameter(  # type: ignore
+        self.G = nn.Parameter(
             torch.tensor(
                 [
                     [0.0, 0.0, 0.0, 0.0],
@@ -399,25 +399,19 @@ class SymmetricRudderPropellerPair(nn.Module):
                 'Propeller location relative to COG has expected form (lx, ly, lz).'
             )
 
-        self.w = nn.Parameter(torch.tensor(wake_factor).float())  # type: ignore
+        self.w = nn.Parameter(torch.tensor(wake_factor).float())
         self.w.requires_grad = False
-        self.d = nn.Parameter(torch.tensor(diameter).float())  # type: ignore
+        self.d = nn.Parameter(torch.tensor(diameter).float())
         self.d.requires_grad = False
-        self.rho = nn.Parameter(torch.tensor(rho_water).float())  # type: ignore
+        self.rho = nn.Parameter(torch.tensor(rho_water).float())
         self.rho.requires_grad = False
-        self.kt = nn.Parameter(torch.tensor(thrust_coefficient).float())  # type: ignore
+        self.kt = nn.Parameter(torch.tensor(thrust_coefficient).float())
         self.kt.requires_grad = False
-        self.lx = nn.Parameter(  # type: ignore
-            torch.tensor(propeller_location[0]).float()
-        )
+        self.lx = nn.Parameter(torch.tensor(propeller_location[0]).float())
         self.lx.requires_grad = False
-        self.ly = nn.Parameter(  # type: ignore
-            torch.tensor(propeller_location[1]).float()
-        )
+        self.ly = nn.Parameter(torch.tensor(propeller_location[1]).float())
         self.ly.requires_grad = False
-        self.lz = nn.Parameter(  # type: ignore
-            torch.tensor(propeller_location[2]).float()
-        )
+        self.lz = nn.Parameter(torch.tensor(propeller_location[2]).float())
         self.lz.requires_grad = False
 
     def forward(self, control: torch.Tensor, velocity: torch.Tensor) -> torch.Tensor:

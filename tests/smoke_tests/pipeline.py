@@ -173,7 +173,7 @@ def run_pipeline(
     model_name: str,
     model_class: str,
     model_config: DynamicIdentificationModelConfig,
-):
+) -> None:
     # Define and create temporary file paths and directories.
     paths = prepare_directories(base_path)
 

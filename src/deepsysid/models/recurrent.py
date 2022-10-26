@@ -151,9 +151,7 @@ class LtiRnnInit(base.DynamicIdentificationModel):
                 # Initialize predictor with state of initializer network
                 _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
-                y, _ = self.predictor.forward(  # type: ignore
-                    batch['x'].float().to(self.device), hx=hx
-                )
+                y, _ = self.predictor.forward(batch['x'].float().to(self.device), hx=hx)
                 y = y.to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
@@ -230,14 +228,9 @@ class LtiRnnInit(base.DynamicIdentificationModel):
 
             _, hx = self.initializer.forward(init_x)
             y, _ = self.predictor.forward(pred_x, hx=hx)
-            # We do this just to get proper type hints.
-            # Option 1 should always execute until we change the signature.
-            if isinstance(y, torch.Tensor):
-                y_np: NDArray[np.float64] = (
-                    y.cpu().detach().squeeze().numpy().astype(np.float64)
-                )
-            else:
-                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
+            y_np: NDArray[np.float64] = (
+                y.cpu().detach().squeeze().numpy().astype(np.float64)
+            )
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
@@ -266,10 +259,10 @@ class LtiRnnInit(base.DynamicIdentificationModel):
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self.initializer.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[0], map_location=self.device_name)
         )
         self.predictor.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[1], map_location=self.device_name)
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
@@ -443,9 +436,7 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                 # Initialize predictor with state of initializer network
                 _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
-                y, _ = self.predictor.forward(  # type: ignore
-                    batch['x'].float().to(self.device), hx=hx
-                )
+                y, _ = self.predictor.forward(batch['x'].float().to(self.device), hx=hx)
                 y = y.to(self.device)
                 barrier = self.predictor.get_barrier(t).to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
@@ -574,14 +565,9 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
             _, hx = self.initializer.forward(init_x)
             y, _ = self.predictor.forward(pred_x, hx=hx)
-            # We do this just to get proper type hints.
-            # Option 1 should always execute until we change the signature.
-            if isinstance(y, torch.Tensor):
-                y_np: NDArray[np.float64] = (
-                    y.cpu().detach().squeeze().numpy().astype(np.float64)
-                )
-            else:
-                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
+            y_np: NDArray[np.float64] = (
+                y.cpu().detach().squeeze().numpy().astype(np.float64)
+            )
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
@@ -610,10 +596,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self.initializer.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[0], map_location=self.device_name)
         )
         self.predictor.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[1], map_location=self.device_name)
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
@@ -829,14 +815,9 @@ class LSTMInitModel(base.DynamicIdentificationModel):
 
             _, hx = self.initializer.forward(init_x)
             y, _ = self.predictor.forward(pred_x, hx=hx)
-            # We do this just to get proper type hints.
-            # Option 1 should always execute until we change the signature.
-            if isinstance(y, torch.Tensor):
-                y_np: NDArray[np.float64] = (
-                    y.cpu().detach().squeeze().numpy().astype(np.float64)
-                )
-            else:
-                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
+            y_np: NDArray[np.float64] = (
+                y.cpu().detach().squeeze().numpy().astype(np.float64)
+            )
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
@@ -865,10 +846,10 @@ class LSTMInitModel(base.DynamicIdentificationModel):
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self.initializer.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[0], map_location=self.device_name)
         )
         self.predictor.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[1], map_location=self.device_name)
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
@@ -1059,14 +1040,10 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
             pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
 
             y, _ = self.predictor.forward(pred_x, x0=init_x)
-            # We do this just to get proper type hints.
-            # Option 1 should always execute until we change the signature.
-            if isinstance(y, torch.Tensor):
-                y_np: NDArray[np.float64] = (
-                    y.cpu().detach().squeeze().numpy().astype(np.float64)
-                )
-            else:
-                y_np = y[0].cpu().detach().squeeze().numpy().astype(np.float64)
+
+            y_np: NDArray[np.float64] = (
+                y.cpu().detach().squeeze().numpy().astype(np.float64)
+            )
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
@@ -1094,7 +1071,7 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self.predictor.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[0], map_location=self.device_name)
         )
         with open(file_path[1], mode='r') as f:
             norm = json.load(f)

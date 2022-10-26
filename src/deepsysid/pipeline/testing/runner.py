@@ -19,7 +19,7 @@ def test_model(
     dataset_directory: str,
     result_directory: str,
     models_directory: str,
-):
+) -> None:
     model_directory = os.path.expanduser(
         os.path.normpath(os.path.join(models_directory, model_name))
     )

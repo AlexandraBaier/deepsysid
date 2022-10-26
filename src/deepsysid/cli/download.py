@@ -72,10 +72,13 @@ def download_dataset_4_dof_simulated_ship(
         file_path = os.path.join(directory, os.path.splitext(file_name)[0] + '.csv')
         logger.info(f'Downloading file to {file_path}.')
         response = data_api.get_datafile(file_id)
+
+        def to_utf8(b: bytes) -> str:
+            return b.decode('utf-8')
+
+        response_io = io.StringIO('\n'.join(map(to_utf8, response.iter_lines())))
         df = pd.read_csv(
-            io.StringIO(  # type: ignore
-                '\n'.join(map(lambda b: b.decode("utf-8"), response.iter_lines()))
-            ),
+            response_io,
             sep='\t',
         )
         df.to_csv(file_path, index=False)

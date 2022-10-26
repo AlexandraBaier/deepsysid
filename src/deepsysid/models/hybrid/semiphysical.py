@@ -148,7 +148,7 @@ class LinearComponent(SemiphysicalComponent):
         )
         logger.info(f'Whitebox R2 Score: {linear_fit}')
 
-        self.model.weight = nn.Parameter(  # type: ignore
+        self.model.weight = nn.Parameter(
             torch.from_numpy(regressor.coef_).float().to(self.device),
             requires_grad=False,
         )
@@ -260,7 +260,7 @@ class BlankeComponent(LinearComponent):
         weight[self.STATES.index('phi'), mask_phi] = reg_phi.coef_
 
         # mypy claims nn does not have an attribute Parameter, which is false.
-        self.model.weight = nn.Parameter(  # type: ignore
+        self.model.weight = nn.Parameter(
             torch.from_numpy(weight).float().to(self.device), requires_grad=False
         )
 

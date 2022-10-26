@@ -98,7 +98,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
                     state_pred, batch['state_true'].float().to(self.device)
                 )
                 total_loss += batch_loss.item()
-                batch_loss.backward()  # type: ignore
+                batch_loss.backward()
                 self.optimizer.step()
 
             logger.info(f'Epoch {i + 1}/{self.epochs} - Epoch Loss: {total_loss}')
@@ -187,7 +187,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self.model.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[0], map_location=self.device_name)
         )
         with open(file_path[1], mode='r') as f:
             norm = json.load(f)

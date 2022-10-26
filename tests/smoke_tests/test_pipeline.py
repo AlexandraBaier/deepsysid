@@ -19,7 +19,7 @@ from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
 from . import pipeline
 
 
-def test_linear_model_cpu(tmp_path: pathlib.Path):
+def test_linear_model_cpu(tmp_path: pathlib.Path) -> None:
     model_name = 'LinearModel'
     model_class = 'deepsysid.models.linear.LinearModel'
     config = LinearModel.CONFIG(
@@ -31,7 +31,7 @@ def test_linear_model_cpu(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_linear_lag(tmp_path: pathlib.Path):
+def test_linear_lag(tmp_path: pathlib.Path) -> None:
     model_name = 'LinearLag'
     model_class = 'deepsysid.models.linear.LinearLag'
     config = LinearLag.CONFIG(
@@ -44,7 +44,7 @@ def test_linear_lag(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_quadratic_control_lag(tmp_path: pathlib.Path):
+def test_quadratic_control_lag(tmp_path: pathlib.Path) -> None:
     model_name = 'QuadraticControlLag'
     model_class = 'deepsysid.models.linear.QuadraticControlLag'
     config = QuadraticControlLag.CONFIG(
@@ -57,7 +57,7 @@ def test_quadratic_control_lag(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_narx(tmp_path: pathlib.Path):
+def test_narx(tmp_path: pathlib.Path) -> None:
     model_name = 'NARXDenseNetwork'
     model_class = 'deepsysid.models.narx.NARXDenseNetwork'
     config = NARXDenseNetwork.CONFIG(
@@ -75,7 +75,7 @@ def test_narx(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_lstm_init_model(tmp_path: pathlib.Path):
+def test_lstm_init_model(tmp_path: pathlib.Path) -> None:
     model_name = 'LSTMInitModel'
     model_class = 'deepsysid.models.recurrent.LSTMInitModel'
     config = LSTMInitModel.CONFIG(
@@ -96,7 +96,7 @@ def test_lstm_init_model(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_constrained_rnn(tmp_path: pathlib.Path):
+def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
     model_name = 'ConstrainedRnn'
     model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
     config = ConstrainedRnn.CONFIG(
@@ -123,7 +123,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_constrained_rnn_stable(tmp_path: pathlib.Path):
+def test_constrained_rnn_stable(tmp_path: pathlib.Path) -> None:
     model_name = 'ConstrainedRnn'
     model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
     config = ConstrainedRnn.CONFIG(
@@ -150,7 +150,7 @@ def test_constrained_rnn_stable(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_lti_rnn_init(tmp_path: pathlib.Path):
+def test_lti_rnn_init(tmp_path: pathlib.Path) -> None:
     model_name = 'LtiRnnInit'
     model_class = 'deepsysid.models.recurrent.LtiRnnInit'
     config = LtiRnnInit.CONFIG(
@@ -173,7 +173,7 @@ def test_lti_rnn_init(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path):
+def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridMinimalManeuveringModel'
     model_class = (
         'deepsysid.models.hybrid.bounded_residual.HybridMinimalManeuveringModel'
@@ -216,7 +216,7 @@ def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path):
+def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridPropulsionManeuveringModel'
     model_class = (
         'deepsysid.models.hybrid.bounded_residual.HybridPropulsionManeuveringModel'
@@ -265,7 +265,7 @@ def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_hybrid_linear_model(tmp_path: pathlib.Path):
+def test_hybrid_linear_model(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridLinearModel'
     model_class = 'deepsysid.models.hybrid.bounded_residual.HybridLinearModel'
     config = HybridLinearModel.CONFIG(
@@ -287,7 +287,7 @@ def test_hybrid_linear_model(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_hybrid_blanke_model(tmp_path: pathlib.Path):
+def test_hybrid_blanke_model(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridBlankeModel'
     model_class = 'deepsysid.models.hybrid.bounded_residual.HybridBlankeModel'
     config = HybridBlankeModel.CONFIG(
@@ -309,7 +309,7 @@ def test_hybrid_blanke_model(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_lstm_combined_init_model(tmp_path: pathlib.Path):
+def test_lstm_combined_init_model(tmp_path: pathlib.Path) -> None:
     model_name = 'LSTMCombinedInitModel'
     model_class = 'deepsysid.models.recurrent.LSTMCombinedInitModel'
     config = LSTMCombinedInitModel.CONFIG(
@@ -329,7 +329,7 @@ def test_lstm_combined_init_model(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_stable_switching_lstm_model(tmp_path: pathlib.Path):
+def test_stable_switching_lstm_model(tmp_path: pathlib.Path) -> None:
     model_name = 'StableSwitchingLSTMModel'
     model_class = 'deepsysid.models.switching.switchrnn.StableSwitchingLSTMModel'
     config = StableSwitchingLSTMModel.CONFIG(
@@ -350,7 +350,7 @@ def test_stable_switching_lstm_model(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path):
+def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path) -> None:
     model_name = 'UnconstrainedSwitchingLSTMModel'
     model_class = 'deepsysid.models.switching.switchrnn.UnconstrainedSwitchingLSTMModel'
     config = StableSwitchingLSTMModel.CONFIG(

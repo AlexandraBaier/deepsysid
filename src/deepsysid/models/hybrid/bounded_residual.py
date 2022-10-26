@@ -272,11 +272,9 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 self.initializer.zero_grad()
                 y, _ = self.initializer.forward(batch['x'].float().to(self.device))
                 # This type error is ignored, since we know that y will not be a tuple.
-                batch_loss = mse_loss(
-                    y, batch['y'].float().to(self.device)  # type: ignore
-                )
+                batch_loss = mse_loss(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
-                batch_loss.backward()  # type: ignore
+                batch_loss.backward()
                 self.optimizer_initializer.step()
 
             logger.info(
@@ -348,7 +346,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_epoch_loss += batch_loss.item()
-                batch_loss.backward()  # type: ignore
+                batch_loss.backward()
                 self.optimizer_end2end.step()
 
             logger.info(
@@ -423,7 +421,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     y_est, batch['y'].float().to(self.device)
                 )
                 total_epoch_loss += batch_loss.item()
-                batch_loss.backward()  # type: ignore
+                batch_loss.backward()
                 self.optimizer_end2end.step()
 
             logger.info(
@@ -583,13 +581,13 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self.semiphysical.load_state_dict(
-            torch.load(file_path[0], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[0], map_location=self.device_name)
         )
         self.blackbox.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[1], map_location=self.device_name)
         )
         self.initializer.load_state_dict(
-            torch.load(file_path[2], map_location=self.device_name)  # type: ignore
+            torch.load(file_path[2], map_location=self.device_name)
         )
         with open(file_path[3], mode='r') as f:
             norm = json.load(f)
