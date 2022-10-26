@@ -28,6 +28,7 @@ class RnnInitConfig(DynamicIdentificationModelConfig):
     batch_size: int
     epochs_initializer: int
     epochs_predictor: int
+    clip_gradient_norm: float
     loss: Literal['mse', 'msge']
 
 
@@ -52,6 +53,8 @@ class RnnInit(DynamicIdentificationModel):
         self.batch_size = config.batch_size
         self.epochs_initializer = config.epochs_initializer
         self.epochs_predictor = config.epochs_predictor
+
+        self.clip_gradient_norm = config.clip_gradient_norm
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -156,6 +159,9 @@ class RnnInit(DynamicIdentificationModel):
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    self.predictor.parameters(), self.clip_gradient_norm
+                )
                 self.optimizer_pred.step()
 
             logger.info(
