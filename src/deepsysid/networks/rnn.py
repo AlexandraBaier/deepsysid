@@ -300,8 +300,10 @@ class LtiRnnConvConstr(nn.Module):
         tol = 1e-4
         # rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
         # objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
-        objective = cp.Minimize(None)
-        problem = cp.Problem(objective, [M << -tol * np.eye(nM)])
+        nu = cp.Variable(1)
+        objective = cp.Minimize(nu)
+        # objective = cp.Minimize(None)
+        problem = cp.Problem(objective, [M - nu*np.eye(nM)<< -tol * np.eye(nM)])
 
         logger.info(
             'Initialize Parameter by values that satisfy LMI constraints, solve SDP ...'
@@ -310,10 +312,11 @@ class LtiRnnConvConstr(nn.Module):
         # check if t is negative
         # max_eig_lmi = np.max(np.real(np.linalg.eig(M.value)[0]))
 
-        if problem.status == 'optimal':
+        if problem.status == 'optimal' and nu.value < 0:
             logger.info(
                 f'Found negative semidefinite LMI, problem status: '
                 f'\t {problem.status}'
+                f'\t nu = {nu.value}'
             )
         else:
             raise Exception(
