@@ -7,8 +7,8 @@ After you follow the instructions below, you can download a dataset, run hyperpa
 identify your best-performing models in three lines:
 ```shell
 deepsysid download 4dof-sim-ship
-deepsysid session --enable-cuda configuration.template.json progress.json NEW
-deepsysid session --enable-cuda -reportin=progress.json configuration.template.json progress.json TEST_BEST
+deepsysid session --enable-cuda progress.json NEW
+deepsysid session --enable-cuda -reportin=progress.json progress.json TEST_BEST
 ```
 
 ## How to use?
