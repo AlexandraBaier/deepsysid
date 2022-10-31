@@ -1,14 +1,15 @@
-import abc
 import logging
-from typing import List, Literal, Optional, Protocol, Tuple, Union, runtime_checkable
+from typing import List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from torch import nn
 
 from ...models import utils
-from ...models.base import DynamicIdentificationModel
+from ...models.base import (
+    DynamicIdentificationModel,
+    NormalizedHiddenStateInitializerPredictorModel,
+)
 from .base import (
     BaseTest,
     BaseTestConfig,
@@ -19,39 +20,6 @@ from .base import (
 from .io import split_simulations
 
 logger = logging.getLogger(__name__)
-
-
-@runtime_checkable
-class SupportsRNNForward(Protocol):
-    def forward(
-        self,
-        x_pred: torch.Tensor,
-        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        return_state: bool = False,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        pass
-
-
-class SupportsRNNForwardModule(SupportsRNNForward, nn.Module):
-    pass
-
-
-@runtime_checkable
-class SupportsStabilityTest(Protocol):
-    device_name: str
-    control_dim: int
-    state_mean: NDArray[np.float64]
-    state_std: NDArray[np.float64]
-    control_mean: NDArray[np.float64]
-    control_std: NDArray[np.float64]
-    initializer: SupportsRNNForwardModule
-    predictor: SupportsRNNForwardModule
-
-
-class SupportsStabilityTestDynamicIdentificationModel(
-    SupportsStabilityTest, DynamicIdentificationModel, metaclass=abc.ABCMeta
-):
-    pass
 
 
 class StabilityTestConfig(BaseTestConfig):
@@ -68,9 +36,10 @@ class StabilityTestConfig(BaseTestConfig):
 class StabilityTest(BaseTest):
     CONFIG = StabilityTestConfig
 
-    def __init__(self, config: StabilityTestConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: StabilityTestConfig, device_name: str) -> None:
+        super().__init__(config, device_name)
 
+        self.device_name = device_name
         self.config = config
         self.window_size = config.window_size
         self.horizon_size = config.horizon_size
@@ -79,8 +48,11 @@ class StabilityTest(BaseTest):
     def test(
         self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
     ) -> TestResult:
-        if not isinstance(model, SupportsStabilityTestDynamicIdentificationModel):
+        if not isinstance(model, NormalizedHiddenStateInitializerPredictorModel):
+            print(f'Stability no: {model}')
             return TestResult(list(), dict())
+
+        print(f'Stability yes: {model}')
 
         controls = []
         pred_states = []
@@ -97,6 +69,8 @@ class StabilityTest(BaseTest):
             sim = dataset[self.evaluation_sequence]
             gamma_2, control, pred_state = optimize_input_disturbance(
                 config=self.config,
+                control_dim=len(self.config.control_names),
+                device_name=self.device_name,
                 model=model,
                 initial_control=sim.initial_control,
                 initial_state=sim.initial_state,
@@ -117,6 +91,8 @@ class StabilityTest(BaseTest):
 
                 gamma_2, control, pred_state = optimize_input_disturbance(
                     config=self.config,
+                    control_dim=len(self.config.control_names),
+                    device_name=self.device_name,
                     model=model,
                     initial_control=sim.initial_control,
                     initial_state=sim.initial_state,
@@ -142,7 +118,9 @@ class StabilityTest(BaseTest):
 
 def optimize_input_disturbance(
     config: StabilityTestConfig,
-    model: SupportsStabilityTestDynamicIdentificationModel,
+    control_dim: int,
+    device_name: str,
+    model: NormalizedHiddenStateInitializerPredictorModel,
     initial_control: NDArray[np.float64],
     initial_state: NDArray[np.float64],
     true_control: NDArray[np.float64],
@@ -154,8 +132,10 @@ def optimize_input_disturbance(
         or model.control_std is None
     ):
         raise ValueError('Mean and standard deviation is not initialized in the model')
+    initializer = model.initializer
+    predictor = model.predictor
 
-    model.predictor.train()
+    predictor.train()
 
     # normalize data
     u_init_norm_numpy = utils.normalize(
@@ -171,17 +151,17 @@ def optimize_input_disturbance(
         torch.from_numpy(np.hstack((u_init_norm_numpy[1:], y_init_norm_numpy[:-1])))
         .unsqueeze(0)
         .float()
-        .to(model.device_name)
+        .to(device_name)
     )
-    u_norm = torch.from_numpy(u_norm_numpy).unsqueeze(0).float().to(model.device_name)
+    u_norm = torch.from_numpy(u_norm_numpy).unsqueeze(0).float().to(device_name)
 
     # disturb input
     delta = torch.normal(
         config.initial_mean_delta,
         config.initial_std_delta,
-        size=(config.horizon_size, model.control_dim),
+        size=(config.horizon_size, control_dim),
         requires_grad=True,
-        device=model.device_name,
+        device=device_name,
     )
 
     # optimizer
@@ -197,14 +177,16 @@ def optimize_input_disturbance(
         if config.type == 'incremental':
             u_b = u_norm.clone()
             # model prediction
-            _, hx = model.initializer(u_init_norm, return_state=True)
+            _, hx = initializer.forward(u_init_norm)
             # TODO set initial state to zero should be good to find unstable sequences
             hx = (
-                torch.zeros_like(hx[0]).to(model.device_name),
-                torch.zeros_like(hx[1]).to(model.device_name),
+                torch.zeros_like(hx[0]).to(device_name),
+                torch.zeros_like(hx[1]).to(device_name),
             )
-            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
-            y_hat_b = model.predictor(u_b, hx=hx, return_state=False).squeeze()
+            y_hat_a, _ = predictor.forward(u_a, hx=hx)
+            y_hat_a = y_hat_a.squeeze()
+            y_hat_b, _ = predictor.forward(u_b, hx=hx)
+            y_hat_b = y_hat_b.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
@@ -230,13 +212,14 @@ def optimize_input_disturbance(
 
         elif config.type == 'bibo':
             # model prediction
-            _, hx = model.initializer(u_init_norm, return_state=True)
+            _, hx = initializer.forward(u_init_norm)
             # TODO set initial state to zero should be good to find unstable sequences
             hx = (
-                torch.zeros_like(hx[0]).to(model.device_name),
-                torch.zeros_like(hx[1]).to(model.device_name),
+                torch.zeros_like(hx[0]).to(device_name),
+                torch.zeros_like(hx[1]).to(device_name),
             )
-            y_hat_a = model.predictor(u_a, hx=hx, return_state=False).squeeze()
+            y_hat_a, _ = predictor.forward(u_a, hx=hx)
+            y_hat_a = y_hat_a.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment

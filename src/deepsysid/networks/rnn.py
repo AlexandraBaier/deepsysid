@@ -1,17 +1,32 @@
+import abc
 import logging
 import warnings
-from typing import List, Optional, Tuple
+from typing import Generic, List, Optional, Tuple, TypeVar
 
 import cvxpy as cp
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 logger = logging.getLogger(__name__)
 
 
-class BasicLSTM(nn.Module):
+HiddenStateType = TypeVar('HiddenStateType')
+
+
+class HiddenStateForwardModule(
+    nn.Module, Generic[HiddenStateType], metaclass=abc.ABCMeta
+):
+    @abc.abstractmethod
+    def forward(
+        self, x_pred: torch.Tensor, hx: Optional[HiddenStateType] = None
+    ) -> Tuple[torch.Tensor, HiddenStateType]:
+        pass
+
+
+class BasicLSTM(HiddenStateForwardModule):
     def __init__(
         self,
         input_dim: int,
@@ -52,18 +67,8 @@ class BasicLSTM(nn.Module):
     def forward(
         self,
         x_pred: torch.Tensor,
-        y_init: Optional[torch.Tensor] = None,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        if y_init is not None:
-            h0 = y_init.new_zeros(
-                (self.num_recurrent_layers, y_init.shape[0], self.recurrent_dim)
-            )
-            for i in range(self.num_recurrent_layers):
-                h0[i, :, : y_init.shape[1]] = y_init
-            c0 = h0.new_zeros(h0.shape)
-            hx = (h0, c0)
-
         x, (h0, c0) = self.predictor_lstm(x_pred, hx)
         for layer in self.out[:-1]:
             x = F.relu(layer(x))
@@ -72,7 +77,7 @@ class BasicLSTM(nn.Module):
         return x, (h0, c0)
 
 
-class LinearOutputLSTM(nn.Module):
+class LinearOutputLSTM(HiddenStateForwardModule[Tuple[torch.Tensor, torch.Tensor]]):
     def __init__(
         self,
         input_dim: int,
@@ -116,7 +121,7 @@ class LinearOutputLSTM(nn.Module):
         return x, (h0, c0)
 
 
-class LtiRnn(nn.Module):
+class LtiRnn(HiddenStateForwardModule[torch.Tensor]):
     def __init__(
         self,
         nx: int,
@@ -149,10 +154,10 @@ class LtiRnn(nn.Module):
 
     def forward(
         self,
-        u_tilde: torch.Tensor,
-        hx: Tuple[torch.Tensor, torch.Tensor],
+        x_pred: torch.Tensor,
+        hx: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        n_batch, n_sample, _ = u_tilde.shape
+        n_batch, n_sample, _ = x_pred.shape
 
         Y_inv = self.Y.inverse()
         T_inv = torch.diag(1 / torch.squeeze(self.lambdas))
@@ -160,19 +165,23 @@ class LtiRnn(nn.Module):
         # initialize output
         y = torch.zeros((n_batch, n_sample, self.ny))
 
-        x = hx[0][1]
+        if hx is not None:
+            x = hx[1]
+        else:
+            x = torch.zeros((n_batch, self.nx))
+
         for k in range(n_sample):
-            z = (self.C2_tilde(x) + self.D21_tilde(u_tilde[:, k, :])) @ T_inv
+            z = (self.C2_tilde(x) + self.D21_tilde(x_pred[:, k, :])) @ T_inv
             w = self.nl(z)
-            y[:, k, :] = self.C1(x) + self.D11(u_tilde[:, k, :]) + self.D12(w)
+            y[:, k, :] = self.C1(x) + self.D11(x_pred[:, k, :]) + self.D12(w)
             x = (
-                self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
+                self.A_tilde(x) + self.B1_tilde(x_pred[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
 
         return y, x
 
 
-class LtiRnnConvConstr(nn.Module):
+class LtiRnnConvConstr(HiddenStateForwardModule[torch.Tensor]):
     def __init__(
         self, nx: int, nu: int, ny: int, nw: int, gamma: float, beta: float
     ) -> None:
@@ -304,23 +313,27 @@ class LtiRnnConvConstr(nn.Module):
 
     def forward(
         self,
-        u_tilde: torch.Tensor,
-        hx: Tuple[torch.Tensor, torch.Tensor],
+        x_pred: torch.Tensor,
+        hx: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        n_batch, n_sample, _ = u_tilde.shape
+        n_batch, n_sample, _ = x_pred.shape
 
         Y_inv = self.Y.inverse()
         T_inv = torch.diag(1 / torch.squeeze(self.lambdas))
         # initialize output
         y = torch.zeros((n_batch, n_sample, self.ny))
 
-        x = hx[0][1]
+        if hx is not None:
+            x = hx[1]
+        else:
+            x = torch.zeros((n_batch, self.nx))
+
         for k in range(n_sample):
-            z = (self.C2_tilde(x) + self.D21_tilde(u_tilde[:, k, :])) @ T_inv
+            z = (self.C2_tilde(x) + self.D21_tilde(x_pred[:, k, :])) @ T_inv
             w = self.nl(z)
-            y[:, k, :] = self.C1(x) + self.D11(u_tilde[:, k, :]) + self.D12(w)
+            y[:, k, :] = self.C1(x) + self.D11(x_pred[:, k, :]) + self.D12(w)
             x = (
-                self.A_tilde(x) + self.B1_tilde(u_tilde[:, k, :]) + self.B2_tilde(w)
+                self.A_tilde(x) + self.B1_tilde(x_pred[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
 
         return y, x
@@ -504,7 +517,7 @@ class InitLSTM(nn.Module):
         self,
         input: torch.Tensor,
         x0: torch.Tensor,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         h_init, (h0_init, c0_init) = self.init_lstm(x0)
         h, (_, _) = self.predictor_lstm(input, (h0_init, c0_init))
 

@@ -41,7 +41,7 @@ class BaseTestConfig(BaseModel):
 class BaseTest(metaclass=abc.ABCMeta):
     CONFIG: Type[BaseTestConfig] = BaseTestConfig
 
-    def __init__(self, config: BaseTestConfig):
+    def __init__(self, config: BaseTestConfig, device_name: str):
         pass
 
     @abc.abstractmethod
