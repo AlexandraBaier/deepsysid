@@ -6,6 +6,8 @@ from numpy.typing import NDArray
 from pydantic import BaseModel
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
+from deepsysid.models import utils
+
 
 class BaseMetricConfig(BaseModel):
     state_names: List[str]
@@ -111,11 +113,34 @@ class MeanSquaredErrorMetric(AverageOverSequenceMetric):
 
 
 class RootMeanSquaredErrorMetric(AverageOverSequenceMetric):
+    def score_over_sequences(
+        self, true_seq: List[NDArray[np.float64]], pred_seq: List[NDArray[np.float64]]
+    ) -> NDArray[np.float64]:
+        return np.sqrt(super().score_over_sequences(true_seq, pred_seq))
+
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        score: NDArray[np.float64] = np.sqrt(
-            mean_squared_error(y_true, y_pred, multioutput='raw_values')
+        score: NDArray[np.float64] = mean_squared_error(
+            y_true, y_pred, multioutput='raw_values'
+        )
+        return score
+
+
+class NormalizedRootMeanSquaredErrorMetric(AverageOverSequenceMetric):
+    def score_over_sequences(
+        self, true_seq: List[NDArray[np.float64]], pred_seq: List[NDArray[np.float64]]
+    ) -> NDArray[np.float64]:
+        mse = super().score_over_sequences(true_seq, pred_seq)
+        _, std = utils.mean_stddev(true_seq)
+        nrmse: NDArray[np.float64] = np.sqrt(1.0 / std * mse)
+        return nrmse
+
+    def score_per_sequence(
+        self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        score: NDArray[np.float64] = mean_squared_error(
+            y_true, y_pred, multioutput='raw_values'
         )
         return score
 
