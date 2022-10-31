@@ -11,6 +11,7 @@ from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.metrics import (
     MeanAbsoluteErrorMetric,
     MeanSquaredErrorMetric,
+    NormalizedRootMeanSquaredErrorMetric,
     RootMeanSquaredErrorMetric,
     Trajectory4DOFRootMeanSquaredErrorMetric,
 )
@@ -245,6 +246,13 @@ def run_pipeline(
             mae=ExperimentMetricConfiguration(
                 metric_class='deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric',
                 parameters=MeanAbsoluteErrorMetric.CONFIG(
+                    state_names=get_state_names(), sample_time=get_time_delta()
+                ),
+            ),
+            nrmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.'
+                'NormalizedRootMeanSquaredErrorMetric',
+                parameters=NormalizedRootMeanSquaredErrorMetric.CONFIG(
                     state_names=get_state_names(), sample_time=get_time_delta()
                 ),
             ),
