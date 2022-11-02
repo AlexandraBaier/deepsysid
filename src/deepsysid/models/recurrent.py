@@ -150,7 +150,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
                 _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
                 y, _ = self._predictor.forward(
-                    batch['x'].float().to(self.device), hx=hx[0]
+                    batch['x'].float().to(self.device), hx=hx
                 )
                 y = y.to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
@@ -227,7 +227,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
             pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
 
             _, hx = self._initializer.forward(init_x)
-            y, _ = self._predictor.forward(pred_x, hx=hx[0])
+            y, _ = self._predictor.forward(pred_x, hx=hx)
             y_np: NDArray[np.float64] = (
                 y.cpu().detach().squeeze().numpy().astype(np.float64)
             )
@@ -440,7 +440,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
                 y, _ = self._predictor.forward(
-                    batch['x'].float().to(self.device), hx=hx[0]
+                    batch['x'].float().to(self.device), hx=hx
                 )
                 y = y.to(self.device)
                 barrier = self._predictor.get_barrier(t).to(self.device)
@@ -571,7 +571,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
 
             _, hx = self._initializer.forward(init_x)
-            y, _ = self._predictor.forward(pred_x, hx=hx[0])
+            y, _ = self._predictor.forward(pred_x, hx=hx)
             y_np: NDArray[np.float64] = (
                 y.cpu().detach().squeeze().numpy().astype(np.float64)
             )

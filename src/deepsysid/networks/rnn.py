@@ -155,7 +155,7 @@ class LtiRnn(HiddenStateForwardModule[torch.Tensor]):
     def forward(
         self,
         x_pred: torch.Tensor,
-        hx: Optional[torch.Tensor] = None,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         n_batch, n_sample, _ = x_pred.shape
 
@@ -166,7 +166,7 @@ class LtiRnn(HiddenStateForwardModule[torch.Tensor]):
         y = torch.zeros((n_batch, n_sample, self.ny))
 
         if hx is not None:
-            x = hx[1]
+            x = hx[0][0]
         else:
             x = torch.zeros((n_batch, self.nx))
 
@@ -314,7 +314,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule[torch.Tensor]):
     def forward(
         self,
         x_pred: torch.Tensor,
-        hx: Optional[torch.Tensor] = None,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         n_batch, n_sample, _ = x_pred.shape
 
@@ -324,7 +324,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule[torch.Tensor]):
         y = torch.zeros((n_batch, n_sample, self.ny))
 
         if hx is not None:
-            x = hx[1]
+            x = hx[0][0]
         else:
             x = torch.zeros((n_batch, self.nx))
 
