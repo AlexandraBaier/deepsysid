@@ -723,6 +723,10 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                         )
 
                     if bls_iter > max_iter - 1:
+                        for old_par, new_par in zip(
+                            old_pars, self.predictor.parameters()
+                        ):
+                            new_par.data = old_par.clone()
                         M = self.predictor.get_constraints()
                         logger.warning(
                             f'Epoch {i+1}/{self.epochs_predictor}\t'

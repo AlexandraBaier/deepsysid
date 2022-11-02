@@ -184,7 +184,7 @@ def optimize_input_disturbance(
         .float()
         .to(model.device_name)
     )
-    u_norm = torch.from_numpy(u_norm_numpy).unsqueeze(0).float().to(model.device_name)
+    u_norm = torch.from_numpy(u_norm_numpy).float().to(model.device_name)
 
     # disturb input
     delta = torch.normal(
@@ -213,7 +213,7 @@ def optimize_input_disturbance(
             torch.zeros_like(hx[0]).to(model.device_name),
             torch.zeros_like(hx[1]).to(model.device_name),
         )
-        y_hat_a, _ = model.predictor(u_a, hx=hx)
+        y_hat_a, _ = model.predictor(u_a.unsqueeze(0), hx=hx)
         y_hat_a = y_hat_a.squeeze()
 
         # use log to avoid zero in the denominator (goes to -inf)

@@ -32,6 +32,8 @@ def test_model(
         )
     )
 
+    logger.info(f'Test model: {model_name}')
+
     simulations = load_test_simulations(
         configuration=configuration,
         mode=mode,

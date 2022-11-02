@@ -303,7 +303,7 @@ class LtiRnnConvConstr(nn.Module):
         nu = cp.Variable(1)
         objective = cp.Minimize(nu)
         # objective = cp.Minimize(None)
-        problem = cp.Problem(objective, [M - nu*np.eye(nM)<< -tol * np.eye(nM)])
+        problem = cp.Problem(objective, [M - nu * np.eye(nM) << -tol * np.eye(nM)])
 
         logger.info(
             'Initialize Parameter by values that satisfy LMI constraints, solve SDP ...'

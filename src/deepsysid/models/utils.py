@@ -25,6 +25,9 @@ def normalize(x: TensorType, mean: TensorType, stddev: TensorType) -> TensorType
 
 def sequence_norm(x: torch.Tensor) -> torch.Tensor:
     norm = torch.tensor(0, device=x.device).float()
+
     for x_k in x:
-        norm += (torch.linalg.norm(x_k) ** 2).float()
+
+        x_k = x_k.unsqueeze(0)
+        norm += (x_k @ x_k.T).squeeze()
     return norm

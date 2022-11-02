@@ -98,6 +98,10 @@ class IncrementalStabilityTest(BaseTest):
         true_states = []
         stability_gains = []
 
+        print(f'constraints satisfied? {model.predictor.check_constr()}')
+        M = model.predictor.get_constraints()
+        print(f'max eigenvalue of M {max(torch.real(torch.linalg.eig(M)[0]))}')
+
         if isinstance(self.evaluation_sequence, int):
             logger.info(
                 f'Test incremental stability for sequence number {self.evaluation_sequence}'
@@ -120,7 +124,9 @@ class IncrementalStabilityTest(BaseTest):
             true_states.append(sim.true_state)
 
         elif self.evaluation_sequence == 'all':
-            logger.info(f'Test incremental stability for {self.evaluation_sequence} sequences')
+            logger.info(
+                f'Test incremental stability for {self.evaluation_sequence} sequences'
+            )
             for idx_data, sim in enumerate(
                 split_simulations(self.window_size, self.horizon_size, simulations)
             ):
@@ -184,7 +190,7 @@ def optimize_input_disturbance(
         .float()
         .to(model.device_name)
     )
-    u_norm = torch.from_numpy(u_norm_numpy).unsqueeze(0).float().to(model.device_name)
+    u_norm = torch.from_numpy(u_norm_numpy).float().to(model.device_name)
 
     # disturb input
     delta = torch.normal(
@@ -199,6 +205,7 @@ def optimize_input_disturbance(
     opt = torch.optim.Adam(  # type: ignore
         [delta], lr=config.optimization_lr, maximize=True
     )
+    print(f'u shape: {u_norm.shape} \t delta shape {delta.shape}')
 
     gamma_2: Optional[np.float64] = None
     control: Optional[NDArray[np.float64]] = None
@@ -206,6 +213,9 @@ def optimize_input_disturbance(
     for step_idx in range(config.optimization_steps):
         u_a = u_norm + delta
         u_b = u_norm.clone()
+
+        # print(f'u_a shape {u_a.shape} \t u_b shape {u_b.shape} \t u_norm[:,:,0] {u_norm[0,:]}')
+        # print(f'u_a {u_a[0,:]} \t u_b {u_b[0,:]} \t delta {delta[0,:]}')
         # model prediction
         _, hx = model.initializer(u_init_norm)
         # TODO set initial state to zero should be good to find unstable sequences
@@ -213,8 +223,8 @@ def optimize_input_disturbance(
             torch.zeros_like(hx[0]).to(model.device_name),
             torch.zeros_like(hx[1]).to(model.device_name),
         )
-        y_hat_a, _ = model.predictor(u_a, hx=hx)
-        y_hat_b, _ = model.predictor(u_b, hx=hx)
+        y_hat_a, _ = model.predictor(u_a.unsqueeze(0), hx=hx)
+        y_hat_b, _ = model.predictor(u_b.unsqueeze(0), hx=hx)
         y_hat_a = y_hat_a.squeeze()
         y_hat_b = y_hat_b.squeeze()
 
