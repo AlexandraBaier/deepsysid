@@ -1,28 +1,24 @@
 import abc
 import logging
 import warnings
-from typing import Generic, List, Optional, Tuple, TypeVar
+from typing import List, Optional, Tuple
 
 import cvxpy as cp
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch import nn
 
 logger = logging.getLogger(__name__)
 
 
-HiddenStateType = TypeVar('HiddenStateType')
-
-
-class HiddenStateForwardModule(
-    nn.Module, Generic[HiddenStateType], metaclass=abc.ABCMeta
-):
+class HiddenStateForwardModule(nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def forward(
-        self, x_pred: torch.Tensor, hx: Optional[HiddenStateType] = None
-    ) -> Tuple[torch.Tensor, HiddenStateType]:
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         pass
 
 
@@ -77,7 +73,7 @@ class BasicLSTM(HiddenStateForwardModule):
         return x, (h0, c0)
 
 
-class LinearOutputLSTM(HiddenStateForwardModule[Tuple[torch.Tensor, torch.Tensor]]):
+class LinearOutputLSTM(HiddenStateForwardModule):
     def __init__(
         self,
         input_dim: int,
@@ -121,7 +117,7 @@ class LinearOutputLSTM(HiddenStateForwardModule[Tuple[torch.Tensor, torch.Tensor
         return x, (h0, c0)
 
 
-class LtiRnn(HiddenStateForwardModule[torch.Tensor]):
+class LtiRnn(HiddenStateForwardModule):
     def __init__(
         self,
         nx: int,
@@ -156,7 +152,7 @@ class LtiRnn(HiddenStateForwardModule[torch.Tensor]):
         self,
         x_pred: torch.Tensor,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         n_batch, n_sample, _ = x_pred.shape
 
         Y_inv = self.Y.inverse()
@@ -178,10 +174,10 @@ class LtiRnn(HiddenStateForwardModule[torch.Tensor]):
                 self.A_tilde(x) + self.B1_tilde(x_pred[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
 
-        return y, x
+        return y, (x, x)
 
 
-class LtiRnnConvConstr(HiddenStateForwardModule[torch.Tensor]):
+class LtiRnnConvConstr(HiddenStateForwardModule):
     def __init__(
         self, nx: int, nu: int, ny: int, nw: int, gamma: float, beta: float
     ) -> None:
@@ -315,7 +311,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule[torch.Tensor]):
         self,
         x_pred: torch.Tensor,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         n_batch, n_sample, _ = x_pred.shape
 
         Y_inv = self.Y.inverse()
@@ -336,7 +332,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule[torch.Tensor]):
                 self.A_tilde(x) + self.B1_tilde(x_pred[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
 
-        return y, x
+        return y, (x, x)
 
     def get_constraints(self) -> torch.Tensor:
         # state sizes

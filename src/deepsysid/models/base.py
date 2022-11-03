@@ -3,7 +3,6 @@ import logging
 from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
-from numpy._typing import NDArray
 from numpy.typing import NDArray
 from pydantic import BaseModel
 from sklearn.base import BaseEstimator
