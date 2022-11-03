@@ -14,6 +14,7 @@ from deepsysid.models.recurrent import (
     LSTMInitModel,
     LtiRnnInit,
 )
+from deepsysid.models.switching.klinreg import KLinearRegressionARXModel
 from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
 
 from . import pipeline
@@ -367,5 +368,23 @@ def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path) -> None:
         epochs_initializer=2,
         epochs_predictor=2,
         loss='mse',
+    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+
+
+def test_k_linear_regression_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'KLinearRegressionARXModel'
+    model_class = 'deepsysid.models.switching.klinreg.KLinearRegressionARXModel'
+    config = KLinearRegressionARXModel.CONFIG(
+        control_names=pipeline.get_control_names(),
+        state_names=pipeline.get_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        n_modes=2,
+        lag=pipeline.get_window_size() - 1,
+        probability_failure=0.001,
+        initialization_bound=100.0,
+        zero_probability_restarts=100,
+        use_max_restarts=False,
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
