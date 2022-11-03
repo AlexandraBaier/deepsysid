@@ -26,12 +26,6 @@ def test_model(
     model = initialize_model(configuration, model_name, device_name)
     load_model(model, model_directory, model_name)
 
-    logger.addHandler(
-        logging.FileHandler(
-            filename=os.path.join(model_directory, 'testing.log'), mode='a'
-        )
-    )
-
     simulations = load_test_simulations(
         configuration=configuration,
         mode=mode,
