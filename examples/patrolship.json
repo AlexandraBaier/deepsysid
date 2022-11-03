@@ -619,6 +619,18 @@
           192
         ]
       }
+    }, {
+      "model_base_name": "kLinRegARX",
+      "model_class": "deepsysid.models.switching.klinreg.KLinearRegressionARXModel",
+      "static_parameters": {
+        "use_max_restarts": false,
+        "zero_probability_restarts": 100,
+        "initialization_bound": 50.0
+      },
+      "flexible_parameters": {
+        "lag": [5, 7, 10, 15, 30, 45],
+        "n_modes": [2, 5, 7, 10]
+      }
     }
   ]
 }
