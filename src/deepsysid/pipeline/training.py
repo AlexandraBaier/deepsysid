@@ -29,12 +29,6 @@ def train_model(
     except FileExistsError:
         pass
 
-    logger.addHandler(
-        logging.FileHandler(
-            filename=os.path.join(model_directory, 'training.log'), mode='a'
-        )
-    )
-
     # Load dataset
     controls, states = load_simulation_data(
         directory=dataset_directory,
