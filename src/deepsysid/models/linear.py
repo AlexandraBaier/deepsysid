@@ -147,7 +147,7 @@ class LinearLagConfig(DynamicIdentificationModelConfig):
     lag: int
 
 
-class LinearLag(FixedWindowModel):
+class LinearLag(FixedWindowModel[LinearRegression]):
     """
     Lag applies to control inputs and system states.
     Similar to a NARX model.
