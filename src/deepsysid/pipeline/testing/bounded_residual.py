@@ -19,8 +19,10 @@ class BoundedResidualInferenceTestConfig(BaseTestConfig):
 class BoundedResidualInferenceTest(BaseTest):
     CONFIG = BoundedResidualInferenceTestConfig
 
-    def __init__(self, config: BoundedResidualInferenceTestConfig) -> None:
-        super().__init__(config)
+    def __init__(
+        self, config: BoundedResidualInferenceTestConfig, device_name: str
+    ) -> None:
+        super().__init__(config, device_name=device_name)
 
         self.window_size = config.window_size
         self.horizon_size = config.horizon_size

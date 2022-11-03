@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 
+from ..networks.rnn import HiddenStateForwardModule
 from . import utils
 
 logger = logging.getLogger(__name__)
@@ -199,3 +200,51 @@ class FixedWindowModel(
         # non-overlapping windows
         width = self.window_size + 1
         return np.hstack([arr[i : 1 + i - width or None : width] for i in range(width)])
+
+
+class NormalizedControlStateModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
+    def __init__(self, config: DynamicIdentificationModelConfig):
+        super().__init__(config)
+
+        self._state_mean: Optional[NDArray[np.float64]] = None
+        self._state_std: Optional[NDArray[np.float64]] = None
+        self._control_mean: Optional[NDArray[np.float64]] = None
+        self._control_std: Optional[NDArray[np.float64]] = None
+
+    @property
+    def state_mean(self) -> NDArray[np.float64]:
+        if self._state_mean is None:
+            raise ValueError('Model is not trained and has no computed state_mean.')
+        return self._state_mean
+
+    @property
+    def state_std(self) -> NDArray[np.float64]:
+        if self._state_std is None:
+            raise ValueError('Model is not trained and has no computed state_std.')
+        return self._state_std
+
+    @property
+    def control_mean(self) -> NDArray[np.float64]:
+        if self._control_mean is None:
+            raise ValueError('Model is not trained and has no computed control_mean')
+        return self._control_mean
+
+    @property
+    def control_std(self) -> NDArray[np.float64]:
+        if self._control_std is None:
+            raise ValueError('Model is not trained and has no computed control_std.')
+        return self._control_std
+
+
+class NormalizedHiddenStateInitializerPredictorModel(
+    NormalizedControlStateModel, metaclass=abc.ABCMeta
+):
+    @property
+    @abc.abstractmethod
+    def initializer(self) -> HiddenStateForwardModule:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def predictor(self) -> HiddenStateForwardModule:
+        pass

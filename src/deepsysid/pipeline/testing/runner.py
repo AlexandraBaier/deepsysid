@@ -44,14 +44,15 @@ def test_model(
             state_names=configuration.state_names,
             window_size=configuration.window_size,
             horizon_size=configuration.horizon_size,
-        )
+        ),
+        device_name=device_name,
     )
     main_results = main_test.test(model, simulations)
 
     additional_results = dict()
     for test_name, test_config in configuration.additional_tests.items():
         test_cls = retrieve_test_class(test_config.test_class)
-        test_instance = test_cls(test_config.parameters)
+        test_instance = test_cls(test_config.parameters, device_name)
 
         additional_results[test_name] = test_instance.test(model, simulations)
 
