@@ -1,13 +1,22 @@
 import pathlib
 from typing import Dict, List, Literal
 
+import torch
+
+from deepsysid.explainability.base import (
+    BaseExplainerConfig,
+    BaseExplanationMetricConfig,
+)
 from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
+    ExperimentExplainerConfiguration,
+    ExperimentExplanationMetricConfiguration,
     ExperimentMetricConfiguration,
     ExperimentTestConfiguration,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
+from deepsysid.pipeline.explaining import explain_model
 from deepsysid.pipeline.metrics import (
     MeanAbsoluteErrorMetric,
     MeanSquaredErrorMetric,
@@ -175,6 +184,9 @@ def run_pipeline(
     model_class: str,
     model_config: DynamicIdentificationModelConfig,
 ) -> None:
+    # Activate for easier debugging when tests fail due to torch errors.
+    torch.autograd.set_detect_anomaly(True)
+
     # Define and create temporary file paths and directories.
     paths = prepare_directories(base_path)
 
@@ -258,6 +270,19 @@ def run_pipeline(
             ),
         ),
         target_metric='rmse',
+        explanation_metrics=dict(
+            infidelity=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics.NMSEInfidelityMetric',
+                parameters=BaseExplanationMetricConfig(state_names=get_state_names()),
+            )
+        ),
+        explainers=dict(
+            switching_lstm_explainer=ExperimentExplainerConfiguration(
+                explainer_class='deepsysid.explainability'
+                '.explainers.SwitchingLSTMExplainer',
+                parameters=BaseExplainerConfig(),
+            )
+        ),
     )
 
     # Setup dataset directory.
@@ -280,6 +305,16 @@ def run_pipeline(
         device_name=get_cpu_device_name(),
         mode=get_evaluation_mode(),
         configuration=config,
+        dataset_directory=str(paths['data']),
+        result_directory=str(paths['result']),
+        models_directory=str(paths['models']),
+    )
+
+    explain_model(
+        configuration=config,
+        model_name=model_name,
+        device_name=get_cpu_device_name(),
+        mode=get_evaluation_mode(),
         dataset_directory=str(paths['data']),
         result_directory=str(paths['result']),
         models_directory=str(paths['models']),

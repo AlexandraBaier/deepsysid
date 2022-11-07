@@ -11,6 +11,7 @@ from ..pipeline.configuration import (
     ExperimentGridSearchTemplate,
 )
 from ..pipeline.evaluation import evaluate_model
+from ..pipeline.explaining import explain_model
 from ..pipeline.gridsearch import (
     ExperimentSessionManager,
     ExperimentSessionReport,
@@ -68,6 +69,17 @@ class DeepSysIdCommandLineInterface:
             mode_argument=True,
         )
         self.test_parser.set_defaults(func=test)
+
+        self.explain_parser = self.subparsers.add_parser(
+            name='explain', help='Explain a model.'
+        )
+        add_parser_arguments(
+            self.explain_parser,
+            model_argument=True,
+            cuda_argument=True,
+            mode_argument=True,
+        )
+        self.explain_parser.set_defaults(func=explain)
 
         self.evaluate_parser = self.subparsers.add_parser(
             name='evaluate', help='Evaluate a model.'
@@ -233,6 +245,34 @@ def test(args: argparse.Namespace) -> None:
 
     time_end = time.time()
     logger.info(f'Testing time: {time_end - time_start:1f}')
+
+
+def explain(args: argparse.Namespace) -> None:
+    if 'device_idx' in args:
+        device_name = build_device_name(args.enable_cuda, args.device_idx)
+    else:
+        device_name = build_device_name(args.enable_cuda, None)
+
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
+        config_dict = json.load(f)
+    config = ExperimentConfiguration.from_grid_search_template(
+        ExperimentGridSearchTemplate.parse_obj(config_dict), device_name=device_name
+    )
+    setup_root_logger(
+        file_name=os.path.expanduser(
+            os.path.join(os.environ[RESULT_DIR_ENV_VAR], args.model, 'explain.log')
+        )
+    )
+
+    explain_model(
+        model_name=args.model,
+        device_name=device_name,
+        mode=args.mode,
+        configuration=config,
+        dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
+        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
+        models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
+    )
 
 
 def evaluate(args: argparse.Namespace) -> None:
