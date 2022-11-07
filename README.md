@@ -132,14 +132,15 @@ You can then, for example, run `deepsysid train <model_name>` on a chosen model.
 The `deepsysid` package exposes a command-line interface. 
 Run `deepsysid` or `deepsysid --help` to access the list of available subcommands:
 ```
-usage: Command line interface for the deepsysid package. [-h] {validate_configuration,train,test,evaluate,write_model_names,session,download} ...
+usage: Command line interface for the deepsysid package. [-h] {validate_configuration,train,test,explain,evaluate,write_model_names,session,download} ...
 
 positional arguments:
-  {validate_configuration,train,test,evaluate,write_model_names,session,download}
+  {validate_configuration,train,test,explain,evaluate,write_model_names,session,download}
     validate_configuration
                         Validate configuration file defined in CONFIGURATION.
     train               Train a model.
     test                Test a model.
+    explain             Explain a model.
     evaluate            Evaluate a model.
     write_model_names   Write all model names from the configuration to a text file.
     session             Run a full experiment given the configuration JSON. State of the session can be loaded from and is saved to disk. This allows stopping and continuing a session at any point.
