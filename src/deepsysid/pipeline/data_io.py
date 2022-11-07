@@ -80,3 +80,12 @@ def build_result_file_name(
         f'threshold_hybrid_{mode}-w_{window_size}'
         f'-h_{horizon_size}-t_{threshold_str}.{extension}'
     )
+
+
+def build_explanation_result_file_name(
+    mode: Literal['train', 'validation', 'test'],
+    window_size: int,
+    horizon_size: int,
+    extension: str,
+) -> str:
+    return f'{mode}-explanation-w_{window_size}-h_{horizon_size}.{extension}'

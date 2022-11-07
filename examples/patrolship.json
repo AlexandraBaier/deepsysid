@@ -81,6 +81,12 @@
         "metric_class": "deepsysid.pipeline.metrics.Trajectory4DOFRootMeanSquaredErrorMetric",
         "parameters": {}
       }
+    },
+    "explanation_metrics": {
+      "infidelity": {
+        "metric_class": "deepsysid.explainability.metrics.NMSEInfidelityMetric",
+        "parameters": {}
+      }
     }
   },
   "models": [
@@ -632,5 +638,11 @@
         "n_modes": [2, 5, 7, 10]
       }
     }
-  ]
+  ],
+  "explainers": {
+    "SwitchingLSTMExplainer": {
+      "explainer_class": "deepsysid.explainability.explainers.SwitchingLSTMExplainer",
+      "parameters": {}
+    }
+  }
 }
