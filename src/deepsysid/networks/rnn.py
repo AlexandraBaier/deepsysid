@@ -73,6 +73,43 @@ class BasicLSTM(HiddenStateForwardModule):
         return x, (h0, c0)
 
 
+class BasicRnn(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: int,
+        dropout: float,
+        bias: bool,
+    ) -> None:
+        super().__init__()
+
+        self.num_recurrent_layers = num_recurrent_layers
+        self.recurrent_dim = recurrent_dim
+
+        self.predictor_rnn = nn.RNN(
+            input_size=input_dim,
+            hidden_size=recurrent_dim,
+            num_layers=num_recurrent_layers,
+            dropout=dropout,
+            bias=bias,
+            batch_first=True,
+        )
+
+        self.out = nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=bias
+        )
+
+    def forward(
+        self,
+        u: torch.Tensor,
+        hx: Tuple[torch.Tensor, torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        h, _ = self.predictor_rnn(u, hx[0])
+        return self.out(h), h
+
+
 class LinearOutputLSTM(HiddenStateForwardModule):
     def __init__(
         self,
@@ -160,9 +197,8 @@ class LtiRnn(HiddenStateForwardModule):
 
         # initialize output
         y = torch.zeros((n_batch, n_sample, self.ny))
-
         if hx is not None:
-            x = hx[0][0]
+            x = hx[0][1]
         else:
             x = torch.zeros((n_batch, self.nx))
 
@@ -270,6 +306,8 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         tol = 1e-4
         # rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
         # objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
+        # nu = cp.Variable((1, nM))
+        # objective = cp.Minimize(nu @ np.ones((nM, 1)))
         objective = cp.Minimize(None)
         problem = cp.Problem(objective, [M << -tol * np.eye(nM)])
 
@@ -320,7 +358,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         y = torch.zeros((n_batch, n_sample, self.ny))
 
         if hx is not None:
-            x = hx[0][0]
+            x = hx[0][1]
         else:
             x = torch.zeros((n_batch, self.nx))
 

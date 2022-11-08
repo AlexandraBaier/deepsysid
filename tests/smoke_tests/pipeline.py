@@ -28,7 +28,7 @@ from deepsysid.pipeline.testing.bounded_residual import (
     BoundedResidualInferenceTestConfig,
 )
 from deepsysid.pipeline.testing.runner import test_model as run_model
-from deepsysid.pipeline.testing.stability import StabilityTestConfig
+from deepsysid.pipeline.testing.stability.base import StabilityTestConfig
 from deepsysid.pipeline.training import train_model
 
 
@@ -200,14 +200,31 @@ def run_pipeline(
         control_names=get_control_names(),
         state_names=get_state_names(),
         additional_tests=dict(
-            stability=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing.stability.StabilityTest',
+            bibo_stability=ExperimentTestConfiguration(
+                test_class='deepsysid.pipeline.testing.stability.'
+                'bibo.BiboStabilityTest',
                 parameters=StabilityTestConfig(
                     control_names=get_control_names(),
                     state_names=get_state_names(),
                     window_size=get_window_size(),
                     horizon_size=get_horizon_size(),
-                    type='bibo',
+                    optimization_steps=3,
+                    optimization_lr=1e-3,
+                    initial_mean_delta=0,
+                    initial_std_delta=1e-3,
+                    evaluation_sequence=1,
+                    clip_gradient_norm=100,
+                    regularization_scale=0.25,
+                ),
+            ),
+            incremental_stability=ExperimentTestConfiguration(
+                test_class='deepsysid.pipeline.testing.stability.'
+                'incremental.IncrementalStabilityTest',
+                parameters=StabilityTestConfig(
+                    control_names=get_control_names(),
+                    state_names=get_state_names(),
+                    window_size=get_window_size(),
+                    horizon_size=get_horizon_size(),
                     optimization_steps=3,
                     optimization_lr=1e-3,
                     initial_mean_delta=0,
