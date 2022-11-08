@@ -22,7 +22,7 @@
     ],
     "additional_tests": {
       "bibo_stability": {
-        "test_class": "deepsysid.pipeline.testing.bibo_stability.BiboStabilityTest",
+        "test_class": "deepsysid.pipeline.testing.stability.bibo.BiboStabilityTest",
         "parameters": {
           "optimization_steps": 100,
           "optimization_lr": 1e-3,
@@ -34,7 +34,7 @@
         }
       },
       "incremental_stability": {
-        "test_class": "deepsysid.pipeline.testing.incremental_stability.IncrementalStabilityTest",
+        "test_class": "deepsysid.pipeline.testing.stability.incremental.IncrementalStabilityTest",
         "parameters": {
           "optimization_steps": 100,
           "optimization_lr": 1e-3,
@@ -542,11 +542,19 @@
         "learning_rate": 0.0025
       },
       "flexible_parameters": {
-        "gamma": [
+        "gamma":[
+          2.0,
           5.0,
+          10.0,
           20.0,
-          40.0,
-          100.0
+          30.0,
+          40.0
+        ],
+        "recurrent_dim": [
+          32,
+          64,
+          128,
+          192
         ]
       }
     },
@@ -627,7 +635,8 @@
         "recurrent_dim": [
           64,
           128,
-          192
+          192,
+          256
         ]
       }
     },
@@ -642,7 +651,8 @@
         "epochs_initializer": 400,
         "epochs_predictor": 2000,
         "learning_rate": 0.0025,
-        "bias": false
+        "bias": false,
+        "loss": "mse"
       },
       "flexible_parameters": {
         "recurrent_dim": [
@@ -650,10 +660,6 @@
           128,
           192,
           256
-        ],
-        "loss": [
-          "mse",
-          "msge"
         ],
         "num_recurrent_layers": [
           2,

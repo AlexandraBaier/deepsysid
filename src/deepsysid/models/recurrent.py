@@ -732,7 +732,8 @@ class ConstrainedRnn(base.DynamicIdentificationModel):
                             f'Epoch {i+1}/{self.epochs_predictor}\t'
                             f'max real eigenvalue of M: '
                             f'{(torch.max(torch.real(torch.linalg.eig(M)[0]))):1f}\t'
-                            f'Backtracking line search exceeded maximum iteration.'
+                            f'Backtracking line search exceeded maximum iteration. \t'
+                            f'Constraints satisfied? {self.predictor.check_constr()}'
                         )
                         return dict(
                             index=np.asarray(i),

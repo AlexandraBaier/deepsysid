@@ -18,7 +18,7 @@ from deepsysid.pipeline.testing.bounded_residual import (
     BoundedResidualInferenceTestConfig,
 )
 from deepsysid.pipeline.testing.runner import test_model as run_model
-from deepsysid.pipeline.testing.base import StabilityTestConfig
+from deepsysid.pipeline.testing.stability.base import StabilityTestConfig
 from deepsysid.pipeline.training import train_model
 
 
@@ -188,7 +188,7 @@ def run_pipeline(
         state_names=get_state_names(),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing.bibo_stability.BiboStabilityTest',
+                test_class='deepsysid.pipeline.testing.stability.bibo.BiboStabilityTest',
                 parameters=StabilityTestConfig(
                     control_names=get_control_names(),
                     state_names=get_state_names(),
@@ -204,7 +204,7 @@ def run_pipeline(
                 ),
             ),
             incremental_stability=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing.incremental_stability.IncrementalStabilityTest',
+                test_class='deepsysid.pipeline.testing.stability.incremental.IncrementalStabilityTest',
                 parameters=StabilityTestConfig(
                     control_names=get_control_names(),
                     state_names=get_state_names(),

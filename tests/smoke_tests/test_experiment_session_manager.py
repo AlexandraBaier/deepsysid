@@ -51,7 +51,7 @@ def test_experiment_session_manager_new_and_test_best_successful(
             ),
             additional_tests=dict(
                 Bibo_stability=dict(
-                    test_class='deepsysid.pipeline.testing.bibo_stability.BiboStabilityTest',
+                    test_class='deepsysid.pipeline.testing.stability.bibo.BiboStabilityTest',
                     parameters=dict(
                         optimization_steps=10,
                         optimization_lr=1e-3,
@@ -62,8 +62,8 @@ def test_experiment_session_manager_new_and_test_best_successful(
                         regularization_scale=0.25,
                     ),
                 ),
-                Incremental_stability=dict(
-                    test_class='deepsysid.pipeline.testing.incremental_stability.IncrementalStabilityTest',
+                incremental_stability=dict(
+                    test_class='deepsysid.pipeline.testing.stability.incremental.IncrementalStabilityTest',
                     parameters=dict(
                         optimization_steps=10,
                         optimization_lr=1e-3,
@@ -73,7 +73,7 @@ def test_experiment_session_manager_new_and_test_best_successful(
                         clip_gradient_norm=100.0,
                         regularization_scale=0.25,
                     ),
-                )
+                ),
             ),
         ),
         models=[
