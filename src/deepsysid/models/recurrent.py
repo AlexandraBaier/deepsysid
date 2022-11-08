@@ -734,13 +734,13 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                             old_pars, self.predictor.parameters()
                         ):
                             new_par.data = old_par.clone()
-                        M = self.predictor.get_constraints()
+                        M = self._predictor.get_constraints()
                         logger.warning(
                             f'Epoch {i+1}/{self.epochs_predictor}\t'
                             f'max real eigenvalue of M: '
                             f'{(torch.max(torch.real(torch.linalg.eig(M)[0]))):1f}\t'
                             f'Backtracking line search exceeded maximum iteration. \t'
-                            f'Constraints satisfied? {self.predictor.check_constr()}'
+                            f'Constraints satisfied? {self._predictor.check_constr()}'
                         )
                         return dict(
                             index=np.asarray(i),

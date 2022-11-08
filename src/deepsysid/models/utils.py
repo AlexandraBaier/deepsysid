@@ -1,8 +1,8 @@
 from typing import List, Tuple, TypeVar
 
 import numpy as np
-from numpy.typing import NDArray
 import torch
+from numpy.typing import NDArray
 
 TensorType = TypeVar('TensorType', torch.Tensor, NDArray[np.float64])
 

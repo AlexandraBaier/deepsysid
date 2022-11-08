@@ -1,17 +1,11 @@
 import abc
-from typing import List, Type, Union, Literal
+from typing import Literal, Type, Union
 
 import numpy as np
 from numpy.typing import NDArray
 
-from ....models.base import DynamicIdentificationModel
-from ..base import (
-    BaseTest,
-    BaseTestConfig,
-    TestSimulation,
-    TestResult,
-    TestSequenceResult,
-)
+from ....models.base import NormalizedHiddenStateInitializerPredictorModel
+from ..base import BaseTest, BaseTestConfig, TestSequenceResult
 
 
 class StabilityTestConfig(BaseTestConfig):
@@ -27,19 +21,12 @@ class StabilityTestConfig(BaseTestConfig):
 class BaseStabilityTest(BaseTest):
     CONFIG: Type[StabilityTestConfig] = StabilityTestConfig
 
-    def __init__(self, config: StabilityTestConfig):
-        pass
-
-    @abc.abstractmethod
-    def test(
-        self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
-    ) -> TestResult:
-        pass
-
     @abc.abstractmethod
     def evaluate_stability_of_sequence(
         self,
-        model: DynamicIdentificationModel,
+        model: NormalizedHiddenStateInitializerPredictorModel,
+        device_name: str,
+        control_dim: int,
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         true_control: NDArray[np.float64],

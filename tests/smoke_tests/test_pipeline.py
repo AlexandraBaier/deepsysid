@@ -175,7 +175,7 @@ def test_lti_rnn_init(tmp_path: pathlib.Path) -> None:
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_rnn_init(tmp_path: pathlib.Path):
+def test_rnn_init(tmp_path: pathlib.Path) -> None:
     model_name = 'RnnInit'
     model_class = 'deepsysid.models.recurrent.RnnInit'
     config = RnnInit.CONFIG(
@@ -198,7 +198,7 @@ def test_rnn_init(tmp_path: pathlib.Path):
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
 
-def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path):
+def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridMinimalManeuveringModel'
     model_class = (
         'deepsysid.models.hybrid.bounded_residual.HybridMinimalManeuveringModel'

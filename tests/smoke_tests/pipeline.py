@@ -201,7 +201,8 @@ def run_pipeline(
         state_names=get_state_names(),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing.stability.bibo.BiboStabilityTest',
+                test_class='deepsysid.pipeline.testing.stability.'
+                'bibo.BiboStabilityTest',
                 parameters=StabilityTestConfig(
                     control_names=get_control_names(),
                     state_names=get_state_names(),
@@ -217,7 +218,8 @@ def run_pipeline(
                 ),
             ),
             incremental_stability=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing.stability.incremental.IncrementalStabilityTest',
+                test_class='deepsysid.pipeline.testing.stability.'
+                'incremental.IncrementalStabilityTest',
                 parameters=StabilityTestConfig(
                     control_names=get_control_names(),
                     state_names=get_state_names(),

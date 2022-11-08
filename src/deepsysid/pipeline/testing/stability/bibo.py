@@ -1,25 +1,18 @@
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from deepsysid.models.recurrent import (
-    RnnInit,
-    LtiRnnInit,
-    ConstrainedRnn,
-    LSTMInitModel,
-)
 
 from ....models import utils
-from ....models.base import DynamicIdentificationModel
-from ..base import (
-    TestResult,
-    TestSequenceResult,
-    TestSimulation,
+from ....models.base import (
+    DynamicIdentificationModel,
+    NormalizedHiddenStateInitializerPredictorModel,
 )
-from .base import BaseStabilityTest, StabilityTestConfig
+from ..base import TestResult, TestSequenceResult, TestSimulation
 from ..io import split_simulations
+from .base import BaseStabilityTest, StabilityTestConfig
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +20,12 @@ logger = logging.getLogger(__name__)
 class BiboStabilityTest(BaseStabilityTest):
     CONFIG = StabilityTestConfig
 
-    def __init__(self, config: StabilityTestConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: StabilityTestConfig, device_name: str) -> None:
+        super().__init__(config, device_name)
 
+        self.control_dim = len(config.control_names)
+
+        self.device_name = device_name
         self.window_size = config.window_size
         self.horizon_size = config.horizon_size
         self.evaluation_sequence = config.evaluation_sequence
@@ -44,16 +40,8 @@ class BiboStabilityTest(BaseStabilityTest):
     def test(
         self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
     ) -> TestResult:
-        if not (
-            any(
-                (
-                    isinstance(model, RnnInit),
-                    isinstance(model, LtiRnnInit),
-                    isinstance(model, ConstrainedRnn),
-                    isinstance(model, LSTMInitModel),
-                )
-            )
-        ):
+
+        if not isinstance(model, NormalizedHiddenStateInitializerPredictorModel):
             return TestResult(list(), dict())
 
         test_sequence_results: List[TestSequenceResult] = []
@@ -69,6 +57,8 @@ class BiboStabilityTest(BaseStabilityTest):
             test_sequence_results.append(
                 self.evaluate_stability_of_sequence(
                     model=model,
+                    device_name=self.device_name,
+                    control_dim=self.control_dim,
                     initial_control=sim.initial_control,
                     initial_state=sim.initial_state,
                     true_control=sim.true_control,
@@ -85,6 +75,8 @@ class BiboStabilityTest(BaseStabilityTest):
                 test_sequence_results.append(
                     self.evaluate_stability_of_sequence(
                         model=model,
+                        device_name=self.device_name,
+                        control_dim=self.control_dim,
                         initial_control=sim.initial_control,
                         initial_state=sim.initial_state,
                         true_control=sim.true_control,
@@ -94,7 +86,9 @@ class BiboStabilityTest(BaseStabilityTest):
 
     def evaluate_stability_of_sequence(
         self,
-        model: Union[RnnInit, LtiRnnInit, LSTMInitModel, ConstrainedRnn],
+        model: NormalizedHiddenStateInitializerPredictorModel,
+        device_name: str,
+        control_dim: int,
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         true_control: NDArray[np.float64],
@@ -127,17 +121,17 @@ class BiboStabilityTest(BaseStabilityTest):
             torch.from_numpy(np.hstack((u_init_norm_numpy[1:], y_init_norm_numpy[:-1])))
             .unsqueeze(0)
             .float()
-            .to(model.device_name)
+            .to(device_name)
         )
-        u_norm = torch.from_numpy(u_norm_numpy).float().to(model.device_name)
+        u_norm = torch.from_numpy(u_norm_numpy).float().to(device_name)
 
         # disturb input
         delta = torch.normal(
             self.initial_mean_delta,
             self.initial_std_delta,
-            size=(self.horizon_size, model.control_dim),
+            size=(self.horizon_size, control_dim),
             requires_grad=True,
-            device=model.device_name,
+            device=device_name,
         )
 
         # optimizer
@@ -153,8 +147,8 @@ class BiboStabilityTest(BaseStabilityTest):
             _, hx = model.initializer(u_init_norm)
             # TODO set initial state to zero should be good to find unstable sequences
             hx = (
-                torch.zeros_like(hx[0]).to(model.device_name),
-                torch.zeros_like(hx[1]).to(model.device_name),
+                torch.zeros_like(hx[0]).to(device_name),
+                torch.zeros_like(hx[1]).to(device_name),
             )
             y_hat_a, _ = model.predictor(u_a.unsqueeze(0), hx=hx)
             y_hat_a = y_hat_a.squeeze()
@@ -192,5 +186,5 @@ class BiboStabilityTest(BaseStabilityTest):
                     y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std
                 )
             ),
-            metadata=dict(stability_gain=gamma_2),
+            metadata=dict(stability_gain=np.array([gamma_2])),
         )
