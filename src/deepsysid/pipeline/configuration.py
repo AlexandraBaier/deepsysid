@@ -1,8 +1,14 @@
 import itertools
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Optional, Type
 
 from pydantic import BaseModel, root_validator
 
+from ..explainability.base import (
+    BaseExplainerConfig,
+    BaseExplanationMetricConfig,
+    retrieve_explainer_class,
+    retrieve_explanation_metric_class,
+)
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
 from .metrics import BaseMetricConfig, retrieve_metric_class
 from .testing.base import BaseTestConfig, retrieve_test_class
@@ -23,7 +29,22 @@ class ExperimentTestConfiguration(BaseModel):
     parameters: BaseTestConfig
 
 
+class ExperimentExplainerConfiguration(BaseModel):
+    explainer_class: str
+    parameters: BaseExplainerConfig
+
+
+class ExperimentExplanationMetricConfiguration(BaseModel):
+    metric_class: str
+    parameters: BaseExplanationMetricConfig
+
+
 class GridSearchMetricConfiguration(BaseModel):
+    metric_class: str
+    parameters: Dict[str, Any]
+
+
+class GridSearchExplanationMetricConfiguration(BaseModel):
     metric_class: str
     parameters: Dict[str, Any]
 
@@ -44,6 +65,7 @@ class ExperimentGridSearchSettings(BaseModel):
     additional_tests: Dict[str, GridSearchTestConfiguration]
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
+    explanation_metrics: Optional[Dict[str, GridSearchExplanationMetricConfiguration]]
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -53,9 +75,15 @@ class ModelGridSearchTemplate(BaseModel):
     flexible_parameters: Dict[str, List[Any]]
 
 
+class GridSearchExplainerConfiguration(BaseModel):
+    explainer_class: str
+    parameters: Dict[str, Any]
+
+
 class ExperimentGridSearchTemplate(BaseModel):
     settings: ExperimentGridSearchSettings
     models: List[ModelGridSearchTemplate]
+    explainers: Optional[Dict[str, GridSearchExplainerConfiguration]]
 
 
 class ExperimentConfiguration(BaseModel):
@@ -67,9 +95,11 @@ class ExperimentConfiguration(BaseModel):
     control_names: List[str]
     state_names: List[str]
     metrics: Dict[str, ExperimentMetricConfiguration]
+    explanation_metrics: Optional[Dict[str, ExperimentExplanationMetricConfiguration]]
     target_metric: str
     additional_tests: Dict[str, ExperimentTestConfiguration]
     models: Dict[str, ExperimentModelConfiguration]
+    explainers: Optional[Dict[str, ExperimentExplainerConfiguration]]
 
     @root_validator
     def check_target_metric_in_metrics(cls, values):
@@ -157,6 +187,35 @@ class ExperimentConfiguration(BaseModel):
                 ),
             )
 
+        explainers = dict()
+        if template.explainers is not None:
+            for name, explainer in template.explainers.items():
+                explainer_cls = retrieve_explainer_class(explainer.explainer_class)
+                explainers[name] = ExperimentExplainerConfiguration(
+                    explainer_class=explainer.explainer_class,
+                    parameters=explainer_cls.CONFIG.parse_obj(explainer.parameters),
+                )
+
+        explanation_metrics = dict()
+        base_explanation_metric_params = dict(state_names=template.settings.state_names)
+        if template.settings.explanation_metrics is not None:
+            for (
+                name,
+                explanation_metric,
+            ) in template.settings.explanation_metrics.items():
+                explanation_metric_cls = retrieve_explanation_metric_class(
+                    explanation_metric.metric_class
+                )
+                explanation_metrics[name] = ExperimentExplanationMetricConfiguration(
+                    metric_class=explanation_metric.metric_class,
+                    parameters=explanation_metric_cls.CONFIG.parse_obj(
+                        {
+                            **base_explanation_metric_params,
+                            **explanation_metric.parameters,
+                        }
+                    ),
+                )
+
         return cls(
             train_fraction=template.settings.train_fraction,
             validation_fraction=template.settings.validation_fraction,
@@ -168,7 +227,9 @@ class ExperimentConfiguration(BaseModel):
             models=models,
             target_metric=template.settings.target_metric,
             metrics=metrics,
+            explanation_metrics=explanation_metrics,
             additional_tests=tests,
+            explainers=explainers,
         )
 
 

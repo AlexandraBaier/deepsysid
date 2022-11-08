@@ -162,9 +162,13 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         x, (h0, c0) = self.lstm.forward(control, hx=hx)
         x = torch.reshape(x, (batch_size * sequence_length, self.recurrent_dim))
 
-        A = torch.reshape(
-            torch.diag_embed(torch.tanh(self.gen_A.forward(x))),
-            (batch_size, sequence_length, self.state_dim, self.state_dim),
+        A = (
+            torch.linalg.inv(self.T).unsqueeze(0).unsqueeze(0)
+            @ torch.reshape(
+                torch.diag_embed(torch.tanh(self.gen_A.forward(x))),
+                (batch_size, sequence_length, self.state_dim, self.state_dim),
+            )
+            @ self.T.unsqueeze(0).unsqueeze(0)
         )
         B = torch.reshape(
             self.gen_B.forward(x),
@@ -174,15 +178,14 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         states = torch.zeros(
             size=(batch_size, sequence_length, self.state_dim), device=state.device
         )
+        A = torch.zeros(
+            size=(batch_size, sequence_length, self.state_dim, self.state_dim),
+            device=state.device,
+        )
         for time in range(sequence_length):
-            state = torch.linalg.inv(self.T).unsqueeze(0) @ A[
+            state = A[:, time] @ state.unsqueeze(-1) + B[:, time] @ control[
                 :, time
-            ] @ self.T.unsqueeze(0) @ state.unsqueeze(-1) + B[:, time] @ control[
-                :, time
-            ].unsqueeze(
-                -1
-            )
+            ].unsqueeze(-1)
             state = state.squeeze(-1)
             states[:, time] = state
-
         return states, (h0, c0), A, B

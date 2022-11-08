@@ -11,6 +11,7 @@ from ..pipeline.configuration import (
     ExperimentGridSearchTemplate,
 )
 from ..pipeline.evaluation import evaluate_model
+from ..pipeline.explaining import explain_model
 from ..pipeline.gridsearch import (
     ExperimentSessionManager,
     ExperimentSessionReport,
@@ -68,6 +69,17 @@ class DeepSysIdCommandLineInterface:
             mode_argument=True,
         )
         self.test_parser.set_defaults(func=test)
+
+        self.explain_parser = self.subparsers.add_parser(
+            name='explain', help='Explain a model.'
+        )
+        add_parser_arguments(
+            self.explain_parser,
+            model_argument=True,
+            cuda_argument=True,
+            mode_argument=True,
+        )
+        self.explain_parser.set_defaults(func=explain)
 
         self.evaluate_parser = self.subparsers.add_parser(
             name='evaluate', help='Evaluate a model.'
@@ -178,10 +190,14 @@ def train(args: argparse.Namespace) -> None:
 
     # Configure logging
     # This is the "root" logger, so we do not initializer it with a name.
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    if not args.disable_stdout:
-        logger.addHandler(logging.StreamHandler(sys.stdout))
+    setup_root_logger(
+        disable_stdout=args.disable_stdout,
+        file_name=os.path.expanduser(
+            os.path.normpath(
+                os.path.join(os.environ[MODELS_DIR_ENV_VAR], args.model, 'training.log')
+            )
+        ),
+    )
 
     with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config_dict = json.load(f)
@@ -209,9 +225,11 @@ def test(args: argparse.Namespace) -> None:
     config = ExperimentConfiguration.from_grid_search_template(
         ExperimentGridSearchTemplate.parse_obj(config_dict), device_name=device_name
     )
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    logger.addHandler(logging.StreamHandler(sys.stdout))
+    logger = setup_root_logger(
+        file_name=os.path.expanduser(
+            os.path.join(os.environ[RESULT_DIR_ENV_VAR], args.model, 'testing.log')
+        )
+    )
 
     time_start = time.time()
 
@@ -227,6 +245,34 @@ def test(args: argparse.Namespace) -> None:
 
     time_end = time.time()
     logger.info(f'Testing time: {time_end - time_start:1f}')
+
+
+def explain(args: argparse.Namespace) -> None:
+    if 'device_idx' in args:
+        device_name = build_device_name(args.enable_cuda, args.device_idx)
+    else:
+        device_name = build_device_name(args.enable_cuda, None)
+
+    with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
+        config_dict = json.load(f)
+    config = ExperimentConfiguration.from_grid_search_template(
+        ExperimentGridSearchTemplate.parse_obj(config_dict), device_name=device_name
+    )
+    setup_root_logger(
+        file_name=os.path.expanduser(
+            os.path.join(os.environ[RESULT_DIR_ENV_VAR], args.model, 'explain.log')
+        )
+    )
+
+    explain_model(
+        model_name=args.model,
+        device_name=device_name,
+        mode=args.mode,
+        configuration=config,
+        dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
+        result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
+        models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
+    )
 
 
 def evaluate(args: argparse.Namespace) -> None:
@@ -258,9 +304,11 @@ def write_model_names(args: argparse.Namespace) -> None:
 
 
 def session(args: argparse.Namespace) -> None:
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    logger.addHandler(logging.StreamHandler(sys.stdout))
+    setup_root_logger(
+        file_name=os.path.expanduser(
+            os.path.join(os.environ[RESULT_DIR_ENV_VAR], args.model, 'session.log')
+        )
+    )
 
     if 'device_idx' in args:
         device_name = build_device_name(args.enable_cuda, args.device_idx)
@@ -312,9 +360,7 @@ def download_4dof_sim_ship(args: argparse.Namespace) -> None:
     routine_dir = args.target_routine
     ood_dir = args.target_ood
 
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    logger.addHandler(logging.StreamHandler(sys.stdout))
+    setup_root_logger()
 
     download_dataset_4_dof_simulated_ship(
         routine_directory=routine_dir, ood_directory=ood_dir
@@ -326,9 +372,7 @@ def download_pelican(args: argparse.Namespace) -> None:
     train_fraction = args.train_fraction
     validation_fraction = args.validation_fraction
 
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    logger.addHandler(logging.StreamHandler(sys.stdout))
+    setup_root_logger()
 
     download_dataset_pelican_quadcopter(
         target_directory=directory,
@@ -377,3 +421,17 @@ def build_device_name(enable_cuda: bool, device_idx: Optional[int] = None) -> st
         device_name = 'cpu'
 
     return device_name
+
+
+def setup_root_logger(
+    disable_stdout: bool = False, file_name: Optional[str] = None
+) -> logging.Logger:
+    logger = logging.getLogger('deepsysid')
+    logger.setLevel(logging.INFO)
+    if not disable_stdout:
+        logger.addHandler(logging.StreamHandler(sys.stdout))
+    if file_name is not None:
+        directory = os.path.dirname(file_name)
+        os.makedirs(directory, exist_ok=True)
+        logger.addHandler(logging.FileHandler(filename=file_name, mode='a'))
+    return logger
