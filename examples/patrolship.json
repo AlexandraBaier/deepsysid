@@ -21,10 +21,21 @@
       "alpha_y"
     ],
     "additional_tests": {
-      "stability": {
-        "test_class": "deepsysid.pipeline.testing.stability.StabilityTest",
+      "bibo_stability": {
+        "test_class": "deepsysid.pipeline.testing.stability.bibo.BiboStabilityTest",
         "parameters": {
-          "type": "bibo",
+          "optimization_steps": 100,
+          "optimization_lr": 1e-3,
+          "initial_mean_delta": 0.0,
+          "initial_std_delta": 1e-3,
+          "evaluation_sequence": 1,
+          "clip_gradient_norm": 100.0,
+          "regularization_scale": 0.25
+        }
+      },
+      "incremental_stability": {
+        "test_class": "deepsysid.pipeline.testing.stability.incremental.IncrementalStabilityTest",
+        "parameters": {
           "optimization_steps": 100,
           "optimization_lr": 1e-3,
           "initial_mean_delta": 0.0,
@@ -537,11 +548,19 @@
         "learning_rate": 0.0025
       },
       "flexible_parameters": {
-        "gamma": [
+        "gamma":[
+          2.0,
           5.0,
+          10.0,
           20.0,
-          40.0,
-          100.0
+          30.0,
+          40.0
+        ],
+        "recurrent_dim": [
+          32,
+          64,
+          128,
+          192
         ]
       }
     },
@@ -622,7 +641,36 @@
         "recurrent_dim": [
           64,
           128,
-          192
+          192,
+          256
+        ]
+      }
+    },
+    {
+      "model_base_name": "RnnInit",
+      "model_class": "deepsysid.models.recurrent.RnnInit",
+      "static_parameters": {
+        "time_delta": 1.0,
+        "dropout": 0.25,
+        "sequence_length": 50,
+        "batch_size": 128,
+        "epochs_initializer": 400,
+        "epochs_predictor": 2000,
+        "learning_rate": 0.0025,
+        "bias": false,
+        "loss": "mse"
+      },
+      "flexible_parameters": {
+        "recurrent_dim": [
+          64,
+          128,
+          192,
+          256
+        ],
+        "num_recurrent_layers": [
+          2,
+          3,
+          4
         ]
       }
     }, {
