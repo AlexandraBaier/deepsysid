@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -10,6 +11,8 @@ from deepsysid.explainability.base import (
     ModelInput,
 )
 from deepsysid.models.base import DynamicIdentificationModel
+
+logger = logging.getLogger(__name__)
 
 
 class NMSEInfidelityMetric(BaseExplanationMetric):
@@ -32,15 +35,20 @@ class NMSEInfidelityMetric(BaseExplanationMetric):
             )[0]
             for model_input in model_inputs
         ]
-        explanations = [
-            explainer.explain(
-                model,
-                model_input.initial_control,
-                model_input.initial_state,
-                model_input.control,
+        explanations = []
+        for idx, model_input in enumerate(model_inputs):
+            explanations.append(
+                explainer.explain(
+                    model,
+                    model_input.initial_control,
+                    model_input.initial_state,
+                    model_input.control,
+                )
             )
-            for model_input in model_inputs
-        ]
+            logger.info(
+                f'NMSEInfidelityMetric: '
+                f'Computed {(idx + 1) / len(model_inputs):.2%} explanations.'
+            )
 
         n = len(model_inputs)
         std_y = np.std(np.vstack(model_predictions), axis=0)

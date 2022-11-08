@@ -1,12 +1,16 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
+import lime
+import lime.lime_tabular
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 
 from deepsysid.explainability.base import (
     BaseExplainer,
+    BaseExplainerConfig,
     ExplainerNotImplementedForModel,
     Explanation,
+    ModelInput,
 )
 from deepsysid.models.base import DynamicIdentificationModel
 from deepsysid.models.switching.switchrnn import SwitchingLSTMBaseModel
@@ -151,3 +155,150 @@ class SwitchingLSTMExplainer(BaseExplainer):
                 intercept[out_idx] = intercept[out_idx] - weight * state_mean[in_idx]
 
         return state_matrix_den, intercept
+
+
+class LimeExplainerConfig(BaseExplainerConfig):
+    num_samples: int
+    # If num_features is None, all features are used.
+    num_features: Optional[int] = None
+
+
+class LIMEExplainer(BaseExplainer):
+    CONFIG = LimeExplainerConfig
+
+    def __init__(self, config: LimeExplainerConfig):
+        super().__init__(config)
+
+        self.num_samples = config.num_samples
+        self.lime_explainers: Optional[
+            List[lime.lime_tabular.LimeTabularExplainer]
+        ] = None
+        self.num_features = config.num_features
+
+    def initialize(
+        self,
+        training_inputs: List[ModelInput],
+        training_outputs: List[NDArray[np.float64]],
+    ) -> None:
+        training_data = np.vstack(
+            [
+                np.hstack(
+                    (
+                        inp.initial_control.flatten(),
+                        inp.initial_state.flatten(),
+                        inp.control.flatten(),
+                    )
+                )
+                for inp in training_inputs
+            ]
+        )
+        training_labels = np.vstack([out[-1, :] for out in training_outputs])
+
+        self.lime_explainers = [
+            lime.lime_tabular.LimeTabularExplainer(
+                training_data=training_data,
+                mode='regression',
+                training_labels=training_labels[:, out_idx],
+            )
+            for out_idx in range(training_labels.shape[1])
+        ]
+
+    def explain(
+        self,
+        model: DynamicIdentificationModel,
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+    ) -> Explanation:
+        if self.lime_explainers is None:
+            raise ValueError(
+                'Explainer needs to be initialized with initialize' 'before explaining.'
+            )
+
+        control_dim = initial_control.shape[1]
+        state_dim = initial_state.shape[1]
+        window_size = initial_state.shape[0]
+        horizon_size = control.shape[0]
+
+        if self.num_features is None:
+            num_features_lime = (
+                control_dim * window_size
+                + state_dim * window_size
+                + control_dim * horizon_size
+            )
+        else:
+            num_features_lime = self.num_features
+
+        def predict_fn(x: NDArray[np.float64], out_idx: int) -> NDArray[np.float64]:
+            if len(x.shape) != 2:
+                raise ValueError(
+                    'Expected 2D array from LIMEs explain_instance method.'
+                )
+            batch_size = x.shape[0]
+
+            initial_control_index = window_size * control_dim
+            initial_state_index = initial_control_index + window_size * state_dim
+            x_initial_control = x[:, :initial_control_index].reshape(
+                (batch_size, window_size, control_dim)
+            )
+            x_initial_state = x[:, initial_control_index:initial_state_index].reshape(
+                (batch_size, window_size, state_dim)
+            )
+            x_control = x[:, initial_state_index:].reshape(
+                (batch_size, horizon_size, control_dim)
+            )
+            output = np.zeros((batch_size,))
+            for idx in range(batch_size):
+                pred, _ = model.simulate(
+                    x_initial_control[idx], x_initial_state[idx], x_control[idx]
+                )
+                output[idx] = pred[-1, out_idx]
+
+            return output
+
+        data_row = np.hstack(
+            (initial_control.flatten(), initial_state.flatten(), control.flatten())
+        )
+        lime_explanations = [
+            lime_explainer.explain_instance(
+                data_row=data_row,
+                predict_fn=lambda x: predict_fn(x, out_idx),
+                num_samples=self.num_samples,
+                num_features=num_features_lime,
+            )
+            for out_idx, lime_explainer in enumerate(self.lime_explainers)
+        ]
+        weights = np.zeros(
+            (
+                state_dim,
+                window_size * control_dim
+                + window_size * state_dim
+                + horizon_size * control_dim,
+            ),
+            dtype=np.float64,
+        )
+        intercept = np.zeros((state_dim,), dtype=np.float64)
+        for out_idx, explanation in enumerate(lime_explanations):
+            intercept[out_idx] = explanation.intercept[0]
+            for in_idx, weight in explanation.local_exp[0]:
+                # According to
+                # https://github.com/abacusai/xai-bench/blob/main/custom_explainers/lime.py#L69
+                # The outputs of LIME for regression are negated.
+                # So we have to invert them again.
+                weights[out_idx, in_idx] = -weight
+
+        initial_control_idx = window_size * control_dim
+        initial_state_idx = initial_control_idx + window_size * state_dim
+
+        return Explanation(
+            weights_initial_control=weights[:, :initial_control_idx].reshape(
+                (state_dim, window_size, control_dim)
+            ),
+            weights_initial_state=weights[
+                :, initial_control_idx:initial_state_idx
+            ].reshape((state_dim, window_size, state_dim)),
+            weights_control=weights[:, initial_state_idx:].reshape(
+                (state_dim, horizon_size, control_dim)
+            ),
+            intercept=intercept,
+        )

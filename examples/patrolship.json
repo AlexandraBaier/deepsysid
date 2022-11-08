@@ -643,6 +643,12 @@
     "SwitchingLSTMExplainer": {
       "explainer_class": "deepsysid.explainability.explainers.SwitchingLSTMExplainer",
       "parameters": {}
+    },
+    "LIMEExplainer": {
+      "explainer_class": "deepsysid.explainability.explainers.LIMEExplainer",
+      "parameters": {
+        "num_samples": 100
+      }
     }
   }
 }
