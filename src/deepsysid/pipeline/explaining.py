@@ -33,16 +33,33 @@ def explain_model(
     model = initialize_model(configuration, model_name, device_name)
     load_model(model, model_directory, model_name)
 
-    simulations = load_test_simulations(
+    explained_simulations = load_test_simulations(
         configuration=configuration,
         mode=mode,
         dataset_directory=dataset_directory,
     )
 
+    training_simulations = load_test_simulations(
+        configuration=configuration, mode='train', dataset_directory=dataset_directory
+    )
+    training_inputs, training_outputs = zip(
+        *[
+            (
+                ModelInput(sim.initial_control, sim.initial_state, sim.true_control),
+                sim.true_state,
+            )
+            for sim in split_simulations(
+                configuration.window_size,
+                configuration.horizon_size,
+                training_simulations,
+            )
+        ]
+    )
+
     model_inputs = [
         ModelInput(sim.initial_control, sim.initial_state, sim.true_control)
         for sim in split_simulations(
-            configuration.window_size, configuration.horizon_size, simulations
+            configuration.window_size, configuration.horizon_size, explained_simulations
         )
     ]
 
@@ -58,6 +75,11 @@ def explain_model(
         for explainer_name, explainer_config in configuration.explainers.items():
             explainer_cls = retrieve_explainer_class(explainer_config.explainer_class)
             explainer = explainer_cls(explainer_config.parameters)
+            explainer.initialize(list(training_inputs), list(training_outputs))
+            logger.info(
+                f'Running metric {metric.__class__} on explainer {explainer.__class__} '
+                f'explaining {model.__class__}.'
+            )
             try:
                 result, metadata = metric.measure(model, explainer, model_inputs)
             except ExplainerNotImplementedForModel:

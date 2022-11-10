@@ -7,6 +7,7 @@ from deepsysid.explainability.base import (
     BaseExplainerConfig,
     BaseExplanationMetricConfig,
 )
+from deepsysid.explainability.explainers.lime import LIMEExplainerConfig
 from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
@@ -296,9 +297,14 @@ def run_pipeline(
         explainers=dict(
             switching_lstm_explainer=ExperimentExplainerConfiguration(
                 explainer_class='deepsysid.explainability'
-                '.explainers.SwitchingLSTMExplainer',
+                '.explainers.switching.SwitchingLSTMExplainer',
                 parameters=BaseExplainerConfig(),
-            )
+            ),
+            lime_explainer=ExperimentExplainerConfiguration(
+                explainer_class='deepsysid.explainability'
+                '.explainers.lime.LIMEExplainer',
+                parameters=LIMEExplainerConfig(num_samples=6, cv_folds=2),
+            ),
         ),
     )
 

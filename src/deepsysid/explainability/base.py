@@ -79,6 +79,22 @@ class BaseExplainer(metaclass=abc.ABCMeta):
     ):
         pass
 
+    def initialize(
+        self,
+        training_inputs: List[ModelInput],
+        training_outputs: List[NDArray[np.float64]],
+    ) -> None:
+        """
+        :param training_inputs: list of length n_samples with ModelInput
+            with initial_control (window, control)
+            with initial_state (window, state)
+            with control (horizon, control)
+        :param training_outputs: list of length n_samples
+            with arrays (horizon, state_dim).
+        :return:
+        """
+        pass
+
     @abc.abstractmethod
     def explain(
         self,
