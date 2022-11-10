@@ -658,7 +658,8 @@
         "epochs_predictor": 2000,
         "learning_rate": 0.0025,
         "bias": false,
-        "loss": "mse"
+        "loss": "mse",
+        "clip_gradient_norm": 10
       },
       "flexible_parameters": {
         "recurrent_dim": [
@@ -689,13 +690,13 @@
   ],
   "explainers": {
     "SwitchingLSTMExplainer": {
-      "explainer_class": "deepsysid.explainability.explainers.SwitchingLSTMExplainer",
+      "explainer_class": "deepsysid.explainability.explainers.switching.SwitchingLSTMExplainer",
       "parameters": {}
     },
     "LIMEExplainer": {
-      "explainer_class": "deepsysid.explainability.explainers.LIMEExplainer",
+      "explainer_class": "deepsysid.explainability.explainers.lime.LIMEExplainer",
       "parameters": {
-        "num_samples": 100
+        "num_samples": 5000
       }
     }
   }
