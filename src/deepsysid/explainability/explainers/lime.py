@@ -2,7 +2,7 @@ from typing import List, Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from sklearn.linear_model import MultiTaskLassoCV
+from sklearn.linear_model import LassoCV
 
 from ...models import utils
 from ...models.base import DynamicIdentificationModel
@@ -101,6 +101,9 @@ class LIMEExplainer(BaseExplainer):
         x_ref = utils.normalize(x_ref, self.input_mean, self.input_std)
         disturbances = np.random.normal(0.0, 1.0, (self.num_samples, input_dim))
         x_all = x_ref + disturbances
+        x_all_dist_to_ref = (1.0 + 1e-05) / (
+            np.linalg.norm(disturbances, ord=2, axis=1) + 1e-05
+        )
         x_all_den = utils.denormalize(x_all, self.input_mean, self.input_std)
 
         y_all = np.zeros((self.num_samples, output_dim))
@@ -125,19 +128,36 @@ class LIMEExplainer(BaseExplainer):
                 y_all[idx, :], self.output_mean, self.output_std
             )
 
-        local_estimator = MultiTaskLassoCV(fit_intercept=True, cv=self.cv_folds)
-        local_estimator.fit(x_all, y_all)
+        weights_initial_control = np.zeros(
+            (state_dim, window_size, control_dim), dtype=np.float64
+        )
+        weights_initial_state = np.zeros(
+            (state_dim, window_size, state_dim), dtype=np.float64
+        )
+        weights_control = np.zeros(
+            (state_dim, horizon_size, control_dim), dtype=np.float64
+        )
+        intercept = self.state_mean.copy()
 
-        weights_initial_control = local_estimator.coef_[
-            :, : window_size * control_dim
-        ].reshape((state_dim, window_size, control_dim))
-        weights_initial_state = local_estimator.coef_[
-            :, window_size * control_dim : window_size * (state_dim + control_dim)
-        ].reshape((state_dim, window_size, state_dim))
-        weights_control = local_estimator.coef_[
-            :, window_size * (state_dim + control_dim) :
-        ].reshape((state_dim, horizon_size, control_dim))
-        intercept = local_estimator.intercept_ * self.state_std + self.state_mean
+        for out_idx in range(state_dim):
+            local_estimator = LassoCV(fit_intercept=True, cv=self.cv_folds)
+            local_estimator.fit(
+                x_all, y_all[:, out_idx], sample_weight=x_all_dist_to_ref
+            )
+
+            weights_initial_control[out_idx, :, :] = local_estimator.coef_[
+                : window_size * control_dim
+            ].reshape((window_size, control_dim))
+            weights_initial_state[out_idx, :, :] = local_estimator.coef_[
+                window_size * control_dim : window_size * (state_dim + control_dim)
+            ].reshape((window_size, state_dim))
+            weights_control[out_idx, :, :] = local_estimator.coef_[
+                window_size * (state_dim + control_dim) :
+            ].reshape((horizon_size, control_dim))
+            intercept[out_idx] = (
+                intercept[out_idx]
+                + local_estimator.intercept_ * self.state_std[out_idx]
+            )
 
         for time in range(window_size):
             (
