@@ -224,7 +224,10 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             return x / state_std[self.physical_state_mask]  # type: ignore
 
         def scale_acc_physical_np(x: NDArray[np.float64]) -> NDArray[np.float64]:
-            return x / self.state_std[self.physical_state_mask]  # type: ignore
+            out: NDArray[np.float64] = (
+                x / self.state_std[self.physical_state_mask]  # type: ignore
+            )
+            return out
 
         # Train linear model
         targets_seqs = []
