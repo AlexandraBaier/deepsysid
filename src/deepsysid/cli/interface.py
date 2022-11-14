@@ -306,7 +306,7 @@ def write_model_names(args: argparse.Namespace) -> None:
 def session(args: argparse.Namespace) -> None:
     setup_root_logger(
         file_name=os.path.expanduser(
-            os.path.join(os.environ[RESULT_DIR_ENV_VAR], args.model, 'session.log')
+            os.path.join(os.environ[RESULT_DIR_ENV_VAR], 'session.log')
         )
     )
 
