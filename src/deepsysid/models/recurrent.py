@@ -443,11 +443,11 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
 
         return dict(
             index=np.asarray(i),
-            initializer_loss=np.asarray(initializer_loss),
-            predictor_loss=np.asarray(predictor_loss),
+            epoch_loss_initializer=np.asarray(initializer_loss),
+            epoch_loss_predictor=np.asarray(predictor_loss),
             gradient_norm=np.asarray(gradient_norm),
-            training_time_init=np.asarray(time_total_init),
-            training_time_pred=np.asarray(time_total_pred),
+            training_time_initializer=np.asarray(time_total_init),
+            training_time_predictor=np.asarray(time_total_pred),
         )
 
     def simulate(
@@ -742,15 +742,21 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                             f'Backtracking line search exceeded maximum iteration. \t'
                             f'Constraints satisfied? {self._predictor.check_constr()}'
                         )
+                        time_end_pred = time.time()
+                        time_total_init = time_end_init - time_start_init
+                        time_total_pred = time_end_pred - time_start_pred
+
                         return dict(
                             index=np.asarray(i),
-                            initializer_loss=np.asarray(initializer_loss),
-                            predictor_loss=np.asarray(predictor_loss),
+                            epoch_loss_initializer=np.asarray(initializer_loss),
+                            epoch_loss_predictor=np.asarray(predictor_loss),
                             barrier_value=np.asarray(barrier_value),
                             backtracking_iter=np.asarray(backtracking_iter),
                             gradient_norm=np.asarray(gradient_norm),
                             max_eigenvalue=np.asarray(max_eigenvalue),
                             min_eigenvalue=np.asarray(min_eigenvalue),
+                            training_time_initializer=np.asarray(time_total_init),
+                            training_time_predictor=np.asarray(time_total_pred),
                         )
                     bls_iter += 1
 
@@ -788,15 +794,15 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
         return dict(
             index=np.asarray(i),
-            initializer_loss=np.asarray(initializer_loss),
-            predictor_loss=np.asarray(predictor_loss),
+            epoch_loss_initializer=np.asarray(initializer_loss),
+            epoch_loss_predictor=np.asarray(predictor_loss),
             barrier_value=np.asarray(barrier_value),
             backtracking_iter=np.asarray(backtracking_iter),
             gradient_norm=np.asarray(gradient_norm),
             max_eigenvalue=np.asarray(max_eigenvalue),
             min_eigenvalue=np.asarray(min_eigenvalue),
-            training_time_init=np.asarray(time_total_init),
-            training_time_pred=np.asarray(time_total_pred),
+            training_time_initializer=np.asarray(time_total_init),
+            training_time_predictor=np.asarray(time_total_pred),
         )
 
     def simulate(
