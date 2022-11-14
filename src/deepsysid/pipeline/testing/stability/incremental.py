@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Optional
 
 import numpy as np
@@ -46,6 +47,8 @@ class IncrementalStabilityTest(BaseStabilityTest):
 
         test_sequence_results = []
 
+        time_start_test = time.time()
+
         if isinstance(self.evaluation_sequence, int):
             logger.info(
                 'Test incremental stability'
@@ -86,7 +89,13 @@ class IncrementalStabilityTest(BaseStabilityTest):
                     )
                 )
 
-        return TestResult(sequences=test_sequence_results, metadata=dict())
+        time_end_test = time.time()
+
+        test_time = time_end_test - time_start_test
+
+        return TestResult(
+            sequences=test_sequence_results, metadata=dict(test_time=[test_time])
+        )
 
     def evaluate_stability_of_sequence(
         self,

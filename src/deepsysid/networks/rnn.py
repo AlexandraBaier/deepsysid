@@ -73,7 +73,7 @@ class BasicLSTM(HiddenStateForwardModule):
         return x, (h0, c0)
 
 
-class BasicRnn(nn.Module):
+class BasicRnn(HiddenStateForwardModule):
     def __init__(
         self,
         input_dim: int,
@@ -103,10 +103,17 @@ class BasicRnn(nn.Module):
 
     def forward(
         self,
-        u: torch.Tensor,
-        hx: Tuple[torch.Tensor, torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        h, _ = self.predictor_rnn(u, hx[0])
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        n_batch, _, _ = x_pred.shape
+
+        if hx is not None:
+            x = hx[0]
+        else:
+            x = torch.zeros((n_batch, self.recurrent_dim))
+
+        h, _ = self.predictor_rnn(x_pred, x)
         return self.out(h), h
 
 
