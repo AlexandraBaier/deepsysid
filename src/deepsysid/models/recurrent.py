@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 from ..networks import loss, rnn
 from ..networks.rnn import HiddenStateForwardModule
 from . import base, utils
-from .base import DynamicIdentificationModel, DynamicIdentificationModelConfig
+from .base import DynamicIdentificationModelConfig
 from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 
 logger = logging.getLogger('deepsysid.pipeline.training')
@@ -34,7 +34,7 @@ class RnnInitConfig(DynamicIdentificationModelConfig):
     loss: Literal['mse', 'msge']
 
 
-class RnnInit(DynamicIdentificationModel):
+class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
     CONFIG = RnnInitConfig
 
     def __init__(self, config: RnnInitConfig):
@@ -65,7 +65,7 @@ class RnnInit(DynamicIdentificationModel):
         else:
             raise ValueError('loss can only be "mse" or "msge"')
 
-        self.predictor = rnn.BasicRnn(
+        self._predictor = rnn.BasicRnn(
             input_dim=self.control_dim,
             recurrent_dim=self.recurrent_dim,
             num_recurrent_layers=self.num_recurrent_layers,
@@ -74,7 +74,7 @@ class RnnInit(DynamicIdentificationModel):
             bias=config.bias,
         ).to(self.device)
 
-        self.initializer = rnn.BasicLSTM(
+        self._initializer = rnn.BasicLSTM(
             input_dim=self.control_dim + self.state_dim,
             recurrent_dim=self.recurrent_dim,
             num_recurrent_layers=self.num_recurrent_layers,
@@ -83,16 +83,11 @@ class RnnInit(DynamicIdentificationModel):
         ).to(self.device)
 
         self.optimizer_pred = optim.Adam(
-            self.predictor.parameters(), lr=self.learning_rate
+            self._predictor.parameters(), lr=self.learning_rate
         )
         self.optimizer_init = optim.Adam(
-            self.initializer.parameters(), lr=self.learning_rate
+            self._initializer.parameters(), lr=self.learning_rate
         )
-
-        self.state_mean: Optional[NDArray[np.float64]] = None
-        self.state_std: Optional[NDArray[np.float64]] = None
-        self.control_mean: Optional[NDArray[np.float64]] = None
-        self.control_std: Optional[NDArray[np.float64]] = None
 
     def train(
         self,
@@ -102,11 +97,11 @@ class RnnInit(DynamicIdentificationModel):
         epoch_losses_initializer = []
         epoch_losses_predictor = []
 
-        self.predictor.train()
-        self.initializer.train()
+        self._predictor.train()
+        self._initializer.train()
 
-        self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
-        self.state_mean, self.state_std = utils.mean_stddev(state_seqs)
+        self._control_mean, self._control_std = utils.mean_stddev(control_seqs)
+        self._state_mean, self._state_std = utils.mean_stddev(state_seqs)
 
         control_seqs = [
             utils.normalize(control, self.control_mean, self.control_std)
@@ -128,8 +123,8 @@ class RnnInit(DynamicIdentificationModel):
             )
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
-                self.initializer.zero_grad()
-                y, _ = self.initializer.forward(batch['x'].float().to(self.device))
+                self._initializer.zero_grad()
+                y, _ = self._initializer.forward(batch['x'].float().to(self.device))
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
@@ -153,16 +148,18 @@ class RnnInit(DynamicIdentificationModel):
             )
             total_loss = 0
             for batch_idx, batch in enumerate(data_loader):
-                self.predictor.zero_grad()
+                self._predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
+                _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
-                y, _ = self.predictor.forward(batch['x'].float().to(self.device), hx=hx)
+                y, _ = self._predictor.forward(
+                    batch['x'].float().to(self.device), hx=hx
+                )
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 torch.nn.utils.clip_grad_norm_(
-                    self.predictor.parameters(), self.clip_gradient_norm
+                    self._predictor.parameters(), self.clip_gradient_norm
                 )
                 self.optimizer_pred.step()
 
@@ -201,8 +198,8 @@ class RnnInit(DynamicIdentificationModel):
         ):
             raise ValueError('Model has not been trained and cannot simulate.')
 
-        self.initializer.eval()
-        self.predictor.eval()
+        self._initializer.eval()
+        self._predictor.eval()
 
         initial_control = utils.normalize(
             initial_control, self.control_mean, self.control_std
@@ -219,8 +216,8 @@ class RnnInit(DynamicIdentificationModel):
             )
             pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
 
-            _, hx = self.initializer.forward(init_x)
-            y, _ = self.predictor.forward(pred_x, hx=hx)
+            _, hx = self._initializer.forward(init_x)
+            y, _ = self._predictor.forward(pred_x, hx=hx)
             y_np: NDArray[np.float64] = (
                 y.cpu().detach().squeeze().numpy().astype(np.float64)
             )
@@ -237,8 +234,8 @@ class RnnInit(DynamicIdentificationModel):
         ):
             raise ValueError('Model has not been trained and cannot be saved.')
 
-        torch.save(self.initializer.state_dict(), file_path[0])
-        torch.save(self.predictor.state_dict(), file_path[1])
+        torch.save(self._initializer.state_dict(), file_path[0])
+        torch.save(self._predictor.state_dict(), file_path[1])
         with open(file_path[2], mode='w') as f:
             json.dump(
                 {
@@ -251,18 +248,18 @@ class RnnInit(DynamicIdentificationModel):
             )
 
     def load(self, file_path: Tuple[str, ...]) -> None:
-        self.initializer.load_state_dict(
+        self._initializer.load_state_dict(
             torch.load(file_path[0], map_location=self.device_name)
         )
-        self.predictor.load_state_dict(
+        self._predictor.load_state_dict(
             torch.load(file_path[1], map_location=self.device_name)
         )
         with open(file_path[2], mode='r') as f:
             norm = json.load(f)
-        self.state_mean = np.array(norm['state_mean'], dtype=np.float64)
-        self.state_std = np.array(norm['state_std'], dtype=np.float64)
-        self.control_mean = np.array(norm['control_mean'], dtype=np.float64)
-        self.control_std = np.array(norm['control_std'], dtype=np.float64)
+        self._state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self._state_std = np.array(norm['state_std'], dtype=np.float64)
+        self._control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self._control_std = np.array(norm['control_std'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return 'initializer.pth', 'predictor.pth', 'json'
@@ -270,12 +267,20 @@ class RnnInit(DynamicIdentificationModel):
     def get_parameter_count(self) -> int:
         # technically parameter counts of both networks are equal
         init_count = sum(
-            p.numel() for p in self.initializer.parameters() if p.requires_grad
+            p.numel() for p in self._initializer.parameters() if p.requires_grad
         )
         predictor_count = sum(
-            p.numel() for p in self.predictor.parameters() if p.requires_grad
+            p.numel() for p in self._predictor.parameters() if p.requires_grad
         )
         return init_count + predictor_count
+
+    @property
+    def initializer(self) -> HiddenStateForwardModule:
+        return copy.deepcopy(self._initializer)
+
+    @property
+    def predictor(self) -> HiddenStateForwardModule:
+        return copy.deepcopy(self._predictor)
 
 
 class LtiRnnInitConfig(DynamicIdentificationModelConfig):
@@ -731,7 +736,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
                     if bls_iter > max_iter - 1:
                         for old_par, new_par in zip(
-                            old_pars, self.predictor.parameters()
+                            old_pars, self._predictor.parameters()
                         ):
                             new_par.data = old_par.clone()
                         M = self._predictor.get_constraints()
