@@ -225,7 +225,7 @@ class ExperimentSessionManager(object):
                 )
                 logger.info(
                     f'Trained and tested additional run '
-                    f'{repeat_number}/{n_repeats + 1}: {model_name}'
+                    f'{repeat_number + 1}/{n_repeats}: {model_name}'
                 )
 
             self.session_report = ExperimentSessionReport(
