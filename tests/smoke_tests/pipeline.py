@@ -15,6 +15,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentExplanationMetricConfiguration,
     ExperimentMetricConfiguration,
     ExperimentTestConfiguration,
+    SessionConfiguration,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.explaining import explain_model
@@ -190,6 +191,7 @@ def run_pipeline(
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
         state_names=get_state_names(),
+        session=SessionConfiguration(best_model_runs=3),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing.stability.'

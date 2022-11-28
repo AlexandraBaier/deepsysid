@@ -143,6 +143,13 @@ def test_experiment_session_manager_new_and_test_best_successful(
     )
     manager.run_session()
     session_report = manager.get_session_report()
+
     assert (
         len(session_report.tested_models) == 3
     ), 'Only 3 models should be tested (one per class/base name).'
+    assert (
+        len(session_report.best_per_base_name.items()) == 3
+    ), 'There are 3 unique base names.'
+    assert (
+        len(session_report.best_per_class.items()) == 3
+    ), 'There are 3 unique classes.'

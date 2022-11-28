@@ -49,10 +49,8 @@ def save_model_tests(
 ) -> None:
     # Save true and predicted time series
     result_directory = os.path.join(result_directory, model_name)
-    try:
-        os.mkdir(result_directory)
-    except FileExistsError:
-        pass
+
+    os.makedirs(result_directory, exist_ok=True)
 
     result_file_path = os.path.join(
         result_directory,

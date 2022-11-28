@@ -3,6 +3,9 @@
     "time_delta": 1.0,
     "window_size": 60,
     "horizon_size": 900,
+    "session": {
+      "best_model_runs": 3
+    },
     "control_names": [
       "n",
       "deltal",

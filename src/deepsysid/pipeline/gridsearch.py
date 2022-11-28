@@ -95,7 +95,7 @@ class ExperimentSessionManager(object):
         if self.session_action in {SessionAction.NEW, SessionAction.CONTINUE}:
             self._run_validation(callback)
         elif self.session_action == SessionAction.TEST_BEST:
-            self._run_test_best()
+            self._run_test_best(callback)
         else:
             raise NotImplementedError(
                 f'{self.session_action} has no implemented functionality.'
@@ -110,13 +110,7 @@ class ExperimentSessionManager(object):
         )
         unfinished_models = self.session_report.unfinished_models.copy()
         for model_name in unfinished_models:
-            train_model(
-                model_name=model_name,
-                device_name=self.device_name,
-                configuration=self.experiment_config,
-                dataset_directory=self.dataset_directory,
-                models_directory=self.models_directory,
-            )
+            self._run_train(model_name=model_name)
             self._run_test_eval(model_name=model_name, mode='validation')
             self.session_report = self._update_from_unfinished_to_validated(model_name)
 
@@ -133,7 +127,9 @@ class ExperimentSessionManager(object):
             )
         return self.get_session_report()
 
-    def _run_test_best(self) -> ExperimentSessionReport:
+    def _run_test_best(
+        self, callback: Callable[[ExperimentSessionReport], None]
+    ) -> ExperimentSessionReport:
         model2score = dict(
             (model_name, self._get_validation_score(model_name))
             for model_name in self.session_report.validated_models
@@ -193,17 +189,65 @@ class ExperimentSessionManager(object):
             for base_name in base_names
         )
         models_to_test = set(best_per_class.values()).union(best_per_base_name.values())
-        for model_name in models_to_test:
-            self._run_test_eval(model_name=model_name, mode='test')
-            logger.info(f'Tested: {model_name}')
+
+        tested_models = (
+            self.session_report.tested_models
+            if self.session_report.tested_models is not None
+            else set()
+        )
+        untested_models = models_to_test.difference(tested_models)
+        logger.info(
+            f'{len(untested_models)} out of {len(models_to_test)} '
+            f'models left to be tested.'
+        )
 
         self.session_report = ExperimentSessionReport(
             unfinished_models=self.session_report.unfinished_models.copy(),
             validated_models=self.session_report.validated_models.copy(),
-            tested_models=models_to_test,
-            best_per_class=best_per_class,
-            best_per_base_name=best_per_base_name,
+            best_per_class=best_per_class.copy(),
+            best_per_base_name=best_per_base_name.copy(),
         )
+        callback(self.get_session_report())
+
+        if self.config.settings.session is None:
+            n_repeats = 1
+        else:
+            n_repeats = self.config.settings.session.best_model_runs
+
+        for model_name in untested_models:
+            self._run_test_eval(model_name=model_name, mode='test')
+            logger.info(f'Tested already trained model: {model_name}')
+
+            for repeat_number in range(1, n_repeats):
+                self._run_train(model_name, repeat_number=repeat_number)
+                self._run_test_eval(
+                    model_name=model_name, mode='test', repeat_number=repeat_number
+                )
+                logger.info(
+                    f'Trained and tested additional run '
+                    f'{repeat_number}/{n_repeats + 1}: {model_name}'
+                )
+
+            self.session_report = ExperimentSessionReport(
+                unfinished_models=self.session_report.unfinished_models.copy(),
+                validated_models=self.session_report.validated_models.copy(),
+                best_per_class=(
+                    self.session_report.best_per_class.copy()
+                    if self.session_report.best_per_class is not None
+                    else None
+                ),
+                best_per_base_name=(
+                    self.session_report.best_per_base_name.copy()
+                    if self.session_report.best_per_base_name is not None
+                    else None
+                ),
+                tested_models=(
+                    self.session_report.tested_models.union({model_name})
+                    if self.session_report.tested_models is not None
+                    else {model_name}
+                ),
+            )
+            callback(self.session_report)
 
         return self.get_session_report()
 
@@ -228,24 +272,70 @@ class ExperimentSessionManager(object):
 
         return validation_score
 
+    def _run_train(self, model_name: str, repeat_number: Optional[int] = None) -> None:
+        if repeat_number is None:
+            train_model(
+                model_name=model_name,
+                device_name=self.device_name,
+                configuration=self.experiment_config,
+                dataset_directory=self.dataset_directory,
+                models_directory=self.models_directory,
+            )
+        else:
+            train_model(
+                model_name=model_name,
+                device_name=self.device_name,
+                configuration=self.experiment_config,
+                dataset_directory=self.dataset_directory,
+                models_directory=os.path.join(
+                    self.models_directory, f'repeat-{repeat_number}'
+                ),
+            )
+
     def _run_test_eval(
-        self, model_name: str, mode: Literal['validation', 'test']
+        self,
+        model_name: str,
+        mode: Literal['validation', 'test'],
+        repeat_number: Optional[int] = None,
     ) -> None:
-        test_model(
-            model_name=model_name,
-            device_name=self.device_name,
-            mode=mode,
-            configuration=self.experiment_config,
-            dataset_directory=self.dataset_directory,
-            result_directory=self.results_directory,
-            models_directory=self.models_directory,
-        )
-        evaluate_model(
-            config=self.experiment_config,
-            model_name=model_name,
-            mode=mode,
-            result_directory=self.results_directory,
-        )
+        if repeat_number is None:
+            test_model(
+                model_name=model_name,
+                device_name=self.device_name,
+                mode=mode,
+                configuration=self.experiment_config,
+                dataset_directory=self.dataset_directory,
+                result_directory=self.results_directory,
+                models_directory=self.models_directory,
+            )
+            evaluate_model(
+                config=self.experiment_config,
+                model_name=model_name,
+                mode=mode,
+                result_directory=self.results_directory,
+            )
+        else:
+            test_model(
+                model_name=model_name,
+                device_name=self.device_name,
+                mode=mode,
+                configuration=self.experiment_config,
+                dataset_directory=self.dataset_directory,
+                result_directory=os.path.join(
+                    self.results_directory, f'repeat-{repeat_number}'
+                ),
+                models_directory=os.path.join(
+                    self.models_directory, f'repeat-{repeat_number}'
+                ),
+            )
+            evaluate_model(
+                config=self.experiment_config,
+                model_name=model_name,
+                mode=mode,
+                result_directory=os.path.join(
+                    self.results_directory, f'repeat-{repeat_number}'
+                ),
+            )
 
     def _update_from_unfinished_to_validated(
         self, model_name: str
