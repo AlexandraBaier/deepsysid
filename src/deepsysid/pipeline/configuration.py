@@ -55,7 +55,7 @@ class GridSearchTestConfiguration(BaseModel):
 
 
 class SessionConfiguration(BaseModel):
-    best_model_runs: int
+    total_runs_for_best_models: int
 
 
 class ExperimentGridSearchSettings(BaseModel):

@@ -191,7 +191,7 @@ def run_pipeline(
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
         state_names=get_state_names(),
-        session=SessionConfiguration(best_model_runs=3),
+        session=SessionConfiguration(total_runs_for_best_models=3),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing.stability.'

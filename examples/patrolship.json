@@ -4,7 +4,7 @@
     "window_size": 60,
     "horizon_size": 900,
     "session": {
-      "best_model_runs": 3
+      "total_runs_for_best_models": 3
     },
     "control_names": [
       "n",

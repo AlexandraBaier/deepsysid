@@ -212,7 +212,7 @@ class ExperimentSessionManager(object):
         if self.config.settings.session is None:
             n_repeats = 1
         else:
-            n_repeats = self.config.settings.session.best_model_runs
+            n_repeats = self.config.settings.session.total_runs_for_best_models
 
         for model_name in untested_models:
             self._run_test_eval(model_name=model_name, mode='test')
