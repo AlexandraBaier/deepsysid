@@ -213,7 +213,6 @@ class ExperimentSessionManager(object):
             window_size=self.config.settings.window_size,
             horizon_size=self.config.settings.horizon_size,
             extension='json',
-            threshold=None,
         )
         with open(
             os.path.join(self.results_directory, model_name, score_file_name)
@@ -246,7 +245,6 @@ class ExperimentSessionManager(object):
             model_name=model_name,
             mode=mode,
             result_directory=self.results_directory,
-            threshold=None,
         )
 
     def _update_from_unfinished_to_validated(

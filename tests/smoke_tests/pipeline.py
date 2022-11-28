@@ -339,5 +339,4 @@ def run_pipeline(
         model_name=model_name,
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
-        threshold=None,
     )
