@@ -15,6 +15,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentExplanationMetricConfiguration,
     ExperimentMetricConfiguration,
     ExperimentTestConfiguration,
+    SessionConfiguration,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.explaining import explain_model
@@ -136,14 +137,6 @@ def get_evaluation_mode() -> Literal['train', 'validation', 'test']:
     return 'test'
 
 
-def get_train_fraction() -> float:
-    return 0.6
-
-
-def get_validation_fraction() -> float:
-    return 0.3
-
-
 def prepare_directories(
     base_path: pathlib.Path,
 ) -> Dict[str, pathlib.Path]:
@@ -193,13 +186,12 @@ def run_pipeline(
 
     # Setup configuration file.
     config = ExperimentConfiguration(
-        train_fraction=get_train_fraction(),
-        validation_fraction=get_validation_fraction(),
         time_delta=get_time_delta(),
         window_size=get_window_size(),
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
         state_names=get_state_names(),
+        session=SessionConfiguration(total_runs_for_best_models=3),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing.stability.'
@@ -349,5 +341,4 @@ def run_pipeline(
         model_name=model_name,
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
-        threshold=None,
     )

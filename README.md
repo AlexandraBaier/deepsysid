@@ -79,14 +79,15 @@ A JSON configuration will have the following format:
 ```json
 {
   "settings": {
-    "train_fraction": "float < 1.0, these fractions are currently not used by our code.",
-    "validation_fraction": "float < 1.0",
     "time_delta": "float, sampling time of your measurements",
     "window_size": "int, size of the initial window during evaluation",
     "horizon_size": "int, size of the prediction horizon during evaluation",
     "control_names": "list of strings, inputs to the model",
     "state_names": "list of strings, outputs of the model",
-    "thresholds": "list of floats, only used by bounded residual models during evaluation",
+    "session": {
+      "comment": "session is entirely optional and configures deepsysid session",
+      "total_runs_for_best_models": "int, > 1, how many runs in total are executed for the best performing models"
+    },    
     "target_metric": "name of metric used to select best performing model during grid-search",
     "metrics": {
       "name of metric": {

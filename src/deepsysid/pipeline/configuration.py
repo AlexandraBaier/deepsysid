@@ -54,9 +54,11 @@ class GridSearchTestConfiguration(BaseModel):
     parameters: Dict[str, Any]
 
 
+class SessionConfiguration(BaseModel):
+    total_runs_for_best_models: int
+
+
 class ExperimentGridSearchSettings(BaseModel):
-    train_fraction: float
-    validation_fraction: float
     time_delta: float
     window_size: int
     horizon_size: int
@@ -66,6 +68,7 @@ class ExperimentGridSearchSettings(BaseModel):
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
     explanation_metrics: Optional[Dict[str, GridSearchExplanationMetricConfiguration]]
+    session: Optional[SessionConfiguration]
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -87,8 +90,6 @@ class ExperimentGridSearchTemplate(BaseModel):
 
 
 class ExperimentConfiguration(BaseModel):
-    train_fraction: float
-    validation_fraction: float
     time_delta: float
     window_size: int
     horizon_size: int
@@ -100,6 +101,7 @@ class ExperimentConfiguration(BaseModel):
     additional_tests: Dict[str, ExperimentTestConfiguration]
     models: Dict[str, ExperimentModelConfiguration]
     explainers: Optional[Dict[str, ExperimentExplainerConfiguration]]
+    session: Optional[SessionConfiguration]
 
     @root_validator
     def check_target_metric_in_metrics(cls, values):
@@ -217,8 +219,6 @@ class ExperimentConfiguration(BaseModel):
                 )
 
         return cls(
-            train_fraction=template.settings.train_fraction,
-            validation_fraction=template.settings.validation_fraction,
             time_delta=template.settings.time_delta,
             window_size=template.settings.window_size,
             horizon_size=template.settings.horizon_size,
@@ -230,6 +230,7 @@ class ExperimentConfiguration(BaseModel):
             explanation_metrics=explanation_metrics,
             additional_tests=tests,
             explainers=explainers,
+            session=template.settings.session,
         )
 
 
