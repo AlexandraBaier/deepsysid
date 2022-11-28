@@ -40,15 +40,6 @@ def load_file_names(directory: str) -> List[str]:
     return sorted(file_names)
 
 
-def build_trajectory_file_name(
-    mode: Literal['train', 'validation', 'test'],
-    window_size: int,
-    horizon_size: int,
-    extension: str,
-) -> str:
-    return f'trajectory-{mode}-w_{window_size}-h_{horizon_size}.{extension}'
-
-
 def build_score_file_name(
     mode: Literal['train', 'validation', 'test'],
     window_size: int,
