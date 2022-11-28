@@ -5,6 +5,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentGridSearchSettings,
     ExperimentGridSearchTemplate,
     GridSearchMetricConfiguration,
+    GridSearchTestConfiguration,
     ModelGridSearchTemplate,
 )
 from deepsysid.pipeline.gridsearch import ExperimentSessionManager, SessionAction
@@ -16,8 +17,6 @@ from .pipeline import (
     get_horizon_size,
     get_state_names,
     get_time_delta,
-    get_train_fraction,
-    get_validation_fraction,
     get_window_size,
     prepare_directories,
 )
@@ -35,8 +34,6 @@ def test_experiment_session_manager_new_and_test_best_successful(
 
     template = ExperimentGridSearchTemplate(
         settings=ExperimentGridSearchSettings(
-            train_fraction=get_train_fraction(),
-            validation_fraction=get_validation_fraction(),
             time_delta=get_time_delta(),
             window_size=get_window_size(),
             horizon_size=get_horizon_size(),
@@ -50,7 +47,7 @@ def test_experiment_session_manager_new_and_test_best_successful(
                 )
             ),
             additional_tests=dict(
-                Bibo_stability=dict(
+                Bibo_stability=GridSearchTestConfiguration(
                     test_class='deepsysid.pipeline.testing.stability.'
                     'bibo.BiboStabilityTest',
                     parameters=dict(
@@ -63,7 +60,7 @@ def test_experiment_session_manager_new_and_test_best_successful(
                         regularization_scale=0.25,
                     ),
                 ),
-                incremental_stability=dict(
+                incremental_stability=GridSearchTestConfiguration(
                     test_class='deepsysid.pipeline.testing.stability.'
                     'incremental.IncrementalStabilityTest',
                     parameters=dict(

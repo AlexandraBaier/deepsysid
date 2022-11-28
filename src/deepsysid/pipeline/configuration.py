@@ -55,8 +55,6 @@ class GridSearchTestConfiguration(BaseModel):
 
 
 class ExperimentGridSearchSettings(BaseModel):
-    train_fraction: float
-    validation_fraction: float
     time_delta: float
     window_size: int
     horizon_size: int
@@ -87,8 +85,6 @@ class ExperimentGridSearchTemplate(BaseModel):
 
 
 class ExperimentConfiguration(BaseModel):
-    train_fraction: float
-    validation_fraction: float
     time_delta: float
     window_size: int
     horizon_size: int
@@ -217,8 +213,6 @@ class ExperimentConfiguration(BaseModel):
                 )
 
         return cls(
-            train_fraction=template.settings.train_fraction,
-            validation_fraction=template.settings.validation_fraction,
             time_delta=template.settings.time_delta,
             window_size=template.settings.window_size,
             horizon_size=template.settings.horizon_size,

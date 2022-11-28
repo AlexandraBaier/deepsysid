@@ -136,14 +136,6 @@ def get_evaluation_mode() -> Literal['train', 'validation', 'test']:
     return 'test'
 
 
-def get_train_fraction() -> float:
-    return 0.6
-
-
-def get_validation_fraction() -> float:
-    return 0.3
-
-
 def prepare_directories(
     base_path: pathlib.Path,
 ) -> Dict[str, pathlib.Path]:
@@ -193,8 +185,6 @@ def run_pipeline(
 
     # Setup configuration file.
     config = ExperimentConfiguration(
-        train_fraction=get_train_fraction(),
-        validation_fraction=get_validation_fraction(),
         time_delta=get_time_delta(),
         window_size=get_window_size(),
         horizon_size=get_horizon_size(),
