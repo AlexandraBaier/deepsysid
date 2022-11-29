@@ -260,9 +260,9 @@ class TrajectoryNED6DOFRootMeanSquaredErrorMetric(BaseMetric):
     ) -> Tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
         name2idx = dict((name, idx) for idx, name in enumerate(self.state_names))
 
-        xdot = state[:, name2idx['vx']]
-        ydot = state[:, name2idx['vy']]
-        zdot = state[:, name2idx['vz']]
+        xdot = state[:, name2idx['dx']]
+        ydot = state[:, name2idx['dy']]
+        zdot = state[:, name2idx['dz']]
 
         shape = xdot.shape
 

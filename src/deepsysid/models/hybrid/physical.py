@@ -113,7 +113,7 @@ class PropulsionManeuveringComponent(PhysicalComponent):
 
 
 class BasicPelicanMotionComponent(PhysicalComponent):
-    STATES = ['phi', 'theta', 'xdot', 'ydot', 'zdot', 'p', 'q', 'r']
+    STATES = ['phi', 'theta', 'dx', 'dy', 'dz', 'p', 'q', 'r']
 
     def __init__(
         self, time_delta: float, device: torch.device, config: BasicPelicanMotionConfig
