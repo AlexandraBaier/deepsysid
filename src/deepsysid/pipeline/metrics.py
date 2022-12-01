@@ -106,6 +106,9 @@ class MeanSquaredErrorMetric(AverageOverSequenceMetric):
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
+        if np.any(np.isnan(y_true) | np.isnan(y_pred)):
+            return np.nan * np.ones((y_true.shape[1],), dtype=np.float64)
+
         score: NDArray[np.float64] = mean_squared_error(
             y_true, y_pred, multioutput='raw_values'
         )
@@ -121,6 +124,9 @@ class RootMeanSquaredErrorMetric(AverageOverSequenceMetric):
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
+        if np.any(np.isnan(y_true) | np.isnan(y_pred)):
+            return np.nan * np.ones((y_true.shape[1],), dtype=np.float64)
+
         score: NDArray[np.float64] = mean_squared_error(
             y_true, y_pred, multioutput='raw_values'
         )
@@ -139,6 +145,9 @@ class NormalizedRootMeanSquaredErrorMetric(AverageOverSequenceMetric):
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
+        if np.any(np.isnan(y_true) | np.isnan(y_pred)):
+            return np.nan * np.ones((y_true.shape[1],), dtype=np.float64)
+
         score: NDArray[np.float64] = mean_squared_error(
             y_true, y_pred, multioutput='raw_values'
         )
@@ -149,6 +158,9 @@ class MeanAbsoluteErrorMetric(AverageOverSequenceMetric):
     def score_per_sequence(
         self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64]
     ) -> NDArray[np.float64]:
+        if np.any(np.isnan(y_true) | np.isnan(y_pred)):
+            return np.nan * np.ones((y_true.shape[1],), dtype=np.float64)
+
         score: NDArray[np.float64] = mean_absolute_error(
             y_true, y_pred, multioutput='raw_values'
         )
