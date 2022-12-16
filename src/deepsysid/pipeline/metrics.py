@@ -139,7 +139,7 @@ class NormalizedRootMeanSquaredErrorMetric(AverageOverSequenceMetric):
     ) -> NDArray[np.float64]:
         mse = super().score_over_sequences(true_seq, pred_seq)
         _, std = utils.mean_stddev(true_seq)
-        nrmse: NDArray[np.float64] = np.sqrt(1.0 / std * mse)
+        nrmse: NDArray[np.float64] = np.sqrt(1.0 / (std**2) * mse)
         return nrmse
 
     def score_per_sequence(

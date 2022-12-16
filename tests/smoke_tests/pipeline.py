@@ -3,11 +3,13 @@ from typing import Dict, List, Literal
 
 import torch
 
-from deepsysid.explainability.base import (
-    BaseExplainerConfig,
-    BaseExplanationMetricConfig,
-)
+from deepsysid.explainability.base import BaseExplainerConfig
 from deepsysid.explainability.explainers.lime import LIMEExplainerConfig
+from deepsysid.explainability.metrics import (
+    ExplanationComplexityMetric,
+    LipschitzEstimateMetric,
+    NMSEInfidelityMetric,
+)
 from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
@@ -283,8 +285,24 @@ def run_pipeline(
         explanation_metrics=dict(
             infidelity=ExperimentExplanationMetricConfiguration(
                 metric_class='deepsysid.explainability.metrics.NMSEInfidelityMetric',
-                parameters=BaseExplanationMetricConfig(state_names=get_state_names()),
-            )
+                parameters=NMSEInfidelityMetric.CONFIG(state_names=get_state_names()),
+            ),
+            robustness=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics.LipschitzEstimateMetric',
+                parameters=LipschitzEstimateMetric.CONFIG(
+                    state_names=get_state_names(),
+                    n_disturbances=5,
+                    control_error_std=[0.1 for _ in get_control_names()],
+                    state_error_std=[0.1 for _ in get_state_names()],
+                ),
+            ),
+            simplicity=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics'
+                '.ExplanationComplexityMetric',
+                parameters=ExplanationComplexityMetric.CONFIG(
+                    state_names=get_state_names(), relevance_threshold=0.1
+                ),
+            ),
         ),
         explainers=dict(
             switching_lstm_explainer=ExperimentExplainerConfiguration(
