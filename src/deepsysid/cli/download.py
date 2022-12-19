@@ -6,6 +6,7 @@ from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
+import rarfile
 import requests
 import scipy.io
 from numpy.typing import NDArray
@@ -28,6 +29,12 @@ PELICAN_COLUMN_MAPPING = dict(
     pqr=['p', 'q', 'r'],
 )
 PELICAN_SAMPLING_TIME = 0.01
+
+INDUSTRIAL_ROBOT_DOWNLOAD_URL = (
+    'https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/'
+    'Robot_Identification_Benchmark_Without_Raw_Data.rar'
+)
+INDUSTRIAL_ROBOT_SAMPLING_TIME = 0.1
 
 logger = logging.getLogger(__name__)
 
@@ -189,3 +196,93 @@ def download_dataset_pelican_quadcopter(
         f'Test%: {test_steps / total_steps:.2%}'
     )
     logger.info('Finished Pelican dataset download and preparation.')
+
+
+def download_dataset_industrial_robot(
+    target_directory: str, validation_fraction: float
+) -> None:
+    if validation_fraction < 0.0:
+        raise ValueError('Validation fraction cannot be smaller than 0.')
+    if validation_fraction > 1.0:
+        raise ValueError('Validation fraction cannot be larger than 1.')
+
+    logger.info(
+        f'Downloading industrial robot dataset from "{INDUSTRIAL_ROBOT_DOWNLOAD_URL}". '
+        'This will take some time.'
+    )
+
+    target_directory = os.path.expanduser(target_directory)
+    raw_directory = os.path.join(target_directory, 'raw')
+    processed_directory = os.path.join(target_directory, 'processed')
+    os.makedirs(raw_directory, exist_ok=True)
+    os.makedirs(processed_directory, exist_ok=True)
+    os.makedirs(os.path.join(processed_directory, 'train'), exist_ok=True)
+    os.makedirs(os.path.join(processed_directory, 'validation'), exist_ok=True)
+    os.makedirs(os.path.join(processed_directory, 'test'), exist_ok=True)
+
+    # https://stackoverflow.com/a/53101953
+    rar_path = os.path.join(raw_directory, 'industrial_robot.zip')
+    mat_path = os.path.join(raw_directory, 'industrial_robot.mat')
+    response = requests.get(INDUSTRIAL_ROBOT_DOWNLOAD_URL, stream=True)
+    with open(rar_path, mode='wb') as f:
+        for chunk in response.iter_content(chunk_size=1024):
+            if chunk:
+                f.write(chunk)
+
+    with rarfile.RarFile(rar_path) as f:
+        with f.open(
+            'forward_identification_without_raw_data.mat', mode='r'
+        ) as mat_from_rar:
+            with open(mat_path, mode='wb') as target_mat:
+                target_mat.write(mat_from_rar.read())
+
+    mat = scipy.io.loadmat(mat_path)
+    logger.info('Successfully finished download.')
+
+    u_train_val = mat['u_train'].T
+    y_train_val = mat['y_train'].T
+    u_test = mat['u_test'].T
+    y_test = mat['y_test'].T
+
+    n_train_val = u_train_val.shape[0]
+    n_train = int(n_train_val * (1.0 - validation_fraction))
+
+    u_val = u_train_val[n_train:]
+    y_val = u_train_val[n_train:]
+
+    u_train = u_train_val[:n_train]
+    y_train = y_train_val[:n_train]
+
+    time_train = (
+        np.arange(u_train.shape[0])[:, np.newaxis] * INDUSTRIAL_ROBOT_SAMPLING_TIME
+    )
+    time_val = np.arange(u_val.shape[0])[:, np.newaxis] * INDUSTRIAL_ROBOT_SAMPLING_TIME
+    time_test = (
+        np.arange(u_test.shape[0])[:, np.newaxis] * INDUSTRIAL_ROBOT_SAMPLING_TIME
+    )
+
+    tuy_train = np.hstack((time_train, u_train, y_train))
+    tuy_val = np.hstack((time_val, u_val, y_val))
+    tuy_test = np.hstack((time_test, u_test, y_test))
+
+    input_dim = u_train.shape[1]
+    output_dim = y_train.shape[1]
+
+    for dataset, mode in (
+        (tuy_train, 'train'),
+        (tuy_val, 'validation'),
+        (tuy_test, 'test'),
+    ):
+        processed_path = os.path.join(
+            processed_directory, mode, f'robot_arm_{mode}.csv'
+        )
+        df = pd.DataFrame(
+            data=dataset,
+            columns=(
+                ['time']
+                + [f'u{i}' for i in range(input_dim)]
+                + [f'y{i}' for i in range(output_dim)]
+            ),
+        )
+        df.to_csv(processed_path, index=False)
+    logger.info('Finished Industrial Robot dataset download and preparation.')
