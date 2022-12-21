@@ -115,6 +115,18 @@
       }
     },
     {
+      "model_base_name": "RidgeRegressorLag",
+      "model_class": "deepsysid.models.linear.RidgeRegressorLag",
+      "static_parameters": {},
+      "flexible_parameters": {
+        "lag": [
+          15,
+          30,
+          60
+        ]
+      }
+    },
+    {
       "model_base_name": "LSTM+Init",
       "model_class": "deepsysid.models.recurrent.LSTMInitModel",
       "static_parameters": {
@@ -549,7 +561,7 @@
         "learning_rate": 0.0025
       },
       "flexible_parameters": {
-        "gamma":[
+        "gamma": [
           2.0,
           5.0,
           10.0,
@@ -636,7 +648,7 @@
         "epochs_predictor": 1000,
         "nx": 64,
         "learning_rate": 0.0025,
-        "clip_gradient_norm":  100
+        "clip_gradient_norm": 100
       },
       "flexible_parameters": {
         "recurrent_dim": [
@@ -675,7 +687,8 @@
           4
         ]
       }
-    }, {
+    },
+    {
       "model_base_name": "kLinRegARX",
       "model_class": "deepsysid.models.switching.klinreg.KLinearRegressionARXModel",
       "static_parameters": {
@@ -684,8 +697,20 @@
         "initialization_bound": 50.0
       },
       "flexible_parameters": {
-        "lag": [5, 7, 10, 15, 30, 45],
-        "n_modes": [2, 5, 7, 10]
+        "lag": [
+          5,
+          7,
+          10,
+          15,
+          30,
+          45
+        ],
+        "n_modes": [
+          2,
+          5,
+          7,
+          10
+        ]
       }
     }
   ],

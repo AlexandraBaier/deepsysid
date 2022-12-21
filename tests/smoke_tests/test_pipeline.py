@@ -6,7 +6,12 @@ from deepsysid.models.hybrid.bounded_residual import (
     HybridMinimalManeuveringModel,
     HybridPropulsionManeuveringModel,
 )
-from deepsysid.models.linear import LinearLag, LinearModel, QuadraticControlLag
+from deepsysid.models.linear import (
+    LinearLag,
+    LinearModel,
+    QuadraticControlLag,
+    RidgeRegressorLag,
+)
 from deepsysid.models.narx import NARXDenseNetwork
 from deepsysid.models.recurrent import (
     ConstrainedRnn,
@@ -37,6 +42,19 @@ def test_linear_lag(tmp_path: pathlib.Path) -> None:
     model_name = 'LinearLag'
     model_class = 'deepsysid.models.linear.LinearLag'
     config = LinearLag.CONFIG(
+        control_names=pipeline.get_control_names(),
+        state_names=pipeline.get_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        lag=pipeline.get_window_size(),
+    )
+    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+
+
+def test_ridge_regressor_lag(tmp_path: pathlib.Path) -> None:
+    model_name = 'RidgeRegressorLag'
+    model_class = 'deepsysid.models.linear.RidgeRegressorLag'
+    config = RidgeRegressorLag.CONFIG(
         control_names=pipeline.get_control_names(),
         state_names=pipeline.get_state_names(),
         device_name=pipeline.get_cpu_device_name(),

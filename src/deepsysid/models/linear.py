@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple
 import h5py
 import numpy as np
 from numpy.typing import NDArray
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 
 from . import utils
 from .base import (
@@ -245,3 +245,12 @@ class QuadraticControlLag(LinearLag):
             )
 
         return super().get_parameter_count()
+
+
+class RidgeRegressorLag(LinearLag):
+    CONFIG = LinearLagConfig
+
+    def __init__(self, config: LinearLagConfig) -> None:
+        super().__init__(config)
+        self.regressor = Ridge(alpha=1.0, fit_intercept=True)
+        self.window_size = config.lag
