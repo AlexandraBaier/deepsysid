@@ -20,12 +20,11 @@ cvxpy = "^1.2.1"
 pyDataverse = "^0.3.1"
 requests = "^2.28.1"
 types-requests = "^2.28.10"
-rarfile = { version = "^4.0", optional = true }
-scipy = { version = "^1.9.3", optional = true }
+rarfile = { version = "^4.0" }
+scipy = { version = "^1.9.3" }
 
 [tool.poetry.extras]
 torch-cpu = ["torch"]
-download = ["rarfile", "scipy"]
 
 [tool.poetry.dev-dependencies]
 black = "^22.6.0"
