@@ -28,6 +28,12 @@ command to install the package with PyTorch included:
 ```shell
 pip install deepsysid[torch-cpu]@git+https://github.com/AlexandraBaier/deepsysid.git
 ```
+To enable the `deepsysid download` functionality you need to include the optional flag `download`, for example
+```shell
+pip install deepsysid[download]@git+https://github.com/AlexandraBaier/deepsysid.git
+```
+Some download options, such as `industrial-robot`, have to unpack the proprietary format `.rar`, 
+which requires the corresponding software to be installed on your system.
 
 ### Environment Variables and Directories
 
