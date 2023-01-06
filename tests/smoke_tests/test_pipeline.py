@@ -60,6 +60,7 @@ def test_ridge_regressor_lag(tmp_path: pathlib.Path) -> None:
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         lag=pipeline.get_window_size(),
+        alpha=1.0,
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 

@@ -145,6 +145,7 @@ class LinearModel(DynamicIdentificationModel):
 
 class LinearLagConfig(DynamicIdentificationModelConfig):
     lag: int
+    alpha: Optional[float]
 
 
 class LinearLag(FixedWindowModel[LinearRegression]):
@@ -252,5 +253,5 @@ class RidgeRegressorLag(LinearLag):
 
     def __init__(self, config: LinearLagConfig) -> None:
         super().__init__(config)
-        self.regressor = Ridge(alpha=1.0, fit_intercept=True)
+        self.regressor = Ridge(alpha=config.alpha, fit_intercept=True)
         self.window_size = config.lag
