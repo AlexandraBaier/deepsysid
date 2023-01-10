@@ -313,6 +313,9 @@ def run_pipeline(
             lime_explainer=ExperimentExplainerConfiguration(
                 explainer_class='deepsysid.explainability'
                 '.explainers.lime.LIMEExplainer',
+                explained_super_classes=[
+                    'deepsysid.models.base.DynamicIdentificationModel',
+                ],
                 parameters=LIMEExplainerConfig(num_samples=6, cv_folds=2),
             ),
         ),

@@ -31,6 +31,7 @@ class ExperimentTestConfiguration(BaseModel):
 
 class ExperimentExplainerConfiguration(BaseModel):
     explainer_class: str
+    explained_super_classes: Optional[List[str]]
     parameters: BaseExplainerConfig
 
 
@@ -80,6 +81,7 @@ class ModelGridSearchTemplate(BaseModel):
 
 class GridSearchExplainerConfiguration(BaseModel):
     explainer_class: str
+    explained_super_classes: Optional[List[str]]
     parameters: Dict[str, Any]
 
 
@@ -193,8 +195,15 @@ class ExperimentConfiguration(BaseModel):
         if template.explainers is not None:
             for name, explainer in template.explainers.items():
                 explainer_cls = retrieve_explainer_class(explainer.explainer_class)
+
+                # Check whether all stated classes can be imported.
+                if explainer.explained_super_classes is not None:
+                    for explained_model_class in explainer.explained_super_classes:
+                        _ = retrieve_model_class(explained_model_class)
+
                 explainers[name] = ExperimentExplainerConfiguration(
                     explainer_class=explainer.explainer_class,
+                    explained_super_classes=explainer.explained_super_classes,
                     parameters=explainer_cls.CONFIG.parse_obj(explainer.parameters),
                 )
 
