@@ -121,6 +121,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
         epochs_initializer=2,
         epochs_predictor=2,
         loss='mse',
+        bias=True,
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
 
@@ -147,6 +148,7 @@ def test_constrained_rnn_stable(tmp_path: pathlib.Path) -> None:
         batch_size=2,
         epochs_initializer=2,
         epochs_predictor=2,
+        bias=True,
         loss='mse',
     )
     pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)

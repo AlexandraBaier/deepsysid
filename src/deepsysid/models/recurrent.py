@@ -567,6 +567,7 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     loss: Literal['mse', 'msge']
+    bias: bool
     log_min_max_real_eigenvalues: Optional[bool] = False
 
 
@@ -614,6 +615,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             nw=self.recurrent_dim,
             gamma=config.gamma,
             beta=config.beta,
+            bias=config.bias,
         ).to(self.device)
 
         self._initializer = rnn.BasicLSTM(
@@ -708,7 +710,10 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
                 # gradient infos
                 grads_norm = [
-                    torch.linalg.norm(p.grad) for p in self._predictor.parameters()
+                    torch.linalg.norm(p.grad)
+                    for p in filter(
+                        lambda p: p.grad is not None, self._predictor.parameters()
+                    )
                 ]
                 max_grad += max(grads_norm)
 
