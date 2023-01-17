@@ -24,10 +24,7 @@ def train_model(
     model_directory = os.path.expanduser(
         os.path.normpath(os.path.join(models_directory, model_name))
     )
-    try:
-        os.mkdir(model_directory)
-    except FileExistsError:
-        pass
+    os.makedirs(model_directory, exist_ok=True)
 
     # Load dataset
     controls, states = load_simulation_data(

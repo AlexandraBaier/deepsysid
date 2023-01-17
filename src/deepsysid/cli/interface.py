@@ -21,6 +21,7 @@ from ..pipeline.testing.runner import test_model
 from ..pipeline.training import train_model
 from .download import (
     download_dataset_4_dof_simulated_ship,
+    download_dataset_industrial_robot,
     download_dataset_pelican_quadcopter,
 )
 
@@ -168,6 +169,24 @@ class DeepSysIdCommandLineInterface:
             help='Fraction of dataset used for validation.',
         )
         self.download_pelican_parser.set_defaults(func=download_pelican)
+
+        self.download_industrial_robot_parser = self.download_subparsers.add_parser(
+            'industrial-robot',
+            help='Downloads https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/.',
+        )
+        self.download_industrial_robot_parser.add_argument(
+            'target', help='Target directory for dataset.'
+        )
+        self.download_industrial_robot_parser.add_argument(
+            '--validation_fraction',
+            required=True,
+            action='store',
+            type=float,
+            help='Fraction of dataset used for validation.',
+        )
+        self.download_industrial_robot_parser.set_defaults(
+            func=download_industrial_robot
+        )
 
     def run(self) -> None:
         args = self.parser.parse_args()
@@ -379,6 +398,15 @@ def download_pelican(args: argparse.Namespace) -> None:
         train_fraction=train_fraction,
         validation_fraction=validation_fraction,
     )
+
+
+def download_industrial_robot(args: argparse.Namespace) -> None:
+    directory = args.target
+    validation_fraction = args.validation_fraction
+
+    setup_root_logger()
+
+    download_dataset_industrial_robot(directory, validation_fraction)
 
 
 def add_parser_arguments(

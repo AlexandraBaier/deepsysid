@@ -3,11 +3,13 @@ from typing import Dict, List, Literal
 
 import torch
 
-from deepsysid.explainability.base import (
-    BaseExplainerConfig,
-    BaseExplanationMetricConfig,
-)
+from deepsysid.explainability.base import BaseExplainerConfig
 from deepsysid.explainability.explainers.lime import LIMEExplainerConfig
+from deepsysid.explainability.metrics import (
+    ExplanationComplexityMetric,
+    LipschitzEstimateMetric,
+    NMSEInfidelityMetric,
+)
 from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
@@ -15,6 +17,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentExplanationMetricConfiguration,
     ExperimentMetricConfiguration,
     ExperimentTestConfiguration,
+    SessionConfiguration,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.explaining import explain_model
@@ -136,14 +139,6 @@ def get_evaluation_mode() -> Literal['train', 'validation', 'test']:
     return 'test'
 
 
-def get_train_fraction() -> float:
-    return 0.6
-
-
-def get_validation_fraction() -> float:
-    return 0.3
-
-
 def prepare_directories(
     base_path: pathlib.Path,
 ) -> Dict[str, pathlib.Path]:
@@ -193,13 +188,12 @@ def run_pipeline(
 
     # Setup configuration file.
     config = ExperimentConfiguration(
-        train_fraction=get_train_fraction(),
-        validation_fraction=get_validation_fraction(),
         time_delta=get_time_delta(),
         window_size=get_window_size(),
         horizon_size=get_horizon_size(),
         control_names=get_control_names(),
         state_names=get_state_names(),
+        session=SessionConfiguration(total_runs_for_best_models=3),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing.stability.'
@@ -291,8 +285,24 @@ def run_pipeline(
         explanation_metrics=dict(
             infidelity=ExperimentExplanationMetricConfiguration(
                 metric_class='deepsysid.explainability.metrics.NMSEInfidelityMetric',
-                parameters=BaseExplanationMetricConfig(state_names=get_state_names()),
-            )
+                parameters=NMSEInfidelityMetric.CONFIG(state_names=get_state_names()),
+            ),
+            robustness=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics.LipschitzEstimateMetric',
+                parameters=LipschitzEstimateMetric.CONFIG(
+                    state_names=get_state_names(),
+                    n_disturbances=5,
+                    control_error_std=[0.1 for _ in get_control_names()],
+                    state_error_std=[0.1 for _ in get_state_names()],
+                ),
+            ),
+            simplicity=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics'
+                '.ExplanationComplexityMetric',
+                parameters=ExplanationComplexityMetric.CONFIG(
+                    state_names=get_state_names(), relevance_threshold=0.1
+                ),
+            ),
         ),
         explainers=dict(
             switching_lstm_explainer=ExperimentExplainerConfiguration(
@@ -303,6 +313,9 @@ def run_pipeline(
             lime_explainer=ExperimentExplainerConfiguration(
                 explainer_class='deepsysid.explainability'
                 '.explainers.lime.LIMEExplainer',
+                explained_super_classes=[
+                    'deepsysid.models.base.DynamicIdentificationModel',
+                ],
                 parameters=LIMEExplainerConfig(num_samples=6, cv_folds=2),
             ),
         ),
@@ -349,5 +362,4 @@ def run_pipeline(
         model_name=model_name,
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
-        threshold=None,
     )

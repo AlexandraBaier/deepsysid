@@ -1,10 +1,11 @@
 {
   "settings": {
-    "train_fraction": 0.6,
-    "validation_fraction": 0.1,
     "time_delta": 1.0,
     "window_size": 60,
     "horizon_size": 900,
+    "session": {
+      "total_runs_for_best_models": 3
+    },
     "control_names": [
       "n",
       "deltal",

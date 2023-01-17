@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Tuple
 
 import h5py
 import numpy as np
@@ -21,7 +21,6 @@ def evaluate_model(
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
     result_directory: str,
-    threshold: Optional[float] = None,
 ) -> None:
     # Load from the maximum horizon file.
     test_file_path = os.path.join(
@@ -32,7 +31,6 @@ def evaluate_model(
             window_size=config.window_size,
             horizon_size=config.horizon_size,
             extension='hdf5',
-            threshold=threshold,
         ),
     )
 
@@ -78,7 +76,6 @@ def evaluate_model(
             window_size=config.window_size,
             horizon_size=config.horizon_size,
             extension='hdf5',
-            threshold=threshold,
         ),
     )
     with h5py.File(scores_file_path, 'w') as f:
@@ -102,7 +99,6 @@ def evaluate_model(
             window_size=config.window_size,
             horizon_size=config.horizon_size,
             extension='json',
-            threshold=threshold,
         ),
     )
     readable_evaluation_result = ReadableEvaluationScores(

@@ -31,6 +31,7 @@ class ExperimentTestConfiguration(BaseModel):
 
 class ExperimentExplainerConfiguration(BaseModel):
     explainer_class: str
+    explained_super_classes: Optional[List[str]]
     parameters: BaseExplainerConfig
 
 
@@ -54,9 +55,11 @@ class GridSearchTestConfiguration(BaseModel):
     parameters: Dict[str, Any]
 
 
+class SessionConfiguration(BaseModel):
+    total_runs_for_best_models: int
+
+
 class ExperimentGridSearchSettings(BaseModel):
-    train_fraction: float
-    validation_fraction: float
     time_delta: float
     window_size: int
     horizon_size: int
@@ -66,6 +69,7 @@ class ExperimentGridSearchSettings(BaseModel):
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
     explanation_metrics: Optional[Dict[str, GridSearchExplanationMetricConfiguration]]
+    session: Optional[SessionConfiguration]
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -77,6 +81,7 @@ class ModelGridSearchTemplate(BaseModel):
 
 class GridSearchExplainerConfiguration(BaseModel):
     explainer_class: str
+    explained_super_classes: Optional[List[str]]
     parameters: Dict[str, Any]
 
 
@@ -87,8 +92,6 @@ class ExperimentGridSearchTemplate(BaseModel):
 
 
 class ExperimentConfiguration(BaseModel):
-    train_fraction: float
-    validation_fraction: float
     time_delta: float
     window_size: int
     horizon_size: int
@@ -100,6 +103,7 @@ class ExperimentConfiguration(BaseModel):
     additional_tests: Dict[str, ExperimentTestConfiguration]
     models: Dict[str, ExperimentModelConfiguration]
     explainers: Optional[Dict[str, ExperimentExplainerConfiguration]]
+    session: Optional[SessionConfiguration]
 
     @root_validator
     def check_target_metric_in_metrics(cls, values):
@@ -191,8 +195,15 @@ class ExperimentConfiguration(BaseModel):
         if template.explainers is not None:
             for name, explainer in template.explainers.items():
                 explainer_cls = retrieve_explainer_class(explainer.explainer_class)
+
+                # Check whether all stated classes can be imported.
+                if explainer.explained_super_classes is not None:
+                    for explained_model_class in explainer.explained_super_classes:
+                        _ = retrieve_model_class(explained_model_class)
+
                 explainers[name] = ExperimentExplainerConfiguration(
                     explainer_class=explainer.explainer_class,
+                    explained_super_classes=explainer.explained_super_classes,
                     parameters=explainer_cls.CONFIG.parse_obj(explainer.parameters),
                 )
 
@@ -217,8 +228,6 @@ class ExperimentConfiguration(BaseModel):
                 )
 
         return cls(
-            train_fraction=template.settings.train_fraction,
-            validation_fraction=template.settings.validation_fraction,
             time_delta=template.settings.time_delta,
             window_size=template.settings.window_size,
             horizon_size=template.settings.horizon_size,
@@ -230,6 +239,7 @@ class ExperimentConfiguration(BaseModel):
             explanation_metrics=explanation_metrics,
             additional_tests=tests,
             explainers=explainers,
+            session=template.settings.session,
         )
 
 

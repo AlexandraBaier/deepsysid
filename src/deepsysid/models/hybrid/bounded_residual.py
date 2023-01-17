@@ -15,6 +15,8 @@ from .. import base, utils
 from ..base import DynamicIdentificationModelConfig
 from ..datasets import RecurrentHybridPredictorDataset, RecurrentInitializerDataset
 from .physical import (
+    BasicPelicanMotionComponent,
+    BasicPelicanMotionConfig,
     MinimalManeuveringComponent,
     MinimalManeuveringConfig,
     NoOpPhysicalComponent,
@@ -26,6 +28,7 @@ from .semiphysical import (
     BlankeComponent,
     LinearComponent,
     NoOpSemiphysicalComponent,
+    QuadraticComponent,
     SemiphysicalComponent,
 )
 
@@ -53,6 +56,12 @@ class HybridMinimalManeuveringModelConfig(
 
 class HybridPropulsionManeuveringModelConfig(
     HybridResidualLSTMModelConfig, PropulsionManeuveringConfig
+):
+    pass
+
+
+class HybridBasicQuadcopterModelConfig(
+    HybridResidualLSTMModelConfig, BasicPelicanMotionConfig
 ):
     pass
 
@@ -671,6 +680,28 @@ class HybridPropulsionManeuveringModel(HybridResidualLSTMModel):
         )
 
 
+class HybridBasicQuadcopterModel(HybridResidualLSTMModel):
+    CONFIG = HybridBasicQuadcopterModelConfig
+
+    def __init__(self, config: HybridBasicQuadcopterModelConfig):
+        device = torch.device(config.device_name)
+        physical = BasicPelicanMotionComponent(
+            time_delta=config.time_delta, device=device, config=config
+        )
+        semiphysical = NoOpSemiphysicalComponent(
+            control_dim=len(config.control_names),
+            state_dim=len(config.state_names),
+            device=device,
+        )
+
+        super().__init__(
+            physical=physical,
+            semiphysical=semiphysical,
+            config=config,
+            device_name=config.device_name,
+        )
+
+
 class HybridLinearModel(HybridResidualLSTMModel):
     CONFIG = HybridResidualLSTMModelConfig
 
@@ -678,6 +709,26 @@ class HybridLinearModel(HybridResidualLSTMModel):
         device = torch.device(config.device_name)
         physical = NoOpPhysicalComponent(time_delta=config.time_delta, device=device)
         semiphysical = LinearComponent(
+            control_dim=len(config.control_names),
+            state_dim=len(config.state_names),
+            device=device,
+        )
+
+        super().__init__(
+            physical=physical,
+            semiphysical=semiphysical,
+            config=config,
+            device_name=config.device_name,
+        )
+
+
+class HybridQuadraticModel(HybridResidualLSTMModel):
+    CONFIG = HybridResidualLSTMModelConfig
+
+    def __init__(self, config: HybridResidualLSTMModelConfig):
+        device = torch.device(config.device_name)
+        physical = NoOpPhysicalComponent(time_delta=config.time_delta, device=device)
+        semiphysical = QuadraticComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
             device=device,
@@ -786,6 +837,50 @@ class HybridBlankePropulsionModel(HybridResidualLSTMModel):
             time_delta=config.time_delta, device=device, config=config
         )
         semiphysical = BlankeComponent(
+            control_dim=len(config.control_names),
+            state_dim=len(config.state_names),
+            device=device,
+        )
+
+        super().__init__(
+            physical=physical,
+            semiphysical=semiphysical,
+            config=config,
+            device_name=config.device_name,
+        )
+
+
+class HybridLinearBasicQuadcopterModel(HybridResidualLSTMModel):
+    CONFIG = HybridBasicQuadcopterModelConfig
+
+    def __init__(self, config: HybridBasicQuadcopterModelConfig):
+        device = torch.device(config.device_name)
+        physical = BasicPelicanMotionComponent(
+            time_delta=config.time_delta, device=device, config=config
+        )
+        semiphysical = LinearComponent(
+            control_dim=len(config.control_names),
+            state_dim=len(config.state_names),
+            device=device,
+        )
+
+        super().__init__(
+            physical=physical,
+            semiphysical=semiphysical,
+            config=config,
+            device_name=config.device_name,
+        )
+
+
+class HybridQuadraticBasicQuadcopterModel(HybridResidualLSTMModel):
+    CONFIG = HybridBasicQuadcopterModelConfig
+
+    def __init__(self, config: HybridBasicQuadcopterModelConfig):
+        device = torch.device(config.device_name)
+        physical = BasicPelicanMotionComponent(
+            time_delta=config.time_delta, device=device, config=config
+        )
+        semiphysical = QuadraticComponent(
             control_dim=len(config.control_names),
             state_dim=len(config.state_names),
             device=device,
