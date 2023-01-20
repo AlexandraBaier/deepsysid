@@ -222,7 +222,7 @@ class LtiRnn(HiddenStateForwardModule):
 
 class LtiRnnConvConstr(HiddenStateForwardModule):
     def __init__(
-        self, nx: int, nu: int, ny: int, nw: int, gamma: float, beta: float
+        self, nx: int, nu: int, ny: int, nw: int, gamma: float, beta: float, bias: bool
     ) -> None:
         super(LtiRnnConvConstr, self).__init__()
 
@@ -246,6 +246,8 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         self.C2_tilde = torch.nn.Linear(self.nx, self.nz, bias=False)
         self.D21_tilde = torch.nn.Linear(self.nu, self.nz, bias=False)
         self.lambdas = torch.nn.Parameter(torch.zeros((self.nw, 1)))
+        self.b_z = torch.nn.Parameter(torch.zeros((self.nz)), requires_grad=bias)
+        self.b_y = torch.nn.Parameter(torch.zeros((self.ny)), requires_grad=bias)
 
     def initialize_lmi(self) -> None:
         # storage function
@@ -370,9 +372,9 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
             x = torch.zeros((n_batch, self.nx))
 
         for k in range(n_sample):
-            z = (self.C2_tilde(x) + self.D21_tilde(x_pred[:, k, :])) @ T_inv
+            z = (self.C2_tilde(x) + self.D21_tilde(x_pred[:, k, :]) + self.b_z) @ T_inv
             w = self.nl(z)
-            y[:, k, :] = self.C1(x) + self.D11(x_pred[:, k, :]) + self.D12(w)
+            y[:, k, :] = self.C1(x) + self.D11(x_pred[:, k, :]) + self.D12(w) + self.b_y
             x = (
                 self.A_tilde(x) + self.B1_tilde(x_pred[:, k, :]) + self.B2_tilde(w)
             ) @ Y_inv
