@@ -471,6 +471,11 @@ class SymmetricRudderPropellerPair(nn.Module):
 class BasicPelicanMotionEquations(nn.Module):
     """
     Motion model of quadrotor without propulsion.
+
+    Equations (19-30) in
+    "Freddi et al.
+    A Feedback Linearization Approach to Fault Tolerance in Quadrotor Vehicles.
+    IFAC World Congress. 2011."
     """
 
     def __init__(self, time_delta: float, config: BasicPelicanMotionConfig):
