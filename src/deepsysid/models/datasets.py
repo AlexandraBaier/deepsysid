@@ -186,6 +186,97 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
         }
 
 
+class RecurrentInitializerPredictorDataset(data.Dataset):
+    def __init__(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        sequence_length: int,
+    ):
+        self.sequence_length = sequence_length
+        self.control_dim = control_seqs[0].shape[1]
+        self.state_dim = state_seqs[0].shape[1]
+        (
+            self.control_window,
+            self.state_window,
+            self.control_horizon,
+            self.state_horizon,
+        ) = self.__load_data(control_seqs, state_seqs)
+
+    def __load_data(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+    ]:
+        control_window_seq = list()
+        state_window_seq = list()
+        control_horizon_seq = list()
+        state_horizon_seq = list()
+
+        for control, state in zip(control_seqs, state_seqs):
+            n_samples = int(
+                (control.shape[0] - 2 * self.sequence_length) / self.sequence_length
+            )
+
+            control_window = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim),
+                dtype=np.float64,
+            )
+            state_window = np.zeros(
+                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
+            )
+            control_horizon = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim), dtype=np.float64
+            )
+            state_horizon = np.zeros(
+                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
+            )
+
+            for idx in range(n_samples):
+                time = idx * self.sequence_length
+
+                control_window[idx, :, :] = control[
+                    time : time + self.sequence_length, :
+                ]
+
+                state_window[idx, :, :] = state[time : time + self.sequence_length, :]
+
+                control_horizon[idx, :, :] = control[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
+                state_horizon[idx, :, :] = state[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
+
+            control_window_seq.append(control_window)
+            state_window_seq.append(state_window)
+            control_horizon_seq.append(control_horizon)
+            state_horizon_seq.append(state_horizon)
+
+        return (
+            np.vstack(control_window_seq),
+            np.vstack(state_window_seq),
+            np.vstack(control_horizon_seq),
+            np.vstack(state_horizon_seq),
+        )
+
+    def __len__(self) -> int:
+        return self.control_window.shape[0]
+
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
+        return {
+            'control_window': self.control_window[idx],
+            'state_window': self.state_window[idx],
+            'control_horizon': self.control_horizon[idx],
+            'state_horizon': self.state_horizon[idx],
+        }
+
+
 class RecurrentHybridPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
     def __init__(
         self,
