@@ -565,3 +565,66 @@ class InitLSTM(nn.Module):
         h, (_, _) = self.predictor_lstm(input, (h0_init, c0_init))
 
         return self.output_layer(h), self.init_layer(h_init)
+
+
+class InitializerPredictorLSTM(nn.Module):
+    """
+    Variation of InitLSTM.
+    InitLSTM is somewhat broken, because it assumes that the initializer
+    receives input_dim + output_dim as input but this might actually differ
+    for some models.
+    """
+
+    def __init__(
+        self,
+        predictor_input_dim: int,
+        initializer_input_dim: int,
+        output_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        dropout: float,
+    ):
+        super().__init__()
+
+        self.num_recurrent_layers = num_recurrent_layers
+        self.recurrent_dim = recurrent_dim
+
+        with warnings.catch_warnings():
+            self.init_lstm = nn.LSTM(
+                input_size=initializer_input_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+            )
+
+            self.predictor_lstm = nn.LSTM(
+                input_size=predictor_input_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+            )
+
+        self.output_layer = torch.nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=False
+        )
+
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+        for name, param in self.init_lstm.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+    def forward(
+        self,
+        predictor_input: torch.Tensor,
+        initializer_input: torch.Tensor,
+    ) -> torch.Tensor:
+        _, (h0_init, c0_init) = self.init_lstm.forward(initializer_input)
+        h, (_, _) = self.predictor_lstm.forward(predictor_input, (h0_init, c0_init))
+        y = self.output_layer.forward(h)
+
+        return y

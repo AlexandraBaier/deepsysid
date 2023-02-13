@@ -11,11 +11,11 @@ from deepsysid.pipeline.configuration import (
 from deepsysid.pipeline.gridsearch import ExperimentSessionManager, SessionAction
 
 from .pipeline import (
-    get_control_names,
+    get_4dof_ship_control_names,
+    get_4dof_ship_data,
+    get_4dof_ship_state_names,
     get_cpu_device_name,
-    get_data,
     get_horizon_size,
-    get_state_names,
     get_time_delta,
     get_window_size,
     prepare_directories,
@@ -28,17 +28,19 @@ def test_experiment_session_manager_new_and_test_best_successful(
     paths = prepare_directories(tmp_path)
 
     # Setup dataset directory.
-    paths['train'].joinpath('train-0.csv').write_text(data=get_data(0))
-    paths['validation'].joinpath('validation-0.csv').write_text(data=get_data(1))
-    paths['test'].joinpath('test-0.csv').write_text(data=get_data(2))
+    paths['train'].joinpath('train-0.csv').write_text(data=get_4dof_ship_data(0))
+    paths['validation'].joinpath('validation-0.csv').write_text(
+        data=get_4dof_ship_data(1)
+    )
+    paths['test'].joinpath('test-0.csv').write_text(data=get_4dof_ship_data(2))
 
     template = ExperimentGridSearchTemplate(
         settings=ExperimentGridSearchSettings(
             time_delta=get_time_delta(),
             window_size=get_window_size(),
             horizon_size=get_horizon_size(),
-            control_names=get_control_names(),
-            state_names=get_state_names(),
+            control_names=get_4dof_ship_control_names(),
+            state_names=get_4dof_ship_state_names(),
             target_metric='d1',
             metrics=dict(
                 d1=GridSearchMetricConfiguration(
