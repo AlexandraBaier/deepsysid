@@ -45,6 +45,7 @@ class HybridResidualLSTMModelConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_parallel: int
     epochs_feedback: int
+    feedback_gradient_clip: float = 1.0
     loss: Literal['mse', 'msge']
 
 
@@ -117,6 +118,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.epochs_initializer = config.epochs_initializer
         self.epochs_parallel = config.epochs_parallel
         self.epochs_feedback = config.epochs_feedback
+        self.feedback_gradient_clip = config.feedback_gradient_clip
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -367,9 +369,18 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             )
             epoch_losses_teacher.append([i, total_epoch_loss])
 
+        # Clip gradients in each step to prevent exploding gradients.
+        for parameter in self.blackbox.parameters():
+            parameter.register_hook(
+                lambda grad: torch.clamp(
+                    grad, -self.feedback_gradient_clip, self.feedback_gradient_clip
+                )
+            )
+
         self.optimizer_end2end = optim.Adam(
             params=self.blackbox.parameters(), lr=self.learning_rate
         )
+
         for i in range(self.epochs_feedback):
             data_loader = data.DataLoader(
                 dataset=dataset,
