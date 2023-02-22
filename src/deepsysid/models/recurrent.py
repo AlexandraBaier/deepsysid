@@ -295,6 +295,7 @@ class LtiRnnInitConfig(DynamicIdentificationModelConfig):
     epochs_predictor: int
     clip_gradient_norm: float
     loss: Literal['mse', 'msge']
+    nonlinearity: str
 
 
 class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
@@ -335,6 +336,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
             nu=self.control_dim,
             ny=self.state_dim,
             nw=self.recurrent_dim,
+            nonlinearity=config.nonlinearity,
         ).to(self.device)
 
         self._initializer = rnn.BasicLSTM(
@@ -573,6 +575,7 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_predictor: int
     loss: Literal['mse', 'msge']
     bias: bool
+    nonlinearity: str
     log_min_max_real_eigenvalues: Optional[bool] = False
 
 
@@ -621,6 +624,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             gamma=config.gamma,
             beta=config.beta,
             bias=config.bias,
+            nonlinearity=config.nonlinearity,
         ).to(self.device)
 
         self._initializer = rnn.BasicLSTM(

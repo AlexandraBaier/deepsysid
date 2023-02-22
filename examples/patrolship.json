@@ -546,7 +546,8 @@
         "epochs_with_const_decay": 100,
         "recurrent_dim": 64,
         "nx": 64,
-        "learning_rate": 0.0025
+        "learning_rate": 0.0025,
+        "nonlinearity": "torch.nn.Tanh()"
       },
       "flexible_parameters": {
         "gamma":[
@@ -636,7 +637,8 @@
         "epochs_predictor": 1000,
         "nx": 64,
         "learning_rate": 0.0025,
-        "clip_gradient_norm":  100
+        "clip_gradient_norm":  100,
+        "nonlinearity": "torch.nn.Tanh()"
       },
       "flexible_parameters": {
         "recurrent_dim": [

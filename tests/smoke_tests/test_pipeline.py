@@ -136,6 +136,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         loss='mse',
         bias=True,
+        nonlinearity='torch.nn.Tanh()',
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
@@ -166,6 +167,7 @@ def test_constrained_rnn_stable(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         bias=True,
         loss='mse',
+        nonlinearity='torch.nn.Softshrink(0.5)',
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
@@ -191,6 +193,7 @@ def test_lti_rnn_init(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         loss='mse',
         clip_gradient_norm=10,
+        nonlinearity='torch.nn.Tanh()',
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
