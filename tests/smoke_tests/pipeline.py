@@ -1,5 +1,5 @@
 import pathlib
-from typing import Dict, List, Literal
+from typing import Callable, Dict, List, Literal
 
 import torch
 
@@ -27,6 +27,7 @@ from deepsysid.pipeline.metrics import (
     NormalizedRootMeanSquaredErrorMetric,
     RootMeanSquaredErrorMetric,
     Trajectory4DOFRootMeanSquaredErrorMetric,
+    TrajectoryNED6DOFRootMeanSquaredErrorMetric,
 )
 from deepsysid.pipeline.testing.bounded_residual import (
     BoundedResidualInferenceTestConfig,
@@ -36,7 +37,7 @@ from deepsysid.pipeline.testing.stability.base import StabilityTestConfig
 from deepsysid.pipeline.training import train_model
 
 
-def get_data(idx: int) -> str:
+def get_4dof_ship_data(idx: int) -> str:
     data = [
         """time,n,deltal,deltar,Vw,alpha_x,alpha_y,u,v,p,r,phi
 0,366.361745840294,-0.000667792634540374,0.000505048081770158,2.3058404686817005,0.730398366799378,0.6830213948162981,1.9059304828813899,0.0684893236802277,0.0,0.0,0.0
@@ -111,12 +112,67 @@ def get_data(idx: int) -> str:
     return data[idx % len(data)]
 
 
-def get_state_names() -> List[str]:
-    return ['u', 'v', 'p', 'r', 'phi', 'alpha_x', 'alpha_y']
+def get_4dof_ship_state_names() -> List[str]:
+    return ['u', 'v', 'p', 'r', 'phi']
 
 
-def get_control_names() -> List[str]:
+def get_4dof_ship_control_names() -> List[str]:
     return ['n', 'deltal', 'deltar', 'Vw']
+
+
+def get_quadcopter_data(idx: int) -> str:
+    data = [
+        """time,x,y,z,phi,theta,psi,n1,n2,n3,n4,n1_cmd,n2_cmd,n3_cmd,n4_cmd,dx,dy,dz,p,q,r
+0.01,7.387242798354087e-05,-9.034331961591213e-05,0.0001265939643346772,0.012586334632959759,0.03156736613435922,0.29388469138138185,76.58575199652259,77.30743419761546,80.13349901572091,74.80619218579649,103.35992110210034,104.66249141562137,108.2027166047465,101.21637990208453,0.002287242798353844,-0.003300331961591222,-0.0007406035665290277,0.009470576650185171,0.017057458104890753,0.005965236268704627
+0.02,0.0001002687242798365,-0.0001232953772290809,0.0001271440329217885,0.012679157644218075,0.0317386776154589,0.2939421624501929,76.72156468327582,77.07453066382661,79.79322391488812,75.93865379132838,104.37493205572989,105.89057054262457,108.400706443283,102.16179040698658,0.0026396296296295626,-0.0032952057613168757,5.5006858711129135e-05,0.01574213372204585,0.01571092296963542,0.008690867095476097
+0.03,0.0001361032921810704,-0.00015706093278463647,0.00013774759945128767,0.012833821078229585,0.03189687556106935,0.29402702840990247,76.8404478565331,77.07102764549406,79.68817753638906,76.82027101699013,105.10370685134399,106.7936828254109,108.456837350193,103.18738700936595,0.00358345679012339,-0.003376555555555558,0.0010603566529499182,0.021888187163008586,0.016583097744160405,0.011581583609894705
+0.04,0.00018852880658436208,-0.00019323914951989028,0.00015430452674896204,0.013049009412929285,0.032064178444822324,0.2941406476153363,76.93746068629831,77.31008395989967,79.7844215342042,77.51543220727085,105.52346315591835,107.34492359165712,108.42197417220878,104.23811378504405,0.005242551440329168,-0.003617821673525381,0.0016556927297674364,0.027178654712085817,0.020545319530103655,0.014288101897901324
+0.05,0.000262445541838134,-0.0002336024691358025,0.00017202194787379458,0.013316215382546142,0.032271477592955886,0.29428076214897475,76.98386822546124,77.79298014411123,80.20086457026132,77.94615061776867,105.85595961009899,107.38652010288236,108.40679560277025,105.2714918616394,0.0073916735253771945,-0.0040363319615912205,0.0017717421124832536,0.03240173076314996,0.027307540307626357,0.016963723301188557
+0.06,0.00035872249657064426,-0.00027973347050754465,0.00019104938271604464,0.013634759196189151,0.03254678646833977,0.29444665979991536,77.15081023631677,78.42458804045667,80.61163860916582,77.74662480632516,105.13078435876959,107.99958770140886,107.9185544684863,106.75009213710906,0.009627695473251024,-0.004613100137174217,0.0019027434842250064,0.03868117110286445,0.035839078849734245,0.01999497874794278
+0.07,0.000476116735253772,-0.00033323050754458167,0.0002169314128943685,0.014015064333050707,0.032907868682682695,0.29464159869744644,77.20772116993668,79.12106535849315,80.73505949921781,77.66426662265121,104.41352196622353,108.48417804555069,107.26853288148088,107.90396602355396,0.011739423868312773,-0.005349703703703702,0.0025882030178323865,0.04550335324809466,0.04545889957205271,0.023102824566716505
+0.08,0.0006141045267489711,-0.0003949632373113855,0.00025510973936898753,0.014462496590473307,0.03336564905023893,0.29486610829863047,77.14826959349278,80.11226895145946,80.1995886911511,78.21273503503056,104.48466960389007,108.63178120559097,107.22651972396578,108.16244820280487,0.013798779149519914,-0.006173272976680384,0.0038178326474619024,0.05095538506184011,0.05569666436837921,0.025497199965659318
+0.09,0.000773807818930041,-0.0004640419890260631,0.00030535116598078146,0.014963544713228897,0.033926242797092554,0.2951128568880234,77.01552517669084,81.16163905142967,79.53894559012647,78.97082448143703,105.50588300785158,108.41722713064976,107.21545712292016,108.26729895094266,0.01597032921810699,-0.006907875171467757,0.005024142661179393,0.05293903988157761,0.06649847945475817,0.026342793633568267
+0.1,0.000956642249657064,-0.0005374689849108367,0.0003610631001371588,0.015483999706240925,0.034595092545843496,0.2953661536048211,76.81667684529901,81.94757736615607,79.32714978148009,79.68942605491219,107.262596099615,107.77601112330126,106.79675966272717,108.66167759481444,0.018283443072702295,-0.007342699588477365,0.005571193415637731,0.05145443079635017,0.07734761263745911,0.02549911643523478
+0.11,0.0011634144032921802,-0.000611522427983539,0.0004144019204389426,0.01598972433078384,0.03537242171496083,0.2956089856208176,76.89514606420505,82.1897758504921,79.47461377257846,80.30189205295827,108.24320335744082,107.6336671247761,106.74255416070466,108.88366630810484,0.020677215363511626,-0.007405344307270225,0.005333882030178385,0.04859304876119361,0.0873063269281264,0.023459848169006637
+0.12,0.0013943152263374472,-0.0006838766941015088,0.00046257887517145554,0.016467358232346442,0.036249122036825274,0.29582944793524363,77.34040371846064,82.01757745315089,79.73675532762692,80.47401300464391,107.47116887649634,108.87516589969623,106.91033116644648,109.13504241915706,0.023090082304526693,-0.007235426611796984,0.004817695473251292,0.047145485711091235,0.09501960851945719,0.02096875157473427
+0.13,0.001649769958847735,-0.0007541723456790122,0.0005100768175582914,0.016931213765615058,0.03720263986586071,0.2960233227777789,77.84659826453847,81.37904580357059,80.06407666495238,80.1294908415806,106.07369338797785,110.60116367806272,107.17483873633628,109.41136573303812,0.02554547325102879,-0.007029565157750338,0.004749794238683585,0.04798806392691552,0.09999977092957481,0.018504076955317986
+0.14,0.0019305310013717405,-0.0008231363237311384,0.0005657736625514381,0.01740421198761643,0.038205624893335,0.2961912786409946,78.12283999917194,80.44397484753513,79.97656886919694,80.25491614917595,105.02877155276009,112.01127380826875,107.49712268023858,110.02893742981176,0.02807610425240054,-0.0068963978052126165,0.005569684499314668,0.04932902704524937,0.10346499136568511,0.016207041518652324
+0.15,0.0022385364883401905,-0.0008897432098765431,0.0006363511659807984,0.01789131176284963,0.03924293661697262,0.2963351999010007,78.24010292152484,79.66046355329605,79.3688915297589,80.78968371870434,105.12630001693783,112.6238767657546,107.511585333602,111.33843090355764,0.030800548696845002,-0.0066606886145404755,0.007057750342936032,0.04796586341867331,0.1083697839515185,0.01397592996161099
+0.16,0.002577120713305897,-0.0009499804663923182,0.0007227956104252455,0.01836548723930399,0.04032895943457271,0.2964554415070791,78.41723106275572,79.49079879091956,78.92777513056001,81.69509692752469,106.92534089404779,112.1500497278929,107.09548458658305,113.23356370480722,0.03385842249657065,-0.006023725651577508,0.008644444444444715,0.04223688952948858,0.11799657822119727,0.011947174049949043
+0.17,0.0029515130315500675,-0.0009965782990397805,0.00082105212620028,0.018783039269582084,0.04151091847579611,0.29655312654508775,79.09452360178544,79.72335092680981,78.83193887478956,83.05557850513719,109.42570996353848,111.22646343560105,106.78917439913747,115.00379995992353,0.037439231824417045,-0.0046597832647462265,0.009825651577503446,0.033828010358826516,0.13420223659689556,0.010459274764257231
+0.18,0.003367404389574759,-0.0010223464609053498,0.000927965706447192,0.019116978878958808,0.042854666876142034,0.29663240498035304,79.94625964610991,80.32285579999294,78.74259464150087,84.34879368351385,110.5324477685414,111.5804023310803,107.57307785326185,115.64995973019725,0.04158913580246913,-0.0025768161865569357,0.010691358024691197,0.02694462164480643,0.15658301447345144,0.010155874380477485
+0.19,0.00383101659807956,-0.0010226890809327846,0.0010441646090534997,0.019382074161322864,0.044422150502010496,0.29670391982223476,81.04768900022586,81.10559929319929,78.65409105013431,85.10008093083016,110.38990426348157,113.09676928453531,108.87202544768972,115.4599387167924,0.046361220850480105,-3.426200274347403e-05,0.01161989026063077,0.024946736452731457,0.18315125616215466,0.011686188730372905
+0.2,0.0043487866941015075,-0.0009972333882030176,0.0011735486968449923,0.01962635197667742,0.04625558170664509,0.29678514820725654,81.88300688909389,81.8051587997355,79.04695784414109,85.27637781491777,110.0333321140955,114.49670224184582,110.05326163653754,115.13437431183928,0.051777009602194765,0.002545569272976696,0.012938408779149257,0.027491782494981586,0.21176067408477192,0.01575008383963708
+0.21,0.0049281480109739356,-0.000947169903978052,0.001318777777777774,0.019893987106359774,0.04837586827855431,0.2969008920550859,82.03149741570701,82.43401957096492,79.85141485263033,85.14485408662897,109.86160794664059,115.13455668942912,111.05558551097064,115.16726467756042,0.057936131687242806,0.005006348422496561,0.014522908093278171,0.030677127889076984,0.2413198787303948,0.02230021281131588
+0.22,0.005575259396433469,-0.0008725085185185185,0.0014807215363511579,0.020189974670876083,0.05079302046399408,0.29707558424184954,82.03505974998147,83.02857641465185,80.6311015016335,84.92176526297317,111.03883690937171,114.32395149973784,112.03861518541201,115.60224735838152,0.06471113854595338,0.007466138545953349,0.01619437585733839,0.03008683898268786,0.2714910133484623,0.029932130313235782
+0.23,0.006293187928669408,-0.0007704690809327845,0.0016603607681755692,0.020475646164085613,0.05351341235550598,0.29731964834477304,82.68556574730344,83.24423165093016,81.28963323378512,85.08563866337994,113.24549398916996,112.47639360390397,112.66649764916062,116.69671699257611,0.0717928532235939,0.010203943758573399,0.01796392318244113,0.02384540423746113,0.30193311350915075,0.036007645148171154
+0.24,0.007080519341563784,-0.0006373396159122084,0.0018617626886145203,0.020694840482202832,0.05653947231168854,0.2976173155395637,83.47366268512145,82.9341785198118,81.63510934502807,85.27382267551978,115.01116924157394,110.72883561688846,113.29044612765927,117.99575348257105,0.07873314128943754,0.013312946502057613,0.02014019204389511,0.013234318526419995,0.33119879136300967,0.03848568651653052
+0.25,0.007933393004115222,-0.0004707892729766803,0.0020908079561042263,0.020805435654739843,0.059858702284513905,0.29793293898314305,84.55883477602158,82.15013676803675,81.91390034440799,85.1556349754466,116.4645184856349,109.72016394329566,114.16448386886896,118.63166788054166,0.08528736625514387,0.016655034293552806,0.022904526748970592,0.0010147134618985133,0.35718498695028006,0.03741298175333764
+0.26,0.008847081893004111,-0.00027087598079561043,0.0023525665294924247,0.020793201235342295,0.06343754854773889,0.2982320093776576,85.85018251563363,81.41163111230541,82.71220135619731,84.71902647143608,118.09315006623183,109.55357673681087,114.1202091169492,119.19395169805699,0.09136888888888889,0.01999132921810699,0.02617585733881984,-0.010491465554758932,0.3777440000742146,0.03472135276451284
+0.27,0.009816536488340187,-3.92592043895748e-05,0.0026494183813442745,0.020666274975345567,0.06722137661545027,0.2984999101732065,86.38945495884815,81.00647358761573,83.80663536018055,84.46290063934765,119.05818795112711,110.61410088356438,112.9258821596301,120.30716984974936,0.09694545953360753,0.023161677640603562,0.029685185185184978,-0.020315583364073426,0.3916760039474632,0.03217666709104596
+0.28,0.01083500727023319,0.00022188340192043883,0.002982135802469104,0.02044150582911699,0.07114393449833788,0.2987399424990491,86.5024736896374,80.80786765633924,84.13468899934843,85.01691557824113,119.4066127655696,112.30413060447583,111.77818217308861,121.44861434233019,0.10184707818930039,0.02611426063100136,0.03327174211248296,-0.028394960439107268,0.39860671130528263,0.03000077147511175
+0.29,0.01189386858710562,0.0005096318381344305,0.003351999999999972,0.02013623049603248,0.07513528551104952,0.2989576532367102,86.75192297152628,80.7303898964017,83.95367363087934,85.95354392549662,120.67445642152065,112.88782247031074,112.44928109671606,121.55085168588825,0.10588613168724288,0.028774843621399166,0.03698641975308681,-0.035092086571204016,0.398796727252196,0.027145960980231493
+0.3,0.012983856515775029,0.0008197344032921806,0.0037627297668038186,0.019764932620095182,0.07912789469783671,0.2991479948913659,87.06809258489355,80.65717310034687,83.94240458032505,86.46487987187258,122.77972990169881,112.0464901068482,114.90552260607937,120.65858080571266,0.10899879286694093,0.031010256515775006,0.04107297668038464,-0.04047892992779616,0.3928598560309083,0.022744229363662667
+0.31,0.014097472976680379,0.0011459003429355277,0.004221773662551423,0.019342165065649623,0.08306020694846902,0.2992970378075526,87.31462784256834,80.66801362395434,84.01975258287577,86.16579173335245,124.73052225021345,110.91984627157794,117.49006968883718,119.9566936137309,0.11136164609053499,0.03261659396433471,0.045904389574760465,-0.04437780870044387,0.3816325988176059,0.017013539925959838
+0.32,0.015230302331961584,0.0014802789300411515,0.004740577503429342,0.01888427174041299,0.08687909831565763,0.2993927435428625,87.59497325623227,80.71287783328488,84.44173748478394,85.6353548890013,126.15796462169075,110.51035279954979,119.61481441090916,119.6327397426805,0.11328293552812056,0.03343785871056239,0.051880384087791845,-0.04612960284432045,0.3659609636650232,0.010883266954959142
+0.33,0.01638117873799725,0.0018141932098765423,0.0053338257887517015,0.018413532317996202,0.0905401027870317,0.2994320414501074,87.72955273200098,80.92766260132183,85.25975612958207,85.75260139638871,127.16508709829732,110.90138964503815,120.7024219125746,119.96889872575615,0.11508764060356655,0.03339142798353908,0.05932482853223597,-0.0450996800592131,0.3463121500457041,0.005283359978016091
+0.34,0.017551072976680376,0.0021397540877914943,0.006017459533607667,0.017957758490717513,0.09400360601793725,0.2994208850296957,88.11201706552795,81.42836728186339,85.69989774620154,86.14535740395547,127.32925105215367,112.44583377469922,120.87698978168824,120.79060008891217,0.11698942386831265,0.0325560877914952,0.06836337448559654,-0.04099966212840264,0.3230640536632837,0.00045512724835365843
+0.35000000000000003,0.018742249382716042,0.0024515690809327837,0.006806399176954716,0.017547334663237914,0.09723380702375864,0.2993674035328777,89.02842671325935,82.2360058627689,86.21320762392368,86.9708007286379,127.03171470404261,114.8622860075154,122.04463985587952,120.54666463220913,0.11911764060356655,0.031181499314128936,0.0788939643347049,-0.03473166414888522,0.2969300035394933,-0.003793309271708894
+0.36,0.019958061316872423,0.0027482238820301774,0.007712582990397787,0.017203700591603026,0.1002019874872406,0.2992775548010964,90.05452939412848,83.08339165636738,87.03739164222979,87.66156643992885,126.95786555629677,117.42334486804711,123.60877441294762,119.83505101370936,0.12158119341563814,0.029665480109739364,0.09061838134430712,-0.028325047049163207,0.2696740654815515,-0.008060488621658108
+0.37,0.021203488614540463,0.0030324897256515763,0.008744219478737977,0.016928513381976908,0.10289694939981167,0.2991509744683733,90.73356000001803,83.9724981295051,87.52634032845292,87.9248047860892,126.94857202835453,119.79093793644486,123.86250058407263,120.33103297858293,0.12454272976680399,0.0284265843621399,0.10316364883401902,-0.024283374464749586,0.24348868648589866,-0.01268084541095303
+0.38,0.022485076406035663,0.0033099433333333315,0.009907064471879268,0.01669870482734625,0.10532935216231393,0.29898363775963044,91.17092327302701,84.71737881670056,87.41707607647257,87.89691521614795,127.2552801840526,121.4682201028865,122.73599022654699,122.74216649963053,0.12815877914951998,0.027745360768175516,0.11628449931412911,-0.023856432511097543,0.22038815586835042,-0.017416830545982864
+0.39,0.023809576954732504,0.0035870009602194768,0.011206805212620012,0.01647845163502567,0.10753003432313027,0.2987736585872999,91.74093671270572,85.23173356773258,87.48698172355886,87.91551276070085,128.43328585527678,121.70532479335212,121.85720142623015,125.0220718066674,0.13245005486968406,0.027705762688614525,0.12997407407407435,-0.02630311755615105,0.20081887305538806,-0.021153509500391413
+"""
+    ]
+    return data[idx % len(data)]
+
+
+def get_quadcopter_state_names() -> List[str]:
+    return ['phi', 'psi', 'theta', 'p', 'q', 'r', 'dx', 'dy', 'dz']
+
+
+def get_quadcopter_control_names() -> List[str]:
+    return ['n1', 'n2', 'n3', 'n4']
 
 
 def get_cpu_device_name() -> str:
@@ -174,11 +230,11 @@ def prepare_directories(
     )
 
 
-def run_pipeline(
+def run_generic_pipeline(
     base_path: pathlib.Path,
     model_name: str,
-    model_class: str,
-    model_config: DynamicIdentificationModelConfig,
+    config: ExperimentConfiguration,
+    get_data_func: Callable[[int], str],
 ) -> None:
     # Activate for easier debugging when tests fail due to torch errors.
     torch.autograd.set_detect_anomaly(True)
@@ -186,145 +242,10 @@ def run_pipeline(
     # Define and create temporary file paths and directories.
     paths = prepare_directories(base_path)
 
-    # Setup configuration file.
-    config = ExperimentConfiguration(
-        time_delta=get_time_delta(),
-        window_size=get_window_size(),
-        horizon_size=get_horizon_size(),
-        control_names=get_control_names(),
-        state_names=get_state_names(),
-        session=SessionConfiguration(total_runs_for_best_models=3),
-        additional_tests=dict(
-            bibo_stability=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing.stability.'
-                'bibo.BiboStabilityTest',
-                parameters=StabilityTestConfig(
-                    control_names=get_control_names(),
-                    state_names=get_state_names(),
-                    window_size=get_window_size(),
-                    horizon_size=get_horizon_size(),
-                    optimization_steps=3,
-                    optimization_lr=1e-3,
-                    initial_mean_delta=0,
-                    initial_std_delta=1e-3,
-                    evaluation_sequence=1,
-                    clip_gradient_norm=100,
-                    regularization_scale=0.25,
-                ),
-            ),
-            incremental_stability=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing.stability.'
-                'incremental.IncrementalStabilityTest',
-                parameters=StabilityTestConfig(
-                    control_names=get_control_names(),
-                    state_names=get_state_names(),
-                    window_size=get_window_size(),
-                    horizon_size=get_horizon_size(),
-                    optimization_steps=3,
-                    optimization_lr=1e-3,
-                    initial_mean_delta=0,
-                    initial_std_delta=1e-3,
-                    evaluation_sequence=1,
-                    clip_gradient_norm=100,
-                    regularization_scale=0.25,
-                ),
-            ),
-            bounded_residual=ExperimentTestConfiguration(
-                test_class='deepsysid.pipeline.testing'
-                '.bounded_residual.BoundedResidualInferenceTest',
-                parameters=BoundedResidualInferenceTestConfig(
-                    control_names=get_control_names(),
-                    state_names=get_state_names(),
-                    window_size=get_window_size(),
-                    horizon_size=get_horizon_size(),
-                    thresholds=[0.5, 1.0],
-                ),
-            ),
-        ),
-        models={
-            model_name: dict(
-                model_class=model_class,
-                parameters=model_config,
-            )
-        },
-        metrics=dict(
-            rmse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric',
-                parameters=RootMeanSquaredErrorMetric.CONFIG(
-                    state_names=get_state_names(), sample_time=get_time_delta()
-                ),
-            ),
-            trajectory_rmse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics'
-                '.Trajectory4DOFRootMeanSquaredErrorMetric',
-                parameters=Trajectory4DOFRootMeanSquaredErrorMetric.CONFIG(
-                    state_names=get_state_names(), sample_time=get_time_delta()
-                ),
-            ),
-            mse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.MeanSquaredErrorMetric',
-                parameters=MeanSquaredErrorMetric.CONFIG(
-                    state_names=get_state_names(), sample_time=get_time_delta()
-                ),
-            ),
-            mae=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric',
-                parameters=MeanAbsoluteErrorMetric.CONFIG(
-                    state_names=get_state_names(), sample_time=get_time_delta()
-                ),
-            ),
-            nrmse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.'
-                'NormalizedRootMeanSquaredErrorMetric',
-                parameters=NormalizedRootMeanSquaredErrorMetric.CONFIG(
-                    state_names=get_state_names(), sample_time=get_time_delta()
-                ),
-            ),
-        ),
-        target_metric='rmse',
-        explanation_metrics=dict(
-            infidelity=ExperimentExplanationMetricConfiguration(
-                metric_class='deepsysid.explainability.metrics.NMSEInfidelityMetric',
-                parameters=NMSEInfidelityMetric.CONFIG(state_names=get_state_names()),
-            ),
-            robustness=ExperimentExplanationMetricConfiguration(
-                metric_class='deepsysid.explainability.metrics.LipschitzEstimateMetric',
-                parameters=LipschitzEstimateMetric.CONFIG(
-                    state_names=get_state_names(),
-                    n_disturbances=5,
-                    control_error_std=[0.1 for _ in get_control_names()],
-                    state_error_std=[0.1 for _ in get_state_names()],
-                ),
-            ),
-            simplicity=ExperimentExplanationMetricConfiguration(
-                metric_class='deepsysid.explainability.metrics'
-                '.ExplanationComplexityMetric',
-                parameters=ExplanationComplexityMetric.CONFIG(
-                    state_names=get_state_names(), relevance_threshold=0.1
-                ),
-            ),
-        ),
-        explainers=dict(
-            switching_lstm_explainer=ExperimentExplainerConfiguration(
-                explainer_class='deepsysid.explainability'
-                '.explainers.switching.SwitchingLSTMExplainer',
-                parameters=BaseExplainerConfig(),
-            ),
-            lime_explainer=ExperimentExplainerConfiguration(
-                explainer_class='deepsysid.explainability'
-                '.explainers.lime.LIMEExplainer',
-                explained_super_classes=[
-                    'deepsysid.models.base.DynamicIdentificationModel',
-                ],
-                parameters=LIMEExplainerConfig(num_samples=6, cv_folds=2),
-            ),
-        ),
-    )
-
     # Setup dataset directory.
-    paths['train'].joinpath('train-0.csv').write_text(data=get_data(0))
-    paths['validation'].joinpath('validation-0.csv').write_text(data=get_data(1))
-    paths['test'].joinpath('test-0.csv').write_text(data=get_data(2))
+    paths['train'].joinpath('train-0.csv').write_text(data=get_data_func(0))
+    paths['validation'].joinpath('validation-0.csv').write_text(data=get_data_func(1))
+    paths['test'].joinpath('test-0.csv').write_text(data=get_data_func(2))
 
     # Run model training.
     train_model(
@@ -362,4 +283,213 @@ def run_pipeline(
         model_name=model_name,
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
+    )
+
+
+def run_4dof_ship_pipeline(
+    base_path: pathlib.Path,
+    model_name: str,
+    model_class: str,
+    model_config: DynamicIdentificationModelConfig,
+) -> None:
+    control_names = get_4dof_ship_control_names()
+    state_names = get_4dof_ship_state_names()
+
+    configuration = ExperimentConfiguration(
+        time_delta=get_time_delta(),
+        window_size=get_window_size(),
+        horizon_size=get_horizon_size(),
+        control_names=control_names,
+        state_names=state_names,
+        session=SessionConfiguration(total_runs_for_best_models=3),
+        additional_tests=dict(
+            bibo_stability=ExperimentTestConfiguration(
+                test_class='deepsysid.pipeline.testing.stability.'
+                'bibo.BiboStabilityTest',
+                parameters=StabilityTestConfig(
+                    control_names=control_names,
+                    state_names=state_names,
+                    window_size=get_window_size(),
+                    horizon_size=get_horizon_size(),
+                    optimization_steps=3,
+                    optimization_lr=1e-3,
+                    initial_mean_delta=0,
+                    initial_std_delta=1e-3,
+                    evaluation_sequence=1,
+                    clip_gradient_norm=100,
+                    regularization_scale=0.25,
+                ),
+            ),
+            incremental_stability=ExperimentTestConfiguration(
+                test_class='deepsysid.pipeline.testing.stability.'
+                'incremental.IncrementalStabilityTest',
+                parameters=StabilityTestConfig(
+                    control_names=control_names,
+                    state_names=state_names,
+                    window_size=get_window_size(),
+                    horizon_size=get_horizon_size(),
+                    optimization_steps=3,
+                    optimization_lr=1e-3,
+                    initial_mean_delta=0,
+                    initial_std_delta=1e-3,
+                    evaluation_sequence=1,
+                    clip_gradient_norm=100,
+                    regularization_scale=0.25,
+                ),
+            ),
+            bounded_residual=ExperimentTestConfiguration(
+                test_class='deepsysid.pipeline.testing'
+                '.bounded_residual.BoundedResidualInferenceTest',
+                parameters=BoundedResidualInferenceTestConfig(
+                    control_names=control_names,
+                    state_names=state_names,
+                    window_size=get_window_size(),
+                    horizon_size=get_horizon_size(),
+                    thresholds=[0.5, 1.0],
+                ),
+            ),
+        ),
+        models={
+            model_name: dict(
+                model_class=model_class,
+                parameters=model_config,
+            )
+        },
+        metrics=dict(
+            rmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric',
+                parameters=RootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            trajectory_rmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics'
+                '.Trajectory4DOFRootMeanSquaredErrorMetric',
+                parameters=Trajectory4DOFRootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            mse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.MeanSquaredErrorMetric',
+                parameters=MeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            mae=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric',
+                parameters=MeanAbsoluteErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            nrmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.'
+                'NormalizedRootMeanSquaredErrorMetric',
+                parameters=NormalizedRootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+        ),
+        target_metric='rmse',
+        explanation_metrics=dict(
+            infidelity=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics.NMSEInfidelityMetric',
+                parameters=NMSEInfidelityMetric.CONFIG(state_names=state_names),
+            ),
+            robustness=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics.LipschitzEstimateMetric',
+                parameters=LipschitzEstimateMetric.CONFIG(
+                    state_names=state_names,
+                    n_disturbances=5,
+                    control_error_std=[0.1 for _ in control_names],
+                    state_error_std=[0.1 for _ in state_names],
+                ),
+            ),
+            simplicity=ExperimentExplanationMetricConfiguration(
+                metric_class='deepsysid.explainability.metrics'
+                '.ExplanationComplexityMetric',
+                parameters=ExplanationComplexityMetric.CONFIG(
+                    state_names=state_names, relevance_threshold=0.1
+                ),
+            ),
+        ),
+        explainers=dict(
+            switching_lstm_explainer=ExperimentExplainerConfiguration(
+                explainer_class='deepsysid.explainability'
+                '.explainers.switching.SwitchingLSTMExplainer',
+                parameters=BaseExplainerConfig(),
+            ),
+            lime_explainer=ExperimentExplainerConfiguration(
+                explainer_class='deepsysid.explainability'
+                '.explainers.lime.LIMEExplainer',
+                explained_super_classes=[
+                    'deepsysid.models.base.DynamicIdentificationModel',
+                ],
+                parameters=LIMEExplainerConfig(num_samples=6, cv_folds=2),
+            ),
+        ),
+    )
+
+    run_generic_pipeline(
+        base_path=base_path,
+        model_name=model_name,
+        config=configuration,
+        get_data_func=get_4dof_ship_data,
+    )
+
+
+def run_quadcopter_pipeline(
+    base_path: pathlib.Path,
+    model_name: str,
+    model_class: str,
+    model_config: DynamicIdentificationModelConfig,
+) -> None:
+    control_names = get_quadcopter_control_names()
+    state_names = get_quadcopter_state_names()
+
+    configuration = ExperimentConfiguration(
+        time_delta=get_time_delta(),
+        window_size=get_window_size(),
+        horizon_size=get_horizon_size(),
+        control_names=control_names,
+        state_names=state_names,
+        session=SessionConfiguration(total_runs_for_best_models=3),
+        additional_tests=dict(),
+        models={
+            model_name: dict(
+                model_class=model_class,
+                parameters=model_config,
+            )
+        },
+        metrics=dict(
+            rmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric',
+                parameters=RootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            nrmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.'
+                'NormalizedRootMeanSquaredErrorMetric',
+                parameters=NormalizedRootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            trajectory_rmse=ExperimentMetricConfiguration(
+                metric_class='deepsysid.pipeline.metrics.'
+                'TrajectoryNED6DOFRootMeanSquaredErrorMetric',
+                parameters=TrajectoryNED6DOFRootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+        ),
+        target_metric='rmse',
+        explanation_metrics=dict(),
+        explainers=dict(),
+    )
+
+    run_generic_pipeline(
+        base_path=base_path,
+        model_name=model_name,
+        config=configuration,
+        get_data_func=get_quadcopter_data,
     )

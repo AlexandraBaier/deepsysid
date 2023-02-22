@@ -45,6 +45,7 @@ class HybridResidualLSTMModelConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_parallel: int
     epochs_feedback: int
+    feedback_gradient_clip: float = 1.0
     loss: Literal['mse', 'msge']
 
 
@@ -117,6 +118,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.epochs_initializer = config.epochs_initializer
         self.epochs_parallel = config.epochs_parallel
         self.epochs_feedback = config.epochs_feedback
+        self.feedback_gradient_clip = config.feedback_gradient_clip
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -209,6 +211,28 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self.physical.train()
         self.semiphysical.train()
 
+        for p in self.blackbox.parameters():
+            if p.requires_grad:
+                p.register_hook(
+                    lambda grad: torch.clamp(
+                        grad, -self.feedback_gradient_clip, self.feedback_gradient_clip
+                    )
+                )
+        for p in self.physical.parameters():
+            if p.requires_grad:
+                p.register_hook(
+                    lambda grad: torch.clamp(
+                        grad, -self.feedback_gradient_clip, self.feedback_gradient_clip
+                    )
+                )
+        for p in self.semiphysical.parameters():
+            if p.requires_grad:
+                p.register_hook(
+                    lambda grad: torch.clamp(
+                        grad, -self.feedback_gradient_clip, self.feedback_gradient_clip
+                    )
+                )
+
         self.control_mean, self.control_std = utils.mean_stddev(control_seqs)
         self.state_mean, self.state_std = utils.mean_stddev(state_seqs)
 
@@ -283,7 +307,6 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             for batch_idx, batch in enumerate(data_loader):
                 self.initializer.zero_grad()
                 y, _ = self.initializer.forward(batch['x'].float().to(self.device))
-                # This type error is ignored, since we know that y will not be a tuple.
                 batch_loss = mse_loss(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
@@ -291,7 +314,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_initializer} '
-                f'- Epoch Loss (Initializer): {total_loss}'
+                f'- Epoch Loss (Initializer): {total_loss} '
+                f'({self.__class__})'
             )
             epoch_losses_initializer.append([i, total_loss])
 
@@ -311,7 +335,10 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             )
             total_epoch_loss = 0.0
             for batch in data_loader:
+                self.physical.zero_grad()
+                self.semiphysical.zero_grad()
                 self.blackbox.zero_grad()
+                self.initializer.zero_grad()
 
                 x_control_unnormed = batch['x_control_unnormed'].float().to(self.device)
                 x_state_unnormed = batch['x_state_unnormed'].float().to(self.device)
@@ -358,18 +385,21 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_epoch_loss += batch_loss.item()
+
                 batch_loss.backward()
                 self.optimizer_end2end.step()
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_parallel} '
-                f'- Epoch Loss (Parallel): {total_epoch_loss}'
+                f'- Epoch Loss (Parallel): {total_epoch_loss} '
+                f'({self.__class__})'
             )
             epoch_losses_teacher.append([i, total_epoch_loss])
 
         self.optimizer_end2end = optim.Adam(
             params=self.blackbox.parameters(), lr=self.learning_rate
         )
+
         for i in range(self.epochs_feedback):
             data_loader = data.DataLoader(
                 dataset=dataset,
@@ -379,7 +409,10 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             )
             total_epoch_loss = 0.0
             for batch in data_loader:
+                self.physical.zero_grad()
+                self.semiphysical.zero_grad()
                 self.blackbox.zero_grad()
+                self.initializer.zero_grad()
 
                 current_state = batch['initial_state'].float().to(self.device)
                 x_control_unnormed = batch['x_control_unnormed'].float().to(self.device)
@@ -433,14 +466,27 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                     y_est, batch['y'].float().to(self.device)
                 )
                 total_epoch_loss += batch_loss.item()
+
+                for name, param in self.blackbox.named_parameters():
+                    if torch.any(torch.isnan(param.grad)):
+                        logger.info(
+                            f'Parameter {name} in module blackbox '
+                            f'has NaN gradient in {self.__class__}'
+                        )
+
                 batch_loss.backward()
                 self.optimizer_end2end.step()
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_feedback} '
-                f'- Epoch Loss (Feedback): {total_epoch_loss}'
+                f'- Epoch Loss (Feedback): {total_epoch_loss} '
+                f'({self.__class__})'
             )
             epoch_losses_multistep.append([i, total_epoch_loss])
+
+            if np.isnan(total_epoch_loss):
+                logger.error('Encountered NaN epoch loss, stopping training.')
+                break
 
         return dict(
             epoch_loss_initializer=np.array(epoch_losses_initializer, dtype=np.float64),

@@ -6,6 +6,10 @@ from deepsysid.models.hybrid.bounded_residual import (
     HybridMinimalManeuveringModel,
     HybridPropulsionManeuveringModel,
 )
+from deepsysid.models.hybrid.serial import (
+    SerialParallel4DOFShipModel,
+    SerialParallelQuadcopterModel,
+)
 from deepsysid.models.linear import LinearLag, LinearModel, QuadraticControlLag
 from deepsysid.models.narx import NARXDenseNetwork
 from deepsysid.models.recurrent import (
@@ -25,46 +29,52 @@ def test_linear_model_cpu(tmp_path: pathlib.Path) -> None:
     model_name = 'LinearModel'
     model_class = 'deepsysid.models.linear.LinearModel'
     config = LinearModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_linear_lag(tmp_path: pathlib.Path) -> None:
     model_name = 'LinearLag'
     model_class = 'deepsysid.models.linear.LinearLag'
     config = LinearLag.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         lag=pipeline.get_window_size(),
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_quadratic_control_lag(tmp_path: pathlib.Path) -> None:
     model_name = 'QuadraticControlLag'
     model_class = 'deepsysid.models.linear.QuadraticControlLag'
     config = QuadraticControlLag.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         lag=pipeline.get_window_size(),
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_narx(tmp_path: pathlib.Path) -> None:
     model_name = 'NARXDenseNetwork'
     model_class = 'deepsysid.models.narx.NARXDenseNetwork'
     config = NARXDenseNetwork.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         window_size=pipeline.get_window_size(),
@@ -74,15 +84,17 @@ def test_narx(tmp_path: pathlib.Path) -> None:
         layers=[5, 10, 5],
         dropout=0.25,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_lstm_init_model(tmp_path: pathlib.Path) -> None:
     model_name = 'LSTMInitModel'
     model_class = 'deepsysid.models.recurrent.LSTMInitModel'
     config = LSTMInitModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -95,15 +107,17 @@ def test_lstm_init_model(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
     model_name = 'ConstrainedRnn'
     model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
     config = ConstrainedRnn.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         nx=3,
@@ -123,15 +137,17 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
         loss='mse',
         bias=True,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_constrained_rnn_stable(tmp_path: pathlib.Path) -> None:
     model_name = 'ConstrainedRnn'
     model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
     config = ConstrainedRnn.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         nx=2,
@@ -151,15 +167,17 @@ def test_constrained_rnn_stable(tmp_path: pathlib.Path) -> None:
         bias=True,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_lti_rnn_init(tmp_path: pathlib.Path) -> None:
     model_name = 'LtiRnnInit'
     model_class = 'deepsysid.models.recurrent.LtiRnnInit'
     config = LtiRnnInit.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         nx=2,
@@ -174,15 +192,17 @@ def test_lti_rnn_init(tmp_path: pathlib.Path) -> None:
         loss='mse',
         clip_gradient_norm=10,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_rnn_init(tmp_path: pathlib.Path) -> None:
     model_name = 'RnnInit'
     model_class = 'deepsysid.models.recurrent.RnnInit'
     config = RnnInit.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=5,
@@ -197,7 +217,9 @@ def test_rnn_init(tmp_path: pathlib.Path) -> None:
         loss='mse',
         clip_gradient_norm=10,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path) -> None:
@@ -206,8 +228,8 @@ def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path) -> None:
         'deepsysid.models.hybrid.bounded_residual.HybridMinimalManeuveringModel'
     )
     config = HybridMinimalManeuveringModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -240,7 +262,9 @@ def test_hybrid_minimal_maneuvering_model(tmp_path: pathlib.Path) -> None:
         gm=4,
         g=9.81,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path) -> None:
@@ -249,8 +273,8 @@ def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path) -> None:
         'deepsysid.models.hybrid.bounded_residual.HybridPropulsionManeuveringModel'
     )
     config = HybridPropulsionManeuveringModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -289,15 +313,17 @@ def test_hybrid_propulsion_maneuvering_model(tmp_path: pathlib.Path) -> None:
         ly=4,
         lz=3,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_hybrid_linear_model(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridLinearModel'
     model_class = 'deepsysid.models.hybrid.bounded_residual.HybridLinearModel'
     config = HybridLinearModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -311,15 +337,17 @@ def test_hybrid_linear_model(tmp_path: pathlib.Path) -> None:
         epochs_feedback=3,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_hybrid_blanke_model(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridBlankeModel'
     model_class = 'deepsysid.models.hybrid.bounded_residual.HybridBlankeModel'
     config = HybridBlankeModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -333,15 +361,17 @@ def test_hybrid_blanke_model(tmp_path: pathlib.Path) -> None:
         epochs_feedback=3,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_lstm_combined_init_model(tmp_path: pathlib.Path) -> None:
     model_name = 'LSTMCombinedInitModel'
     model_class = 'deepsysid.models.recurrent.LSTMCombinedInitModel'
     config = LSTMCombinedInitModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -353,15 +383,17 @@ def test_lstm_combined_init_model(tmp_path: pathlib.Path) -> None:
         epochs=2,
         loss='msge',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_stable_switching_lstm_model(tmp_path: pathlib.Path) -> None:
     model_name = 'StableSwitchingLSTMModel'
     model_class = 'deepsysid.models.switching.switchrnn.StableSwitchingLSTMModel'
     config = StableSwitchingLSTMModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -374,15 +406,17 @@ def test_stable_switching_lstm_model(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path) -> None:
     model_name = 'UnconstrainedSwitchingLSTMModel'
     model_class = 'deepsysid.models.switching.switchrnn.UnconstrainedSwitchingLSTMModel'
     config = StableSwitchingLSTMModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
@@ -395,15 +429,17 @@ def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         loss='mse',
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 
 def test_k_linear_regression_model(tmp_path: pathlib.Path) -> None:
     model_name = 'KLinearRegressionARXModel'
     model_class = 'deepsysid.models.switching.klinreg.KLinearRegressionARXModel'
     config = KLinearRegressionARXModel.CONFIG(
-        control_names=pipeline.get_control_names(),
-        state_names=pipeline.get_state_names(),
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         n_modes=2,
@@ -413,4 +449,75 @@ def test_k_linear_regression_model(tmp_path: pathlib.Path) -> None:
         zero_probability_restarts=100,
         use_max_restarts=False,
     )
-    pipeline.run_pipeline(tmp_path, model_name, model_class, model_config=config)
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_serial_parallel_4dof_ship_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'SerialParallel4DOFShipModel'
+    model_class = 'deepsysid.models.hybrid.serial.SerialParallel4DOFShipModel'
+    config = SerialParallel4DOFShipModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        epochs=3,
+        batch_size=2,
+        sequence_length=2,
+        learning_rate=0.1,
+        recurrent_dim=5,
+        num_recurrent_layers=2,
+        dropout=0.25,
+        m=10.0,
+        g=9.81,
+        rho_water=0.5,
+        disp=20.0,
+        gm=4.0,
+        ixx=0.5,
+        izz=0.1,
+        xg=0.3,
+        zg=0.5,
+        xud=0.1,
+        yvd=0.2,
+        ypd=-0.1,
+        yrd=0.1,
+        kvd=0.1,
+        kpd=0.3,
+        krd=-0.4,
+        nvd=0.1,
+        npd=0.2,
+        nrd=0.1,
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_serial_parallel_quadcopter_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'SerialParallelQuadcopterModel'
+    model_class = 'deepsysid.models.hybrid.serial.SerialParallelQuadcopterModel'
+    config = SerialParallelQuadcopterModel.CONFIG(
+        control_names=pipeline.get_quadcopter_control_names(),
+        state_names=pipeline.get_quadcopter_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        epochs=3,
+        batch_size=2,
+        sequence_length=2,
+        learning_rate=0.1,
+        recurrent_dim=5,
+        num_recurrent_layers=2,
+        dropout=0.25,
+        m=0.5,
+        g=9.81,
+        l=0.2,
+        d=0.01,
+        ixx=0.25,
+        izz=0.25,
+        kr=1.0,
+        kt=1.0,
+    )
+    pipeline.run_quadcopter_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
