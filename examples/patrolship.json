@@ -546,7 +546,8 @@
         "epochs_with_const_decay": 100,
         "recurrent_dim": 64,
         "nx": 64,
-        "learning_rate": 0.0025
+        "learning_rate": 0.0025,
+        "bias": false
       },
       "flexible_parameters": {
         "gamma":[
