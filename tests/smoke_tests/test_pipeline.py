@@ -18,6 +18,7 @@ from deepsysid.models.recurrent import (
     LSTMInitModel,
     LtiRnnInit,
     RnnInit,
+    RnnInitFlexibleNonlinearity,
 )
 from deepsysid.models.switching.klinreg import KLinearRegressionARXModel
 from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
@@ -219,6 +220,32 @@ def test_rnn_init(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         loss='mse',
         clip_gradient_norm=10,
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_rnn_init_flexible_nonlinearity(tmp_path: pathlib.Path) -> None:
+    model_name = 'RnnInitFlexibleNonlinearity'
+    model_class = 'deepsysid.models.recurrent.RnnInitFlexibleNonlinearity'
+    config = RnnInitFlexibleNonlinearity.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=5,
+        bias=True,
+        nonlinearity="torch.nn.Softshrink()",
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+        clip_gradient_norm=10,
+        num_recurrent_layers_init=2,
+        dropout_init=0.25,
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
