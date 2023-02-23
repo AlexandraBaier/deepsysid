@@ -131,12 +131,12 @@ class FixedDepthRnnFlexibleNonlinearity(HiddenStateForwardModule):
         self.recurrent_dim = recurrent_dim
         self.output_dim = output_dim
 
-        # h = sigma(W_h * h^{k-1} + b_h + U_h * x^{k} + b_ih)
+        # h = sigma(W_h * h^{k-1} + b_h + U_h * x^{k})
         self.W_h = torch.nn.Linear(
             in_features=recurrent_dim, out_features=recurrent_dim, bias=bias
         )
         self.U_h = torch.nn.Linear(
-            in_features=input_dim, out_features=recurrent_dim, bias=bias
+            in_features=input_dim, out_features=recurrent_dim, bias=False
         )
         try:
             self.nl = eval(nonlinearity)

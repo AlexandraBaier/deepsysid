@@ -155,6 +155,7 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
                 y, _ = self._predictor.forward(
                     batch['x'].float().to(self.device), hx=hx
                 )
+                y = y.to(self.device)
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
