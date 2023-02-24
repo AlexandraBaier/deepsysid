@@ -248,6 +248,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         self.lambdas = torch.nn.Parameter(torch.zeros((self.nw, 1)))
         self.b_z = torch.nn.Parameter(torch.zeros((self.nz)), requires_grad=bias)
         self.b_y = torch.nn.Parameter(torch.zeros((self.ny)), requires_grad=bias)
+        self.b_x = torch.nn.Parameter(torch.zeros((self.nx)), requires_grad=bias)
 
     def initialize_lmi(self) -> None:
         # storage function
@@ -376,7 +377,10 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
             w = self.nl(z)
             y[:, k, :] = self.C1(x) + self.D11(x_pred[:, k, :]) + self.D12(w) + self.b_y
             x = (
-                self.A_tilde(x) + self.B1_tilde(x_pred[:, k, :]) + self.B2_tilde(w)
+                self.A_tilde(x)
+                + self.B1_tilde(x_pred[:, k, :])
+                + self.B2_tilde(w)
+                + self.b_x
             ) @ Y_inv
 
         return y, (x, x)
