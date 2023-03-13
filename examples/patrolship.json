@@ -547,6 +547,7 @@
         "recurrent_dim": 64,
         "nx": 64,
         "learning_rate": 0.0025,
+        "nonlinearity": "torch.nn.Tanh()",
         "bias": false
       },
       "flexible_parameters": {
@@ -637,7 +638,8 @@
         "epochs_predictor": 1000,
         "nx": 64,
         "learning_rate": 0.0025,
-        "clip_gradient_norm":  100
+        "clip_gradient_norm":  100,
+        "nonlinearity": "torch.nn.Tanh()"
       },
       "flexible_parameters": {
         "recurrent_dim": [
@@ -676,7 +678,8 @@
           4
         ]
       }
-    }, {
+    }, 
+    {
       "model_base_name": "kLinRegARX",
       "model_class": "deepsysid.models.switching.klinreg.KLinearRegressionARXModel",
       "static_parameters": {
@@ -687,6 +690,37 @@
       "flexible_parameters": {
         "lag": [5, 7, 10, 15, 30, 45],
         "n_modes": [2, 5, 7, 10]
+      }
+    },
+    {
+      "model_base_name": "RnnInitFlexibleNonlinearity",
+      "model_class": "deepsysid.models.recurrent.RnnInitFlexibleNonlinearity",
+      "static_parameters": {
+        "time_delta": 1.0,
+        "sequence_length": 50,
+        "batch_size": 128,
+        "epochs_initializer": 400,
+        "epochs_predictor": 2000,
+        "learning_rate": 1e-3,
+        "bias": true,
+        "clip_gradient_norm":  10,
+        "loss": "mse",
+        "dropout_init": 0.25,
+        "num_recurrent_layers_init": 2,
+        "recurrent_dim": 64
+      },
+      "flexible_parameters": {
+        "nonlinearity":[
+          "torch.nn.Softshrink(0.25)",
+          "torch.nn.Softshrink(1)",
+          "torch.nn.Softshrink(0.5)",
+          "torch.nn.Tanh()"
+        ],
+        "learning_rate":[
+          1e-4,
+          1e-3,
+          0.0025
+        ]
       }
     }
   ],

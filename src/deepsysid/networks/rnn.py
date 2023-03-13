@@ -117,6 +117,57 @@ class BasicRnn(HiddenStateForwardModule):
         return self.out(h), h
 
 
+class FixedDepthRnnFlexibleNonlinearity(HiddenStateForwardModule):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        output_dim: int,
+        bias: bool,
+        nonlinearity: str,
+    ) -> None:
+        super().__init__()
+
+        self.recurrent_dim = recurrent_dim
+        self.output_dim = output_dim
+
+        # h = sigma(W_h * h^{k-1} + b_h + U_h * x^{k})
+        self.W_h = torch.nn.Linear(
+            in_features=recurrent_dim, out_features=recurrent_dim, bias=bias
+        )
+        self.U_h = torch.nn.Linear(
+            in_features=input_dim, out_features=recurrent_dim, bias=False
+        )
+        try:
+            self.nl = eval(nonlinearity)
+        except SyntaxError:
+            raise Exception('Nonlinearity could not be evaluated.')
+
+        self.out = nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=bias
+        )
+
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        n_batch, n_sample, _ = x_pred.shape
+
+        # init output
+        y = torch.zeros((n_batch, n_sample, self.output_dim))
+        if hx is not None:
+            x = hx[0][1]
+        else:
+            x = torch.zeros((n_batch, self.recurrent_dim))
+
+        for k in range(n_sample):
+            x = self.nl(self.W_h(x) + self.U_h(x_pred[:, k, :]))
+            y[:, k, :] = self.out(x)
+
+        return y, (x, x)
+
+
 class LinearOutputLSTM(HiddenStateForwardModule):
     def __init__(
         self,
@@ -162,13 +213,7 @@ class LinearOutputLSTM(HiddenStateForwardModule):
 
 
 class LtiRnn(HiddenStateForwardModule):
-    def __init__(
-        self,
-        nx: int,
-        nu: int,
-        ny: int,
-        nw: int,
-    ) -> None:
+    def __init__(self, nx: int, nu: int, ny: int, nw: int, nonlinearity: str) -> None:
         super(LtiRnn, self).__init__()
 
         self.nx = nx  # number of states
@@ -177,7 +222,10 @@ class LtiRnn(HiddenStateForwardModule):
         self.ny = ny  # number of performance output
         self.nz = nw  # number of disturbance output, always equal to size of w
 
-        self.nl = torch.tanh
+        try:
+            self.nl = eval(nonlinearity)
+        except SyntaxError:
+            raise Exception('Nonlinearity could not be evaluated.')
 
         self.Y = torch.nn.Parameter(torch.eye(self.nx))
 
@@ -222,7 +270,15 @@ class LtiRnn(HiddenStateForwardModule):
 
 class LtiRnnConvConstr(HiddenStateForwardModule):
     def __init__(
-        self, nx: int, nu: int, ny: int, nw: int, gamma: float, beta: float, bias: bool
+        self,
+        nx: int,
+        nu: int,
+        ny: int,
+        nw: int,
+        gamma: float,
+        beta: float,
+        bias: bool,
+        nonlinearity: str,
     ) -> None:
         super(LtiRnnConvConstr, self).__init__()
 
@@ -234,7 +290,10 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
 
         self.ga = gamma
         self.beta = beta
-        self.nl = torch.tanh
+        try:
+            self.nl = eval(nonlinearity)
+        except SyntaxError:
+            raise Exception('Nonlinearity could not be evaluated.')
 
         self.Y = torch.nn.Parameter(torch.zeros((self.nx, self.nx)))
         self.A_tilde = torch.nn.Linear(self.nx, self.nx, bias=False)
