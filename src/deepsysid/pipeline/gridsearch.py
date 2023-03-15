@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os.path
@@ -201,13 +202,10 @@ class ExperimentSessionManager(object):
             f'models left to be tested.'
         )
 
-        self.session_report = ExperimentSessionReport(
-            unfinished_models=self.session_report.unfinished_models.copy(),
-            validated_models=self.session_report.validated_models.copy(),
-            best_per_class=best_per_class.copy(),
-            best_per_base_name=best_per_base_name.copy(),
-        )
-        callback(self.get_session_report())
+        self.session_report = self.session_report.copy(deep=True)
+        self.session_report.best_per_class = best_per_class
+        self.session_report.best_per_base_name = best_per_base_name
+        self.session_report.tested_models = tested_models
 
         if self.config.settings.session is None:
             n_repeats = 1
@@ -228,25 +226,13 @@ class ExperimentSessionManager(object):
                     f'{repeat_number + 1}/{n_repeats}: {model_name}'
                 )
 
-            self.session_report = ExperimentSessionReport(
-                unfinished_models=self.session_report.unfinished_models.copy(),
-                validated_models=self.session_report.validated_models.copy(),
-                best_per_class=(
-                    self.session_report.best_per_class.copy()
-                    if self.session_report.best_per_class is not None
-                    else None
-                ),
-                best_per_base_name=(
-                    self.session_report.best_per_base_name.copy()
-                    if self.session_report.best_per_base_name is not None
-                    else None
-                ),
-                tested_models=(
-                    self.session_report.tested_models.union({model_name})
-                    if self.session_report.tested_models is not None
-                    else {model_name}
-                ),
+            self.session_report = self.session_report.copy(deep=True)
+            self.session_report.tested_models = (
+                self.session_report.tested_models.union({model_name})
+                if self.session_report.tested_models is not None
+                else {model_name}
             )
+
             callback(self.session_report)
 
         return self.get_session_report()
@@ -340,16 +326,20 @@ class ExperimentSessionManager(object):
     def _update_from_unfinished_to_validated(
         self, model_name: str
     ) -> ExperimentSessionReport:
-        return ExperimentSessionReport(
-            unfinished_models=self.session_report.unfinished_models.difference(
-                {model_name}
-            ),
-            validated_models=self.session_report.validated_models.union({model_name}),
+        report = copy.deepcopy(self.session_report)
+        report.unfinished_models = self.session_report.unfinished_models.difference(
+            {model_name}
         )
+        report.validated_models = self.session_report.validated_models.union(
+            {model_name}
+        )
+        return report
 
     def _validate_session_report(
         self, progress_report: ExperimentSessionReport
     ) -> ExperimentSessionReport:
+        new_progress_report = progress_report.copy(deep=True)
+
         difference = self._compare_configuration_to_progress(progress_report)
 
         if len(difference.validated_missing_from_configuration) > 0:
@@ -366,11 +356,13 @@ class ExperimentSessionManager(object):
                 f'Removing from session: '
                 f'{", ".join(difference.unfinished_missing_from_configuration)}.'
             )
-            progress_report = ExperimentSessionReport(
-                unfinished_models=progress_report.unfinished_models.difference(
+            new_progress_report.unfinished_models = (
+                progress_report.unfinished_models.difference(
                     difference.unfinished_missing_from_configuration
-                ),
-                validated_models=progress_report.validated_models.copy(),
+                )
+            )
+            new_progress_report.validated_models = (
+                progress_report.validated_models.copy()
             )
 
         if len(difference.new_to_configuration) > 0:
@@ -378,14 +370,14 @@ class ExperimentSessionManager(object):
                 'Following models have been added to the configuration since last time.'
                 f'Adding to session: {", ".join(difference.new_to_configuration)}.'
             )
-            progress_report = ExperimentSessionReport(
-                unfinished_models=progress_report.unfinished_models.union(
-                    difference.new_to_configuration
-                ),
-                validated_models=progress_report.validated_models.copy(),
+            new_progress_report.unfinished_models = (
+                progress_report.unfinished_models.union(difference.new_to_configuration)
+            )
+            new_progress_report.validated_models = (
+                progress_report.validated_models.copy()
             )
 
-        return progress_report.copy(deep=True)
+        return new_progress_report
 
     def _compare_configuration_to_progress(
         self, progress_report: ExperimentSessionReport
