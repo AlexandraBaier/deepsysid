@@ -1,14 +1,14 @@
 import abc
 import logging
 import warnings
-from typing import List, Optional, Tuple, Callable, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import cvxpy as cp
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn
 from numpy.typing import NDArray
+from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,17 @@ class HiddenStateForwardModule(nn.Module, metaclass=abc.ABCMeta):
 
 class ConstrainedForwardModule(HiddenStateForwardModule):
     @abc.abstractmethod
-    def get_initial_parameters(self) -> Tuple[NDArray[np.float64]]:
+    def get_initial_parameters(
+        self,
+    ) -> Union[
+        NDArray[np.float64],
+        Tuple[
+            NDArray[np.float64],
+            NDArray[np.float64],
+            NDArray[np.float64],
+            NDArray[np.float64],
+        ],
+    ]:
         pass
 
     @abc.abstractmethod
@@ -580,7 +590,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
 
         return b_satisfied
 
-    def get_min_max_real_eigenvalues(self) -> Tuple[float, float]:
+    def get_min_max_real_eigenvalues(self) -> Tuple[np.float64, np.float64]:
         M = self.get_constraints()
         return (
             torch.min(torch.real(torch.linalg.eig(M)[0])).cpu().detach().numpy(),
@@ -590,7 +600,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
 
 class Linear(nn.Module):
     def __init__(
-        self, A: torch.tensor, B: torch.tensor, C: torch.tensor, D: torch.tensor
+        self, A: torch.Tensor, B: torch.Tensor, C: torch.Tensor, D: torch.Tensor
     ) -> None:
         super().__init__()
         self._nx = A.shape[0]
@@ -611,15 +621,19 @@ class Linear(nn.Module):
                 tensor=p, a=-np.sqrt(1 / self._nu), b=np.sqrt(1 / self._nu)
             )
 
-    def state_dynamics(self, x: torch.tensor, u: torch.tensor) -> torch.tensor:
+    def state_dynamics(self, x: torch.Tensor, u: torch.Tensor) -> torch.Tensor:
         return self.A @ x + self.B @ u
 
-    def output_dynamics(self, x: torch.tensor, u: torch.tensor) -> torch.tensor:
+    def output_dynamics(self, x: torch.Tensor, u: torch.Tensor) -> torch.Tensor:
         return self.C @ x + self.D @ u
 
     def forward(
-        self, x0: torch.tensor, us: torch.tensor, return_state: bool = False
-    ) -> Union[torch.tensor, Tuple[torch.tensor, torch.tensor]]:
+        self, x0: torch.Tensor, us: torch.Tensor, return_state: bool = False
+    ) -> Union[
+        torch.Tensor,
+        Tuple[torch.Tensor, torch.Tensor],
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    ]:
         n_batch, N, _, _ = us.shape
         x = torch.zeros(size=(n_batch, N + 1, self._nx, 1))
         y = torch.zeros(size=(n_batch, N, self._ny, 1))
@@ -636,15 +650,15 @@ class Linear(nn.Module):
 class LureSystem(Linear):
     def __init__(
         self,
-        A: torch.tensor,
-        B1: torch.tensor,
-        B2: torch.tensor,
-        C1: torch.tensor,
-        D11: torch.tensor,
-        D12: torch.tensor,
-        C2: torch.tensor,
-        D21: torch.tensor,
-        Delta: Callable[[NDArray[np.float64]], NDArray[np.float64]],
+        A: torch.Tensor,
+        B1: torch.Tensor,
+        B2: torch.Tensor,
+        C1: torch.Tensor,
+        D11: torch.Tensor,
+        D12: torch.Tensor,
+        C2: torch.Tensor,
+        D21: torch.Tensor,
+        Delta: Callable[[torch.Tensor], torch.Tensor],
     ) -> None:
         super().__init__(A=A, B=B1, C=C1, D=D11)
         self._nw = B2.shape[1]
@@ -657,8 +671,8 @@ class LureSystem(Linear):
         self.Delta = Delta  # static nonlinearity
 
     def forward(
-        self, x0: torch.tensor, us: torch.tensor, return_states: bool = False
-    ) -> Union[torch.tensor, Tuple[torch.tensor, torch.tensor, torch.tensor]]:
+        self, x0: torch.Tensor, us: torch.Tensor, return_states: bool = False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         n_batch, N, _, _ = us.shape
         x = torch.zeros(size=(n_batch, N + 1, self._nx, 1))
         y = torch.zeros(size=(n_batch, N, self._ny, 1))
@@ -678,7 +692,7 @@ class LureSystem(Linear):
                 + self.D12 @ w[:, k, :, :]
             )
         if return_states:
-            return y, x, w
+            return (y, x, w)
         else:
             return y
 
@@ -705,54 +719,137 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.nzu = nzu  # output size of uncertainty channel
         self.nwu = nwu  # input size of uncertainty channel
 
-        self.A_lin = A_lin
-        self.B_lin = B_lin
-        self.C_lin = C_lin
+        self.A_lin = torch.tensor(A_lin, dtype=torch.float32)
+        self.B_lin = torch.tensor(B_lin, dtype=torch.float32)
+        self.C_lin = torch.tensor(C_lin, dtype=torch.float32)
 
         self.gamma = gamma
 
-        Delta = lambda z: torch.tanh(z)
-        Delta_tilde = lambda z: (2 / beta - alpha) * (
-            Delta(z) - ((alpha + beta) / 2) * z
+        def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
+            return (2 / beta - alpha) * (torch.tanh(z) - ((alpha + beta) / 2) * z)
+
+        # 1. solve synthesis inequalities to find feasible parameter set
+        omega_tilde_0_numpy, X, Y, Lambda = self.get_initial_parameters()
+
+        (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23) = self.get_matrices(
+            omega_tilde_0_numpy
         )
 
-        initial_parameter_block_matrix, X, Y, Lambda = self.get_initial_parameters()
+        self.X = torch.nn.Parameter(torch.tensor(X).float())
+        self.Y = torch.nn.Parameter(torch.tensor(Y).float())
+        self.Lambda = torch.nn.Parameter(torch.tensor(Lambda).float())
 
-        (
-            A_tilde,
-            B1_tilde,
-            B2_tilde,
-            B3_tilde,
-            C1_tilde,
-            D11_tilde,
-            D12_tilde,
-            D13_tilde,
-            C2,
-            D21,
-            D22,
-        ) = self.get_matrices(initial_parameter_block_matrix)
+        self.K = torch.nn.Parameter(torch.tensor(K).float())
+        self.L1 = torch.nn.Parameter(torch.tensor(L1).float())
+        self.L2 = torch.nn.Parameter(torch.tensor(L2).float())
+        self.L3 = torch.nn.Parameter(torch.tensor(L3).float())
 
-        self.X = torch.nn.Parameter(torch.tensor(X))
-        self.Y = torch.nn.Parameter(torch.tensor(Y))
-        self.Lambda = torch.nn.Parameter(torch.tensor(Lambda))
+        self.M1 = torch.nn.Parameter(torch.tensor(M1).float())
+        self.N11 = torch.nn.Parameter(torch.tensor(N11).float())
+        self.N12 = torch.nn.Parameter(torch.tensor(N12).float())
+        self.N13 = torch.nn.Parameter(torch.tensor(N13).float())
 
-        self.A_tilde = torch.nn.Parameter(torch.tensor(A_tilde))
-        self.B1_tilde = torch.nn.Parameter(torch.tensor(B1_tilde))
-        self.B2_tilde = torch.nn.Parameter(torch.tensor(B2_tilde))
-        self.B3_tilde = torch.nn.Parameter(torch.tensor(B3_tilde))
+        self.M2 = torch.nn.Parameter(torch.tensor(M2).float())
+        self.N21 = torch.nn.Parameter(torch.tensor(N21).float())
+        self.N22 = torch.nn.Parameter(torch.tensor(N22).float())
+        self.N23 = torch.nn.Parameter(torch.tensor(N23).float())
 
-        self.C1_tilde = torch.nn.Parameter(torch.tensor(C1_tilde))
-        self.D11_tilde = torch.nn.Parameter(torch.tensor(D11_tilde))
-        self.D12_tilde = torch.nn.Parameter(torch.tensor(D12_tilde))
-        self.D13_tilde = torch.nn.Parameter(torch.tensor(D13_tilde))
+        omega_tilde_0 = self.get_omega_tilde()
 
-        self.C2 = torch.nn.Parameter(torch.tensor(C2))
-        self.D21 = torch.nn.Parameter(torch.tensor(D21))
-        self.D22 = torch.nn.Parameter(torch.tensor(D22))
+        # 2. Determine non-singular U,V with V U^T = I - Y X
+        U = torch.linalg.inv(self.Y) - self.X
+        V = self.Y
+        # print(V@U.T + Y.value @ X.value)
+        assert torch.linalg.norm(V @ U.T + self.Y @ self.X - torch.eye(self.nx)) < 1e-4
 
-        parameter_block_matrix = self.get_block_matrix()
+        # 3. transform to original parameters
+        T_l = torch.concat(
+            [
+                torch.concat(
+                    [U, self.X @ self.A_lin, torch.zeros((self.nx, self.nwu))], dim=1
+                ),
+                torch.concat(
+                    [
+                        torch.zeros((self.nu, self.nx)),
+                        torch.eye(self.nu),
+                        torch.zeros((self.nu, self.nwu)),
+                    ],
+                    dim=1,
+                ),
+                torch.concat(
+                    [
+                        torch.zeros((self.nzu, self.nx)),
+                        torch.zeros((self.nzu, self.nu)),
+                        self.Lambda,
+                    ],
+                    dim=1,
+                ),
+            ],
+            dim=0,
+        ).float()
+        T_r = torch.concat(
+            [
+                torch.concat(
+                    [
+                        torch.zeros((self.nx, self.nx)),
+                        torch.zeros(size=(self.nx, self.nwp)),
+                        V.T,
+                        torch.zeros((self.nx, self.nwu)),
+                    ],
+                    dim=1,
+                ),
+                torch.concat(
+                    [
+                        torch.zeros(size=(self.nwp, self.nx)),
+                        torch.eye(self.nwp),
+                        torch.zeros(size=(self.nwp, self.nx)),
+                        torch.zeros(size=(self.nwp, self.nwu)),
+                    ],
+                    dim=1,
+                ),
+                torch.concat(
+                    [
+                        torch.eye(self.nx),
+                        torch.zeros(size=(self.nx, self.nwp)),
+                        self.Y,
+                        torch.zeros((self.nu, self.nwu)),
+                    ],
+                    dim=1,
+                ),
+                torch.concat(
+                    [
+                        torch.zeros((self.nzu, self.nx)),
+                        torch.zeros(size=(self.nzu, self.nwp)),
+                        torch.zeros((self.nzu, self.ny)),
+                        torch.eye(self.nwu),
+                    ],
+                    dim=1,
+                ),
+            ],
+            dim=0,
+        ).float()
+        T_s = torch.concat(
+            [
+                torch.zeros(size=(self.nx, self.nx + self.nwp + self.ny + self.nwu)),
+                torch.concat(
+                    [
+                        torch.zeros(size=(self.nu, self.nx + self.nwp)),
+                        self.X @ self.A_lin @ self.Y,
+                        torch.zeros(size=(self.nu, self.nwu)),
+                    ],
+                    dim=1,
+                ),
+                torch.zeros(size=(self.nzu, self.nx + self.nwp + self.ny + self.nwu)),
+            ],
+            dim=0,
+        ).float()
+        omega_0 = (
+            torch.linalg.inv(T_l).float()
+            @ (omega_tilde_0 - T_s.float())
+            @ torch.linalg.inv(T_r).float()
+        )
 
-        cal_sum = np.concatenate(
+        S_s = np.concatenate(
             [
                 np.concatenate(
                     [
@@ -777,7 +874,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             ],
             axis=0,
         )
-        cal_left = np.concatenate(
+        S_l = np.concatenate(
             [
                 np.concatenate(
                     [
@@ -814,7 +911,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             ],
             axis=0,
         )
-        cal_right = np.concatenate(
+        S_r = np.concatenate(
             [
                 np.concatenate(
                     [
@@ -856,12 +953,12 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             axis=0,
         )
 
-        interconnected_block_matrix = torch.tensor(
-            cal_sum, requires_grad=True
+        sys_block_matrix = torch.tensor(
+            S_s, requires_grad=True, dtype=torch.float32
         ) + torch.tensor(
-            cal_left, requires_grad=True
-        ) @ parameter_block_matrix @ torch.tensor(
-            cal_right, requires_grad=True
+            S_l, requires_grad=True, dtype=torch.float32
+        ) @ omega_0 @ torch.tensor(
+            S_r, requires_grad=True, dtype=torch.float32
         )
 
         (
@@ -874,7 +971,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             C2_cal,
             D21_cal,
             D22_cal,
-        ) = self.get_interconnected_matrices(interconnected_block_matrix)
+        ) = self.get_interconnected_matrices(sys_block_matrix)
         assert torch.linalg.norm(D22_cal) - 0 < 1e-6
 
         self.lure = LureSystem(
@@ -889,23 +986,21 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             Delta=Delta_tilde,
         )
 
-    def get_block_matrix(self) -> torch.tensor:
+    def get_omega_tilde(self) -> torch.Tensor:
 
         return torch.concat(
             [
+                torch.concat([self.K, self.L1, self.L2, self.L3], dim=1),
                 torch.concat(
-                    [self.A_tilde, self.B1_tilde, self.B2_tilde, self.B3_tilde], dim=1
-                ),
-                torch.concat(
-                    [self.C1_tilde, self.D11_tilde, self.D12_tilde, self.D13_tilde],
+                    [self.M1, self.N11, self.N12, self.N13],
                     dim=1,
                 ),
                 torch.concat(
                     [
-                        self.C2,
-                        self.D21,
-                        self.D22,
-                        torch.zeros(size=(self.nzu, self.nwu)),
+                        self.M2,
+                        self.N21,
+                        self.N22,
+                        self.N23,
                     ],
                     dim=1,
                 ),
@@ -914,71 +1009,56 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         )
 
     def get_matrices(
-        self, block_matrix: torch.tensor
+        self, block_matrix: NDArray[np.float64]
     ) -> Tuple[
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
     ]:
-        A_tilde = block_matrix[: self.nx, : self.nx]
-        B1_tilde = block_matrix[: self.nx, self.nx : self.nx + self.nwp]
-        B2_tilde = block_matrix[
-            : self.nx, self.nx + self.nwp : self.nx + self.nwp + self.ny
-        ]
-        B3_tilde = block_matrix[: self.nx, self.nx + self.nwp + self.ny :]
+        K = block_matrix[: self.nx, : self.nx]
+        L1 = block_matrix[: self.nx, self.nx : self.nx + self.nwp]
+        L2 = block_matrix[: self.nx, self.nx + self.nwp : self.nx + self.nwp + self.ny]
+        L3 = block_matrix[: self.nx, self.nx + self.nwp + self.ny :]
 
-        C1_tilde = block_matrix[self.nx : self.nx + self.nu, : self.nx]
-        D11_tilde = block_matrix[
-            self.nx : self.nx + self.nu, self.nx : self.nx + self.nwp
-        ]
-        D12_tilde = block_matrix[
+        M1 = block_matrix[self.nx : self.nx + self.nu, : self.nx]
+        N11 = block_matrix[self.nx : self.nx + self.nu, self.nx : self.nx + self.nwp]
+        N12 = block_matrix[
             self.nx : self.nx + self.nu,
             self.nx + self.nwp : self.nx + self.nwp + self.ny,
         ]
-        D13_tilde = block_matrix[
-            self.nx : self.nx + self.nu, self.nx + self.nwp + self.ny :
-        ]
+        N13 = block_matrix[self.nx : self.nx + self.nu, self.nx + self.nwp + self.ny :]
 
-        C2 = block_matrix[self.nx + self.nu :, : self.nx]
-        D21 = block_matrix[self.nx + self.nu :, self.nx : self.nx + self.nwp]
-        D22 = block_matrix[
+        M2 = block_matrix[self.nx + self.nu :, : self.nx]
+        N21 = block_matrix[self.nx + self.nu :, self.nx : self.nx + self.nwp]
+        N22 = block_matrix[
             self.nx + self.nu :, self.nx + self.nwp : self.nx + self.nwp + self.ny
         ]
-        D23 = block_matrix[self.nx + self.nu :, self.nx + self.nwp + self.ny :]
-        assert np.linalg.norm(D23) < 1e-4
+        N23 = block_matrix[self.nx + self.nu :, self.nx + self.nwp + self.ny :]
+        # assert np.linalg.norm(D23) < 1e-4
 
-        return (
-            A_tilde,
-            B1_tilde,
-            B2_tilde,
-            B3_tilde,
-            C1_tilde,
-            D11_tilde,
-            D12_tilde,
-            D13_tilde,
-            C2,
-            D21,
-            D22,
-        )
+        return (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23)
 
     def get_interconnected_matrices(
-        self, interconnected_block_matrix: torch.tensor
+        self, interconnected_block_matrix: torch.Tensor
     ) -> Tuple[
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
-        torch.tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
     ]:
         A_cal = interconnected_block_matrix[: self.nx + self.nx, : self.nx + self.nx]
         B1_cal = interconnected_block_matrix[
@@ -1049,10 +1129,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         N12 = cp.Variable(shape=(self.nu, self.ny))
         N13 = cp.Variable(shape=(self.nu, self.nwu))
 
-        M2_tilde = cp.Variable(shape=(self.nzu, self.nx))
-        N21_tilde = cp.Variable(shape=(self.nzu, self.nwp))
-        N22_tilde = cp.Variable(shape=(self.nzu, self.ny))
-        N23_tilde = cp.Variable(shape=(self.nzu, self.nwu))
+        M2 = cp.Variable(shape=(self.nzu, self.nx))
+        N21 = cp.Variable(shape=(self.nzu, self.nwp))
+        N22 = cp.Variable(shape=(self.nzu, self.ny))
+        N23 = cp.Variable(shape=(self.nzu, self.nwu))
 
         P_21_1 = cp.bmat(
             [
@@ -1110,7 +1190,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             [
                 [K, L1, L2, L3],
                 [M1, N11, N12, N13],
-                [M2_tilde, N21_tilde, N22_tilde, N23_tilde],
+                [M2, N21, N22, N23],
             ]
         )
         P_21_4 = cp.bmat(
@@ -1141,8 +1221,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
             ]
         )
-        print(
-            f'sizes: P_21_1 {P_21_1.shape}, P_21_2 {P_21_2.shape}, P_21_3 {P_21_3.shape}, P_21_4 {P_21_4.shape}'
+        logger.info(
+            f'sizes: P_21_1 {P_21_1.shape}, P_21_2 {P_21_2.shape}, '
+            f'P_21_3 {P_21_3.shape}, P_21_4 {P_21_4.shape}'
         )
 
         P_21 = P_21_1 + P_21_2 @ P_21_3 @ P_21_4
@@ -1208,108 +1289,40 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         problem = cp.Problem(objective=objective, constraints=[P << -1e-4 * np.eye(nP)])
         problem.solve(solver=cp.MOSEK)
 
-        print(f'problem status: {problem.status}')
-        print(f'Max real eigenvalue of P: {np.max(np.real(np.linalg.eig(P.value)[0]))}')
-
-        Lambda_inv = np.linalg.inv(Lambda.value)
-        M2 = Lambda_inv @ M2_tilde.value
-        N21 = Lambda_inv @ N21_tilde.value
-        N22 = Lambda_inv @ N22_tilde.value
-        N23 = Lambda_inv @ N23_tilde.value
-
-        # 2. Determine non-singular U,V with V U^T = I - Y X
-        # U = X.value
-        # V = np.linalg.inv(X.value) - Y.value
-        U = np.linalg.inv(Y.value) - X.value
-        V = Y.value
-        # print(V@U.T + Y.value @ X.value)
-        assert np.linalg.norm(V @ U.T + Y.value @ X.value - np.eye(self.nx)) < 1e-4
-
-        # 3. transform to original parameters
-        left_mult = np.concatenate(
-            [
-                np.concatenate(
-                    [U, X.value @ self.A_lin, np.zeros((self.nx, self.nwu))], axis=1
-                ),
-                np.concatenate(
-                    [
-                        np.zeros((self.nu, self.nx)),
-                        np.eye(self.nu),
-                        np.zeros((self.nu, self.nwu)),
-                    ],
-                    axis=1,
-                ),
-                np.concatenate(
-                    [
-                        np.zeros((self.nzu, self.nx)),
-                        np.zeros((self.nzu, self.nu)),
-                        np.eye(self.nwu),
-                    ],
-                    axis=1,
-                ),
-            ],
-            axis=0,
+        logger.info(f'problem status: {problem.status}')
+        logger.info(
+            f'Max real eigenvalue of P: {np.max(np.real(np.linalg.eig(P.value)[0]))}'
         )
-        right_mult = np.concatenate(
-            [
-                np.concatenate(
-                    [
-                        np.zeros((self.nx, self.nx)),
-                        np.zeros(shape=(self.nx, self.nwp)),
-                        V.T,
-                        np.zeros((self.nx, self.nwu)),
-                    ],
-                    axis=1,
-                ),
-                np.concatenate(
-                    [
-                        np.zeros(shape=(self.nwp, self.nx)),
-                        np.eye(self.nwp),
-                        np.zeros(shape=(self.nwp, self.nx)),
-                        np.zeros(shape=(self.nwp, self.nwu)),
-                    ],
-                    axis=1,
-                ),
-                np.concatenate(
-                    [
-                        np.eye(self.nx),
-                        np.zeros(shape=(self.nx, self.nwp)),
-                        Y.value,
-                        np.zeros((self.nu, self.nwu)),
-                    ],
-                    axis=1,
-                ),
-                np.concatenate(
-                    [
-                        np.zeros((self.nzu, self.nx)),
-                        np.zeros(shape=(self.nzu, self.nwp)),
-                        np.zeros((self.nzu, self.ny)),
-                        np.eye(self.nwu),
-                    ],
-                    axis=1,
-                ),
-            ],
-            axis=0,
-        )
-        middle = np.concatenate(
+
+        # Lambda_inv = np.linalg.inv(Lambda.value)
+        # M2 = Lambda_inv @ M2_tilde.value
+        # N21 = Lambda_inv @ N21_tilde.value
+        # N22 = Lambda_inv @ N22_tilde.value
+        # N23 = Lambda_inv @ N23_tilde.value
+
+        omega_tilde_0 = np.concatenate(
             [
                 np.concatenate([K.value, L1.value, L2.value, L3.value], axis=1),
                 np.concatenate(
                     [
                         M1.value,
                         N11.value,
-                        N12.value - X.value @ self.A_lin @ Y.value,
+                        N12.value,
                         N13.value,
                     ],
                     axis=1,
                 ),
-                np.concatenate([M2, N21, N22, N23], axis=1),
+                np.concatenate([M2.value, N21.value, N22.value, N23.value], axis=1),
             ],
             axis=0,
         )
-        orig_par = np.linalg.inv(left_mult) @ middle @ np.linalg.inv(right_mult)
 
-        return orig_par, X.value, Y.value, Lambda.value
+        return (
+            omega_tilde_0,
+            np.array(X.value, dtype=np.float64),
+            np.array(Y.value, dtype=np.float64),
+            np.array(Lambda.value, dtype=np.float64),
+        )
 
     def forward(
         self,
@@ -1324,7 +1337,6 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             shape=(n_batch, self.nx * 2, 1)
         )
         us = x_pred.reshape(shape=(n_batch, N, nu, 1))
-
         y, x, w = self.lure.forward(x0=x0, us=us, return_states=True)
 
         return y.reshape(n_batch, N, self.lure._ny), (
@@ -1335,98 +1347,13 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     def get_constraints(self) -> torch.Tensor:
         X = self.X
         Y = self.Y
-        U = torch.linalg.inv(Y) - X
-        V = Y
-        A_lin = torch.tensor(self.A_lin)
-        B_lin = torch.tensor(self.B_lin)
-        C_lin = torch.tensor(self.C_lin)
+        # U = torch.linalg.inv(Y) - X
+        # V = Y
+        A_lin = self.A_lin
+        B_lin = self.B_lin
+        C_lin = self.C_lin
         Lambda = self.Lambda
-        block_matrix_parameter = self.get_block_matrix()
-
-        left_mult = torch.concat(
-            [
-                torch.concat([U, X @ A_lin, torch.zeros((self.nx, self.nwu))], dim=1),
-                torch.concat(
-                    [
-                        torch.zeros((self.nu, self.nx)),
-                        torch.eye(self.nu),
-                        torch.zeros((self.nu, self.nwu)),
-                    ],
-                    dim=1,
-                ),
-                torch.concat(
-                    [
-                        torch.zeros((self.nzu, self.nx)),
-                        torch.zeros((self.nzu, self.nu)),
-                        Lambda,
-                    ],
-                    dim=1,
-                ),
-            ],
-            dim=0,
-        )
-        right_mult = torch.concat(
-            [
-                torch.concat(
-                    [
-                        torch.zeros((self.nx, self.nx)),
-                        torch.zeros(size=(self.nx, self.nwp)),
-                        V.T,
-                        torch.zeros((self.nx, self.nwu)),
-                    ],
-                    dim=1,
-                ),
-                torch.concat(
-                    [
-                        torch.zeros(size=(self.nwp, self.nx)),
-                        torch.eye(self.nwp),
-                        torch.zeros(size=(self.nwp, self.nx)),
-                        torch.zeros(size=(self.nwp, self.nwu)),
-                    ],
-                    dim=1,
-                ),
-                torch.concat(
-                    [
-                        torch.eye(self.nx),
-                        torch.zeros(size=(self.nx, self.nwp)),
-                        Y,
-                        torch.zeros((self.nu, self.nwu)),
-                    ],
-                    dim=1,
-                ),
-                torch.concat(
-                    [
-                        torch.zeros((self.nzu, self.nx)),
-                        torch.zeros(size=(self.nzu, self.nwp)),
-                        torch.zeros((self.nzu, self.ny)),
-                        torch.eye(self.nwu),
-                    ],
-                    dim=1,
-                ),
-            ],
-            dim=0,
-        )
-        sum_ = torch.concat(
-            [
-                torch.zeros(size=(self.nx, self.nx + self.nwp + self.ny + self.nwu)),
-                torch.concat(
-                    [
-                        torch.zeros(size=(self.nu, self.nx + self.nwp)),
-                        X @ A_lin @ Y,
-                        torch.zeros(size=(self.nu, self.nwu)),
-                    ],
-                    dim=1,
-                ),
-                torch.zeros(size=(self.nzu, self.nx + self.nwp + self.ny + self.nwu)),
-            ],
-            dim=0,
-        )
-
-        print(
-            f'shape sum {sum_.shape}, left {left_mult.shape}, par {block_matrix_parameter.shape}, right {right_mult.shape}'
-        )
-
-        klmn = sum_ + left_mult @ block_matrix_parameter @ right_mult
+        omega_tilde = self.get_omega_tilde().float()
 
         P_21_1 = torch.concat(
             [
@@ -1468,7 +1395,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ),
             ],
             dim=0,
-        )
+        ).float()
         P_21_2 = torch.concat(
             [
                 torch.concat(
@@ -1505,7 +1432,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ),
             ],
             dim=0,
-        )
+        ).float()
 
         P_21_4 = torch.concat(
             [
@@ -1547,9 +1474,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ),
             ],
             dim=0,
-        )
+        ).float()
 
-        P_21 = P_21_1 + P_21_2 @ klmn @ P_21_4
+        P_21 = P_21_1 + P_21_2 @ omega_tilde @ P_21_4
         P_11 = -torch.concat(
             [
                 torch.concat(
@@ -1590,7 +1517,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ),
             ],
             dim=0,
-        )
+        ).float()
         P_22 = -torch.concat(
             [
                 torch.concat(
@@ -1631,7 +1558,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ),
             ],
             dim=0,
-        )
+        ).float()
         P = torch.concat(
             [torch.concat([P_11, P_21.T], dim=1), torch.concat([P_21, P_22], dim=1)],
             dim=0,
@@ -1640,7 +1567,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         return P
 
     def check_constraints(self) -> bool:
-        pass
+        P = self.get_constraints()
+        _, info = torch.linalg.cholesky_ex(-P)
+        return True if info == 0 else False
 
 
 class InitLSTM(nn.Module):
