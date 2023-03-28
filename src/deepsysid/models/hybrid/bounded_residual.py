@@ -507,6 +507,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
             initial_control=initial_control,
             initial_state=initial_state,
             control=control,
+            threshold=threshold,
         )
         return y, dict(whitebox=whitebox, blackbox=blackbox)
 
