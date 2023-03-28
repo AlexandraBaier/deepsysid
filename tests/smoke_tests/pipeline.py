@@ -128,6 +128,10 @@ def get_cartpole_state_names() -> List[str]:
     return ['y_1']
 
 
+def get_cartpole_initial_state_names() -> List[str]:
+    return ['x_1', 'x_2', 'x_3', 'x_4']
+
+
 def get_cartpole_data(idx: int) -> str:
     data = [
         """time,u_1,y_1,x_1,x_2,x_3,x_4
