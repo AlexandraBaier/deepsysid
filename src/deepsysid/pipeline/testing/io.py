@@ -1,6 +1,6 @@
 import dataclasses
 import os
-from typing import Dict, Iterator, List, Literal
+from typing import Dict, Iterator, List, Literal, Optional
 
 import h5py
 import numpy as np
@@ -25,15 +25,18 @@ def load_test_simulations(
             load_file_names(dataset_directory),
         )
     )
-    controls, states = load_simulation_data(
+    controls, states, initial_states = load_simulation_data(
         directory=dataset_directory,
         control_names=configuration.control_names,
         state_names=configuration.state_names,
+        initial_state_names=configuration.initial_state_names,
     )
 
     simulations = [
-        TestSimulation(control, state, file_name)
-        for control, state, file_name in zip(controls, states, file_names)
+        TestSimulation(control, state, initial_state, file_name)
+        for control, state, initial_state, file_name in zip(
+            controls, states, initial_states, file_names
+        )
     ]
 
     return simulations
@@ -124,6 +127,7 @@ class SimulateTestSample:
     initial_state: NDArray[np.float64]
     true_control: NDArray[np.float64]
     true_state: NDArray[np.float64]
+    x0: Optional[NDArray[np.float64]]
     file_name: str
 
 
@@ -141,7 +145,13 @@ def split_simulations(
             initial_state = sim.state[i - total_length : i - total_length + window_size]
             true_control = sim.control[i - total_length + window_size : i]
             true_state = sim.state[i - total_length + window_size : i]
+            x0 = sim.initial_state[i - total_length + window_size]
 
             yield SimulateTestSample(
-                initial_control, initial_state, true_control, true_state, sim.file_name
+                initial_control,
+                initial_state,
+                true_control,
+                true_state,
+                x0,
+                sim.file_name,
             )

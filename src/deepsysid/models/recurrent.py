@@ -15,7 +15,11 @@ from ..networks import loss, rnn
 from ..networks.rnn import HiddenStateForwardModule
 from . import base, utils
 from .base import DynamicIdentificationModelConfig
-from .datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
+from .datasets import (
+    RecurrentInitializerDataset,
+    RecurrentPredictorDataset,
+    RecurrentPredictorInitialDataset,
+)
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
@@ -93,6 +97,7 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -190,6 +195,7 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         if (
             self.state_mean is None
@@ -357,6 +363,7 @@ class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -453,6 +460,7 @@ class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         if (
             self.state_mean is None
@@ -622,6 +630,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -726,6 +735,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         if (
             self.control_mean is None
@@ -910,6 +920,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -1088,6 +1099,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         if (
             self._control_mean is None
@@ -1184,6 +1196,257 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         return copy.deepcopy(self._predictor)
 
 
+class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
+    nwu: int
+    nzu: int
+    gamma: float
+    A_lin: List
+    B_lin: List
+    C_lin: List
+    D_lin: List
+    alpha: float
+    beta: float
+    loss: Literal['mse']
+    initial_decay_parameter: float
+    decay_rate: float
+    epochs_with_const_decay: int
+    num_recurrent_layers_init: int
+    dropout: float
+    sequence_length: int
+    learning_rate: float
+    batch_size: int
+    epochs_initializer: int
+    epochs_predictor: int
+
+
+class HybridConstrainedRnn(base.NormalizedControlStateModel):
+    CONFIG = HybridConstrainedRnnConfig
+
+    def __init__(self, config: HybridConstrainedRnnConfig):
+        super().__init__(config)
+
+        self.device_name = config.device_name
+        self.device = torch.device(self.device_name)
+
+        self.nwu = config.nwu
+        self.nzu = config.nzu
+        assert self.nwu == self.nzu
+        self.nx = len(config.A_lin)
+        self.ny = len(config.C_lin)
+        self.control_dim = len(config.control_names)
+        self.state_dim = len(config.state_names)
+
+        self.initial_decay_parameter = config.initial_decay_parameter
+        self.decay_rate = config.decay_rate
+        self.epochs_with_const_decay = config.epochs_with_const_decay
+
+        self.num_recurrent_layers_init = config.num_recurrent_layers_init
+        self.dropout = config.dropout
+
+        self.sequence_length = config.sequence_length
+        self.learning_rate = config.learning_rate
+        self.batch_size = config.batch_size
+        self.epochs_initializer = config.epochs_initializer
+        self.epochs_predictor = config.epochs_predictor
+
+        if config.loss == 'mse':
+            self.loss: nn.Module = nn.MSELoss().to(self.device)
+        else:
+            raise ValueError('loss can only be "mse"')
+
+        self._predictor = rnn.HybridLinearizationRnn(
+            A_lin=np.array(config.A_lin, dtype=np.float64),
+            B_lin=np.array(config.B_lin, dtype=np.float64),
+            C_lin=np.array(config.C_lin, dtype=np.float64),
+            alpha=config.alpha,
+            beta=config.beta,
+            nwu=self.nwu,
+            nzu=self.nzu,
+            gamma=config.gamma,
+        ).to(self.device)
+        self._predictor.set_lure_system()
+
+        self.optimizer_pred = optim.Adam(
+            self._predictor.parameters(), lr=self.learning_rate
+        )
+
+    def train(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
+    ) -> Dict[str, NDArray[np.float64]]:
+        us = control_seqs
+        ys = state_seqs
+        self._predictor.train()
+
+        self._control_mean, self._control_std = utils.mean_stddev(us)
+        self._state_mean, self._state_std = utils.mean_stddev(ys)
+
+        us = [
+            utils.normalize(control, self._control_mean, self._control_std)
+            for control in us
+        ]
+        ys = [utils.normalize(state, self._state_mean, self._state_std) for state in ys]
+
+        if isinstance(initial_seqs, List):
+            x0s: List[NDArray[np.float64]] = initial_seqs
+
+        predictor_dataset = RecurrentPredictorInitialDataset(
+            us, ys, x0s, self.sequence_length
+        )
+
+        time_start_pred = time.time()
+        predictor_loss: List[np.float64] = []
+
+        for i in range(self.epochs_predictor):
+            data_loader = data.DataLoader(
+                predictor_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
+            total_loss = 0
+            for batch_idx, batch in enumerate(data_loader):
+                self._predictor.zero_grad()
+                # Predict and optimize
+                zp_hat, _ = self._predictor.forward(
+                    x_pred=batch['wp'].float().to(self.device),
+                    hx=(
+                        batch['x0'].float().to(self.device),
+                        batch['x0'].float().to(self.device),
+                    ),
+                )
+                zp_hat = zp_hat.to(self.device)
+                batch_loss = self.loss.forward(
+                    zp_hat, batch['zp'].float().to(self.device)
+                )
+
+                batch_loss.backward()
+
+                self.optimizer_pred.step()
+                self._predictor.set_lure_system()
+
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_predictor}\t'
+                f'Total Loss (Predictor): {total_loss:1f} \t'
+                # f'Max accumulated gradient norm: {max_grad:1f}'
+            )
+            predictor_loss.append(np.float64(total_loss))
+            # gradient_norm.append(np.float64(max_grad))
+
+        time_end_pred = time.time()
+        # time_total_init = time_end_init - time_start_init
+        time_total_pred = time_end_pred - time_start_pred
+        logger.info(
+            # f'Training time for initializer {time_total_init}s '
+            f'and for predictor {time_total_pred}s'
+        )
+
+        return dict(
+            index=np.asarray(i),
+            epoch_loss_predictor=np.asarray(predictor_loss),
+            # gradient_norm=np.asarray(gradient_norm),
+            training_time_predictor=np.asarray(time_total_pred),
+        )
+
+    def simulate(
+        self,
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
+    ) -> NDArray[np.float64]:
+        if (
+            self._control_mean is None
+            or self._control_std is None
+            or self._state_mean is None
+            or self._state_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot simulate.')
+
+        # self._initializer.eval()
+        self._predictor.eval()
+
+        initial_u = initial_control
+        initial_y = initial_state
+        u = control
+        N, nu = control.shape
+
+        initial_u = utils.normalize(initial_u, self._control_mean, self._control_std)
+        initial_y = utils.normalize(initial_y, self._state_mean, self._state_std)
+        u = utils.normalize(u, self._control_mean, self._control_std)
+
+        with torch.no_grad():
+            pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
+            x0_torch = (
+                torch.from_numpy(x0).reshape(shape=(self.nx, 1)).float().to(self.device)
+            )
+
+            y, _ = self._predictor.forward(pred_x, hx=(x0_torch, x0_torch))
+            y_np: NDArray[np.float64] = (
+                y.cpu().detach().numpy().reshape((N, self.ny)).astype(np.float64)
+            )
+
+        y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
+        return y_np
+
+    def save(self, file_path: Tuple[str, ...]) -> None:
+        if (
+            self._state_mean is None
+            or self._state_std is None
+            or self._control_mean is None
+            or self._control_std is None
+        ):
+            raise ValueError('Model has not been trained and cannot be saved.')
+
+        # torch.save(self._initializer.state_dict(), file_path[0])
+        torch.save(self._predictor.state_dict(), file_path[1])
+        with open(file_path[2], mode='w') as f:
+            json.dump(
+                {
+                    'state_mean': self._state_mean.tolist(),
+                    'state_std': self._state_std.tolist(),
+                    'control_mean': self._control_mean.tolist(),
+                    'control_std': self._control_std.tolist(),
+                },
+                f,
+            )
+
+    def load(self, file_path: Tuple[str, ...]) -> None:
+        # self._initializer.load_state_dict(
+        #     torch.load(file_path[0], map_location=self.device_name)
+        # )
+        self._predictor.load_state_dict(
+            torch.load(file_path[1], map_location=self.device_name)
+        )
+        with open(file_path[2], mode='r') as f:
+            norm = json.load(f)
+        self._state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self._state_std = np.array(norm['state_std'], dtype=np.float64)
+        self._control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self._control_std = np.array(norm['control_std'], dtype=np.float64)
+
+    def get_file_extension(self) -> Tuple[str, ...]:
+        return 'initializer.pth', 'predictor.pth', 'json'
+
+    def get_parameter_count(self) -> int:
+        # technically parameter counts of both networks are equal
+        # init_count = sum(
+        #     p.numel() for p in self._initializer.parameters() if p.requires_grad
+        # )
+        predictor_count = sum(
+            p.numel() for p in self._predictor.parameters() if p.requires_grad
+        )
+        # return init_count + predictor_count
+        return predictor_count
+
+    # @property
+    # def initializer(self) -> HiddenStateForwardModule:
+    #     return copy.deepcopy(self._initializer)
+
+    @property
+    def predictor(self) -> HiddenStateForwardModule:
+        return copy.deepcopy(self._predictor)
+
+
 class LSTMInitModelConfig(DynamicIdentificationModelConfig):
     recurrent_dim: int
     num_recurrent_layers: int
@@ -1252,6 +1515,7 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -1345,6 +1609,7 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         if (
             self._state_mean is None
@@ -1498,6 +1763,7 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -1582,6 +1848,7 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         if (
             self._state_mean is None

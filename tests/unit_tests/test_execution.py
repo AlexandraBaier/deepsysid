@@ -39,6 +39,7 @@ def test_experiment_configuration_from_grid_search_template_successful():
             horizon_size=20,
             control_names=['u1', 'u2'],
             state_names=['x1', 'x2', 'x3'],
+            initial_state_names=['x1', 'x2', 'x3'],
             target_metric='d1',
             metrics=dict(
                 d1=GridSearchMetricConfiguration(

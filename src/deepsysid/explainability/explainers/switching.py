@@ -44,7 +44,7 @@ class SwitchingLSTMExplainer(BaseExplainer):
         window_size = initial_state.shape[0]
         horizon_size = control.shape[0]
 
-        _, metadata = model.simulate(initial_control, initial_state, control)
+        _, metadata = model.simulate(initial_control, initial_state, control, None)
         system_matrices = [mat for mat in metadata['system_matrices'].squeeze(0)]
         control_matrices = [mat for mat in metadata['control_matrices'].squeeze(0)]
         weights = self.construct_feature_weights(system_matrices, control_matrices)

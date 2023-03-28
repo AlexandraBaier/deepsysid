@@ -469,6 +469,7 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         epoch_losses = []
 
@@ -536,6 +537,7 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> Union[
         NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
     ]:

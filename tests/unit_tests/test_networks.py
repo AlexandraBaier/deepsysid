@@ -144,6 +144,7 @@ def test_hybrid_linearization_rnn_forward() -> None:
         nzu=nz,
         gamma=1.0,
     )
+    model.set_lure_system()
     u = torch.zeros(size=(n_batch, N, nu))
     u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
@@ -169,6 +170,7 @@ def test_hybrid_linearization_rnn_backward() -> None:
         nzu=nz,
         gamma=1.0,
     )
+    model.set_lure_system()
     opt = torch.optim.Adam(params=model.parameters(), lr=1e-3)
     y = torch.zeros(size=(n_batch, N, ny))
     u = torch.zeros(size=(n_batch, N, nu))
@@ -183,11 +185,59 @@ def test_hybrid_linearization_rnn_backward() -> None:
     opt.step()
 
 
+def test_hybrid_linearization_rnn_backward_two_steps() -> None:
+    torch.autograd.set_detect_anomaly(True)
+    L = torch.nn.MSELoss()
+    A_lin, B_lin, C_lin, _ = get_linear_matrices()
+    model = HybridLinearizationRnn(
+        A_lin=A_lin,
+        B_lin=B_lin,
+        C_lin=C_lin,
+        alpha=0,
+        beta=1,
+        nwu=nw,
+        nzu=nz,
+        gamma=1.0,
+    )
+    model.set_lure_system()
+    opt = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+
+    dataset = []
+
+    y = torch.zeros(size=(n_batch, N, ny))
+    u = torch.zeros(size=(n_batch, N, nu))
+    u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    x0_lin = torch.zeros(size=(n_batch, nx, 1))
+    x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
+    x0_rnn = torch.zeros(size=(n_batch, nx, 1))
+    dataset.append({'y': y, 'u': u, 'x0_lin': x0_lin, 'x0_rnn': x0_rnn})
+
+    y = torch.zeros(size=(n_batch, N, ny))
+    u = torch.zeros(size=(n_batch, N, nu))
+    u[0, :, :] = torch.tensor(np.float64(np.arange(5, 5 + N)).reshape(N, nu))
+    x0_lin = torch.zeros(size=(n_batch, nx, 1))
+    x0_lin[0, :, :] = torch.tensor(data=[[-4], [0.7], [-0.5], [4]])
+    x0_rnn = torch.zeros(size=(n_batch, nx, 1))
+    dataset.append({'y': y, 'u': u, 'x0_lin': x0_lin, 'x0_rnn': x0_rnn})
+    model.train()
+
+    for batch in dataset:
+        model.zero_grad()
+        y_hat, (x, w) = model.forward(
+            x_pred=batch['u'], hx=(batch['x0_lin'], batch['x0_rnn'])
+        )
+        loss = L(batch['y'], y_hat)
+        loss.backward()
+        opt.step()
+        model.set_lure_system()
+    # assert False
+
+
 def test_hybrid_linearization_rnn_parameters() -> None:
     Omega_tilde = [
-        'X',
-        'Y',
-        'Lambda',
+        'L_x',
+        'L_y',
+        'lam',
         'K',
         'L1',
         'L2',
@@ -214,6 +264,7 @@ def test_hybrid_linearization_rnn_parameters() -> None:
         nzu=nz,
         gamma=1.0,
     )
+    model.set_lure_system()
     y = torch.zeros(size=(n_batch, N, ny))
     u = torch.zeros(size=(n_batch, N, nu))
     u[0, :, :] = torch.tensor(np.double(np.arange(N)).reshape(N, nu))
@@ -221,21 +272,13 @@ def test_hybrid_linearization_rnn_parameters() -> None:
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
 
-    print(f'x0_rnn type {x0_rnn.dtype}')
-    print(f'u type: {u.dtype}')
-
     y_hat, (x, w) = model.forward(x_pred=u, hx=(x0_lin, x0_rnn))
     loss = L(y, y_hat)
-    print(f'loss {loss}')
-    print(f'default type {torch.get_default_dtype()}')
 
     loss.backward()
     for idx, p in enumerate(model.named_parameters()):
-        print(f'name: {p[0]}, grad {p[1].grad}')
         assert Omega_tilde[idx] == p[0]
         assert p[1].grad is not None
-
-    # assert False
 
 
 def test_hybrid_linearization_rnn_constraints() -> None:
@@ -251,6 +294,7 @@ def test_hybrid_linearization_rnn_constraints() -> None:
         nzu=nz,
         gamma=1.0,
     )
+    model.set_lure_system()
     P = model.get_constraints()
     # check if P is symmetric
     P_test = P.detach().clone()
@@ -270,4 +314,5 @@ def test_hybrid_linearization_rnn_check_constraints() -> None:
         nzu=nz,
         gamma=1.0,
     )
+    model.set_lure_system()
     assert model.check_constraints()

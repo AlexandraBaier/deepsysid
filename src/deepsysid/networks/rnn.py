@@ -638,6 +638,7 @@ class Linear(nn.Module):
         x = torch.zeros(size=(n_batch, N + 1, self._nx, 1))
         y = torch.zeros(size=(n_batch, N, self._ny, 1))
         x[:, 0, :, :] = x0
+
         for k in range(N):
             x[:, k + 1, :, :] = self.state_dynamics(x=x[:, k, :, :], u=us[:, k, :, :])
             y[:, k, :, :] = self.output_dynamics(x=x[:, k, :, :], u=us[:, k, :, :])
@@ -719,14 +720,14 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.nzu = nzu  # output size of uncertainty channel
         self.nwu = nwu  # input size of uncertainty channel
 
+        self.alpha = alpha
+        self.beta = beta
+
         self.A_lin = torch.tensor(A_lin, dtype=torch.float32)
         self.B_lin = torch.tensor(B_lin, dtype=torch.float32)
         self.C_lin = torch.tensor(C_lin, dtype=torch.float32)
 
         self.gamma = gamma
-
-        def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
-            return (2 / beta - alpha) * (torch.tanh(z) - ((alpha + beta) / 2) * z)
 
         # 1. solve synthesis inequalities to find feasible parameter set
         omega_tilde_0_numpy, X, Y, Lambda = self.get_initial_parameters()
@@ -735,9 +736,15 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             omega_tilde_0_numpy
         )
 
-        self.X = torch.nn.Parameter(torch.tensor(X).float())
-        self.Y = torch.nn.Parameter(torch.tensor(Y).float())
-        self.Lambda = torch.nn.Parameter(torch.tensor(Lambda).float())
+        # self.X = torch.nn.Parameter(torch.tensor(X).float())
+        L_x = np.linalg.cholesky(a=X)
+        self.L_x = torch.nn.Parameter(torch.tensor(L_x).float())
+        # self.Y = torch.nn.Parameter(torch.tensor(Y).float())
+        L_y = np.linalg.cholesky(a=Y)
+        self.L_y = torch.nn.Parameter(torch.tensor(L_y).float())
+
+        # self.Lambda = torch.nn.Parameter(torch.tensor(Lambda).float())
+        self.lam = torch.nn.Parameter(torch.tensor(np.diag(Lambda)).float())
 
         self.K = torch.nn.Parameter(torch.tensor(K).float())
         self.L1 = torch.nn.Parameter(torch.tensor(L1).float())
@@ -754,19 +761,25 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.N22 = torch.nn.Parameter(torch.tensor(N22).float())
         self.N23 = torch.nn.Parameter(torch.tensor(N23).float())
 
+    def set_lure_system(self) -> None:
         omega_tilde_0 = self.get_omega_tilde()
 
+        # construct X, Y, and Lambda
+        X = self.L_x @ self.L_x.T
+        Y = self.L_y @ self.L_y.T
+        Lambda = torch.diag(input=self.lam)
+
         # 2. Determine non-singular U,V with V U^T = I - Y X
-        U = torch.linalg.inv(self.Y) - self.X
-        V = self.Y
+        U = torch.linalg.inv(Y) - X
+        V = Y
         # print(V@U.T + Y.value @ X.value)
-        assert torch.linalg.norm(V @ U.T + self.Y @ self.X - torch.eye(self.nx)) < 1e-4
+        assert torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx)) < 1e-4
 
         # 3. transform to original parameters
         T_l = torch.concat(
             [
                 torch.concat(
-                    [U, self.X @ self.A_lin, torch.zeros((self.nx, self.nwu))], dim=1
+                    [U, X @ self.A_lin, torch.zeros((self.nx, self.nwu))], dim=1
                 ),
                 torch.concat(
                     [
@@ -780,7 +793,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     [
                         torch.zeros((self.nzu, self.nx)),
                         torch.zeros((self.nzu, self.nu)),
-                        self.Lambda,
+                        Lambda,
                     ],
                     dim=1,
                 ),
@@ -811,7 +824,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     [
                         torch.eye(self.nx),
                         torch.zeros(size=(self.nx, self.nwp)),
-                        self.Y,
+                        Y,
                         torch.zeros((self.nu, self.nwu)),
                     ],
                     dim=1,
@@ -834,7 +847,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 torch.concat(
                     [
                         torch.zeros(size=(self.nu, self.nx + self.nwp)),
-                        self.X @ self.A_lin @ self.Y,
+                        X @ self.A_lin @ Y,
                         torch.zeros(size=(self.nu, self.nwu)),
                     ],
                     dim=1,
@@ -973,6 +986,11 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             D22_cal,
         ) = self.get_interconnected_matrices(sys_block_matrix)
         assert torch.linalg.norm(D22_cal) - 0 < 1e-6
+
+        def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
+            return (2 / self.beta - self.alpha) * (
+                torch.tanh(z) - ((self.alpha + self.beta) / 2) * z
+            )
 
         self.lure = LureSystem(
             A=A_cal,
@@ -1345,14 +1363,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         )
 
     def get_constraints(self) -> torch.Tensor:
-        X = self.X
-        Y = self.Y
+        # X = self.X
+        X = self.L_x @ self.L_x.T
+        # Y = self.Y
+        Y = self.L_y @ self.L_y.T
         # U = torch.linalg.inv(Y) - X
         # V = Y
         A_lin = self.A_lin
         B_lin = self.B_lin
         C_lin = self.C_lin
-        Lambda = self.Lambda
+        Lambda = torch.diag(self.lam)
         omega_tilde = self.get_omega_tilde().float()
 
         P_21_1 = torch.concat(

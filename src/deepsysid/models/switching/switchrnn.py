@@ -78,6 +78,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -172,6 +173,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         if (
             self.state_mean is None

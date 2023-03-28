@@ -118,7 +118,9 @@ class LIMEExplainer(BaseExplainer):
                 idx, window_size * (state_dim + control_dim) :
             ].reshape((horizon_size, control_dim))
 
-            model_output = model.simulate(initial_control_i, initial_state_i, control_i)
+            model_output = model.simulate(
+                initial_control_i, initial_state_i, control_i, None
+            )
             if isinstance(model_output, np.ndarray):
                 y_all[idx, :] = model_output[-1]
             else:

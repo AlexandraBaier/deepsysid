@@ -24,7 +24,9 @@ class InferenceTest(BaseTest):
         self.horizon_size = config.horizon_size
 
     def test(
-        self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
+        self,
+        model: DynamicIdentificationModel,
+        simulations: List[TestSimulation],
     ) -> TestResult:
         control = []
         pred_states = []
@@ -34,8 +36,12 @@ class InferenceTest(BaseTest):
         for sample in split_simulations(
             self.window_size, self.horizon_size, simulations
         ):
+
             simulation_result = model.simulate(
-                sample.initial_control, sample.initial_state, sample.true_control
+                sample.initial_control,
+                sample.initial_state,
+                sample.true_control,
+                sample.x0,
             )
             if isinstance(simulation_result, np.ndarray):
                 pred_target = simulation_result

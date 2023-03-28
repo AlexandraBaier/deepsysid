@@ -31,6 +31,7 @@ class LinearModel(DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]],
     ) -> None:
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]
@@ -65,6 +66,7 @@ class LinearModel(DynamicIdentificationModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         assert initial_control.shape[1] == self.control_dim
         assert initial_state.shape[1] == self.state_dim

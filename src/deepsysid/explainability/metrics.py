@@ -27,11 +27,13 @@ class NMSEInfidelityMetric(BaseExplanationMetric):
         explainer: BaseExplainer,
         model_inputs: List[ModelInput],
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
+
         model_predictions = [
             model.simulate(
                 model_input.initial_control,
                 model_input.initial_state,
                 model_input.control,
+                model_input.x0,
             )[0]
             for model_input in model_inputs
         ]
