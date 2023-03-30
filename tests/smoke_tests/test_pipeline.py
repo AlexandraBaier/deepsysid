@@ -175,6 +175,7 @@ def test_constrained_hybrid_rnn(tmp_path: pathlib.Path) -> None:
         epochs_initializer=2,
         epochs_predictor=2,
         loss='mse',
+        clip_gradient_norm=10.0,
     )
     pipeline.run_cartpole_pipeline(
         tmp_path, model_name, model_class, model_config=config

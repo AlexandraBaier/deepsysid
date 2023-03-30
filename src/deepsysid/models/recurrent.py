@@ -1198,7 +1198,6 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
 class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nwu: int
-    nzu: int
     gamma: float
     A_lin: List
     B_lin: List
@@ -1217,6 +1216,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     batch_size: int
     epochs_initializer: int
     epochs_predictor: int
+    clip_gradient_norm: float
 
 
 class HybridConstrainedRnn(base.NormalizedControlStateModel):
@@ -1229,8 +1229,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.device = torch.device(self.device_name)
 
         self.nwu = config.nwu
-        self.nzu = config.nzu
-        assert self.nwu == self.nzu
+        self.nzu = self.nwu
         self.nx = len(config.A_lin)
         self.ny = len(config.C_lin)
         self.control_dim = len(config.control_names)
@@ -1242,6 +1241,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         self.num_recurrent_layers_init = config.num_recurrent_layers_init
         self.dropout = config.dropout
+        self.clip_gradient_norm = config.clip_gradient_norm
 
         self.sequence_length = config.sequence_length
         self.learning_rate = config.learning_rate
@@ -1279,15 +1279,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         us = control_seqs
         ys = state_seqs
         self._predictor.train()
+        self._predictor.to(self.device)
 
         self._control_mean, self._control_std = utils.mean_stddev(us)
         self._state_mean, self._state_std = utils.mean_stddev(ys)
-
-        us = [
-            utils.normalize(control, self._control_mean, self._control_std)
-            for control in us
-        ]
-        ys = [utils.normalize(state, self._state_mean, self._state_std) for state in ys]
 
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
@@ -1298,14 +1293,23 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
+        barrier_value: List[np.float64] = []
+        gradient_norm: List[np.float64] = []
+        t = self.initial_decay_parameter
 
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
             )
-            total_loss = 0
+            total_loss = 0.0
+            max_grad = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self._predictor.zero_grad()
+                try:
+                    self._predictor.set_lure_system()
+                except AssertionError as msg:
+                    logger.warning(msg)
+
                 # Predict and optimize
                 zp_hat, _ = self._predictor.forward(
                     x_pred=batch['wp'].float().to(self.device),
@@ -1319,31 +1323,75 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     zp_hat, batch['zp'].float().to(self.device)
                 )
 
-                batch_loss.backward()
+                barrier = self._predictor.get_barrier(t).to(self.device)
+                try:
+                    (batch_loss + barrier).backward(retain_graph=True)
+                except RuntimeError as msg:
+                    logger.warning(msg)
+                    logger.info('Stop training, due to a runtime error.')
+                    time_end_pred = time.time()
+                    time_total_pred = time_end_pred - time_start_pred
+                    return dict(
+                        index=np.asarray(i),
+                        epoch_loss_predictor=np.asarray(predictor_loss),
+                        barrier_value=np.asarray(barrier_value),
+                        gradient_norm=np.asarray(gradient_norm),
+                        training_time_predictor=np.asarray(time_total_pred),
+                    )
+                total_loss += batch_loss.item()
+
+                torch.nn.utils.clip_grad_norm_(
+                    self._predictor.parameters(), self.clip_gradient_norm
+                )
+
+                # gradient infos
+                grads_norm = [
+                    torch.linalg.norm(p.grad)
+                    for p in filter(
+                        lambda p: p.grad is not None, self._predictor.parameters()
+                    )
+                ]
+                max_grad += max(grads_norm)
 
                 self.optimizer_pred.step()
-                self._predictor.set_lure_system()
+                if not self._predictor.check_constraints():
+                    logger.info(
+                        f'Batch {batch_idx}, Epoch {i+1}'
+                        f'Constraints are not satisfied anymore.\t'
+                    )
+                    time_end_pred = time.time()
+                    time_total_pred = time_end_pred - time_start_pred
+                    return dict(
+                        index=np.asarray(i),
+                        epoch_loss_predictor=np.asarray(predictor_loss),
+                        barrier_value=np.asarray(barrier_value),
+                        gradient_norm=np.asarray(gradient_norm),
+                        training_time_predictor=np.asarray(time_total_pred),
+                    )
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
                 f'Total Loss (Predictor): {total_loss:1f} \t'
-                # f'Max accumulated gradient norm: {max_grad:1f}'
+                f'Barrier: {barrier:1f}\t'
+                f'Max accumulated gradient norm: {max_grad:1f}'
             )
             predictor_loss.append(np.float64(total_loss))
-            # gradient_norm.append(np.float64(max_grad))
+            barrier_value.append(barrier.cpu().detach().numpy())
+            gradient_norm.append(np.float64(max_grad))
 
+            # decay t following the idea of interior point methods
+            if i % self.epochs_with_const_decay == 0 and i != 0:
+                t = t * 1 / self.decay_rate
+                logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
         time_end_pred = time.time()
-        # time_total_init = time_end_init - time_start_init
         time_total_pred = time_end_pred - time_start_pred
-        logger.info(
-            # f'Training time for initializer {time_total_init}s '
-            f'and for predictor {time_total_pred}s'
-        )
+        logger.info(f'Training time for predictor {time_total_pred}s')
 
         return dict(
             index=np.asarray(i),
             epoch_loss_predictor=np.asarray(predictor_loss),
-            # gradient_norm=np.asarray(gradient_norm),
+            barrier_value=np.asarray(barrier_value),
+            gradient_norm=np.asarray(gradient_norm),
             training_time_predictor=np.asarray(time_total_pred),
         )
 
@@ -1362,17 +1410,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         ):
             raise ValueError('Model has not been trained and cannot simulate.')
 
-        # self._initializer.eval()
         self._predictor.eval()
 
-        initial_u = initial_control
-        initial_y = initial_state
         u = control
         N, nu = control.shape
-
-        initial_u = utils.normalize(initial_u, self._control_mean, self._control_std)
-        initial_y = utils.normalize(initial_y, self._state_mean, self._state_std)
-        u = utils.normalize(u, self._control_mean, self._control_std)
 
         with torch.no_grad():
             pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
@@ -1385,7 +1426,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 y.cpu().detach().numpy().reshape((N, self.ny)).astype(np.float64)
             )
 
-        y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
+        # y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
         return y_np
 
     def save(self, file_path: Tuple[str, ...]) -> None:

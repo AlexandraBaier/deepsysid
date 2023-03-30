@@ -235,8 +235,8 @@ def test_hybrid_linearization_rnn_backward_two_steps() -> None:
 
 def test_hybrid_linearization_rnn_parameters() -> None:
     Omega_tilde = [
-        'L_x',
-        'L_y',
+        'L_x_flat',
+        'L_y_flat',
         'lam',
         'K',
         'L1',
@@ -316,3 +316,46 @@ def test_hybrid_linearization_rnn_check_constraints() -> None:
     )
     model.set_lure_system()
     assert model.check_constraints()
+
+
+def test_hybrid_linearization_rnn_construct_lower_triangular_matrix() -> None:
+    L_test = torch.tensor(
+        [[0, 0, 0, 0], [4, 1, 0, 0], [7, 5, 2, 0], [9, 8, 6, 3]]
+    ).float()
+    A_lin, B_lin, C_lin, _ = get_linear_matrices()
+    model = HybridLinearizationRnn(
+        A_lin=A_lin,
+        B_lin=B_lin,
+        C_lin=C_lin,
+        alpha=0,
+        beta=1,
+        nwu=nw,
+        nzu=nz,
+        gamma=1.0,
+    )
+    diag_length = 4
+    L_flat = torch.tensor(np.arange(10)).float()
+    L = model.construct_lower_triangular_matrix(L_flat, diag_length)
+
+    assert torch.linalg.norm(L_test - L) < 1e-10
+
+
+def test_hybrid_linearization_rnn_extract_vector_from_lower_triangular_matrix() -> None:
+    L_test = np.arange(10, dtype=np.float64)
+    A_lin, B_lin, C_lin, _ = get_linear_matrices()
+    model = HybridLinearizationRnn(
+        A_lin=A_lin,
+        B_lin=B_lin,
+        C_lin=C_lin,
+        alpha=0,
+        beta=1,
+        nwu=nw,
+        nzu=nz,
+        gamma=1.0,
+    )
+    L = np.array(
+        [[0, 0, 0, 0], [4, 1, 0, 0], [7, 5, 2, 0], [9, 8, 6, 3]], dtype=np.float64
+    )
+    L_flat = model.extract_vector_from_lower_triangular_matrix(L)
+
+    assert np.linalg.norm(L_test - L_flat) < 1e-10

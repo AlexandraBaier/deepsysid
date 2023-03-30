@@ -1,9 +1,11 @@
-from deepsysid.pipeline.data_io import load_simulation_data
-from ..smoke_tests import pipeline
 import pathlib
 
+from deepsysid.pipeline.data_io import load_simulation_data
 
-def test_load_simulation_data(tmp_path: pathlib) -> None:
+from ..smoke_tests import pipeline
+
+
+def test_load_simulation_data(tmp_path: pathlib.Path) -> None:
     paths = pipeline.prepare_directories(base_path=tmp_path)
 
     # Setup dataset directory.

@@ -1,13 +1,15 @@
 import pathlib
-from deepsysid.pipeline.testing.io import split_simulations
-from deepsysid.pipeline.data_io import load_simulation_data
-from deepsysid.pipeline.testing.base import TestSimulation
-from ..smoke_tests import pipeline
-from deepsysid.pipeline.configuration import ExperimentConfiguration
+
 import numpy as np
 
+from deepsysid.pipeline.data_io import load_simulation_data
+from deepsysid.pipeline.testing.base import TestSimulation
+from deepsysid.pipeline.testing.io import split_simulations
 
-def test_split_simulation(tmp_path: pathlib) -> None:
+from ..smoke_tests import pipeline
+
+
+def test_split_simulation(tmp_path: pathlib.Path) -> None:
     paths = pipeline.prepare_directories(base_path=tmp_path)
 
     # Setup dataset directory.
@@ -20,7 +22,6 @@ def test_split_simulation(tmp_path: pathlib) -> None:
     paths['test'].joinpath('test-0.csv').write_text(data=pipeline.get_cartpole_data(2))
 
     file_names = ['test-0.csv']
-    N = 26
     window_size = 4
     horizon_isze = 8
 
