@@ -660,6 +660,7 @@ class LureSystem(Linear):
         C2: torch.Tensor,
         D21: torch.Tensor,
         Delta: Callable[[torch.Tensor], torch.Tensor],
+        device: torch.device,
     ) -> None:
         super().__init__(A=A, B=B1, C=C1, D=D11)
         self._nw = B2.shape[1]
@@ -670,14 +671,15 @@ class LureSystem(Linear):
         self.D12 = D12
         self.D21 = D21
         self.Delta = Delta  # static nonlinearity
+        self.device = device
 
     def forward(
         self, x0: torch.Tensor, us: torch.Tensor, return_states: bool = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         n_batch, N, _, _ = us.shape
-        x = torch.zeros(size=(n_batch, N + 1, self._nx, 1))
-        y = torch.zeros(size=(n_batch, N, self._ny, 1))
-        w = torch.zeros(size=(n_batch, N, self._nw, 1))
+        x = torch.zeros(size=(n_batch, N + 1, self._nx, 1)).to(self.device)
+        y = torch.zeros(size=(n_batch, N, self._ny, 1)).to(self.device)
+        w = torch.zeros(size=(n_batch, N, self._nw, 1)).to(self.device)
         x[:, 0, :, :] = x0
 
         for k in range(N):
@@ -723,6 +725,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         nwu: int,
         nzu: int,
         gamma: float,
+        device: torch.device = torch.device('cpu'),
     ) -> None:
         super().__init__()
         self.nx = A_lin.shape[0]  # state size
@@ -737,9 +740,11 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.alpha = alpha
         self.beta = beta
 
-        self.A_lin = torch.tensor(A_lin, dtype=torch.float32)
-        self.B_lin = torch.tensor(B_lin, dtype=torch.float32)
-        self.C_lin = torch.tensor(C_lin, dtype=torch.float32)
+        self.device = device
+
+        self.A_lin = torch.tensor(A_lin, dtype=torch.float32).to(device)
+        self.B_lin = torch.tensor(B_lin, dtype=torch.float32).to(device)
+        self.C_lin = torch.tensor(C_lin, dtype=torch.float32).to(device)
 
         self.gamma = gamma
 
@@ -783,9 +788,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 [
                     np.concatenate(
                         [
-                            self.A_lin,
+                            A_lin,
                             np.zeros(shape=(self.nx, self.nx)),
-                            self.B_lin,
+                            B_lin,
                             np.zeros(shape=(self.nx, self.nwu)),
                         ],
                         axis=1,
@@ -793,7 +798,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.zeros(shape=(self.nx, self.nx + self.nx + self.nwp + self.nwu)),
                     np.concatenate(
                         [
-                            self.C_lin,
+                            C_lin,
                             np.zeros(shape=(self.nzp, self.nx)),
                             np.zeros(shape=(self.nzp, self.nwp)),
                             np.zeros(shape=(self.nzp, self.nwu)),
@@ -805,14 +810,14 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 axis=0,
                 dtype=np.float32,
             )
-        )
+        ).to(device)
         self.S_l = torch.from_numpy(
             np.concatenate(
                 [
                     np.concatenate(
                         [
                             np.zeros(shape=(self.nx, self.nx)),
-                            self.A_lin,
+                            A_lin,
                             np.zeros(shape=(self.nx, self.nzu)),
                         ],
                         axis=1,
@@ -828,7 +833,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.concatenate(
                         [
                             np.zeros(shape=(self.nzp, self.nx)),
-                            self.C_lin,
+                            C_lin,
                             np.zeros(shape=(self.nzp, self.nzu)),
                         ],
                         axis=1,
@@ -845,7 +850,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 axis=0,
                 dtype=np.float32,
             )
-        )
+        ).to(device)
         self.S_r = torch.from_numpy(
             np.concatenate(
                 [
@@ -889,7 +894,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 axis=0,
                 dtype=np.float32,
             )
-        )
+        ).to(device)
 
     def construct_lower_triangular_matrix(
         self, L_flat: torch.Tensor, diag_length: int
@@ -933,112 +938,107 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         Y = L_y @ L_y.T
         # print(X)
         # print(Y)
-        Lambda = torch.diag(input=self.lam).to(device)
+        Lambda = torch.diag(input=self.lam).to(self.device)
         # print(Lambda)
 
         # 2. Determine non-singular U,V with V U^T = I - Y X
         U = torch.linalg.inv(Y) - X
         V = Y
         # print(f'round {torch.round(V@U.T + Y@X, decimals=2)}')
-        assert torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx)) < 0.5
+        assert (
+            torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device)) < 0.5
+        )
 
         # 3. transform to original parameters
-        T_l = (
-            torch.concat(
-                [
-                    torch.concat(
-                        [U, X @ self.A_lin, torch.zeros((self.nx, self.nwu))], dim=1
-                    ),
-                    torch.concat(
-                        [
-                            torch.zeros((self.nu, self.nx)),
-                            torch.eye(self.nu),
-                            torch.zeros((self.nu, self.nwu)),
-                        ],
-                        dim=1,
-                    ),
-                    torch.concat(
-                        [
-                            torch.zeros((self.nzu, self.nx)),
-                            torch.zeros((self.nzu, self.nu)),
-                            Lambda,
-                        ],
-                        dim=1,
-                    ),
-                ],
-                dim=0,
-            )
-            .float()
-            .to(device)
-        )
-        T_r = (
-            torch.concat(
-                [
-                    torch.concat(
-                        [
-                            torch.zeros((self.nx, self.nx)),
-                            torch.zeros(size=(self.nx, self.nwp)),
-                            V.T,
-                            torch.zeros((self.nx, self.nwu)),
-                        ],
-                        dim=1,
-                    ),
-                    torch.concat(
-                        [
-                            torch.zeros(size=(self.nwp, self.nx)),
-                            torch.eye(self.nwp),
-                            torch.zeros(size=(self.nwp, self.nx)),
-                            torch.zeros(size=(self.nwp, self.nwu)),
-                        ],
-                        dim=1,
-                    ),
-                    torch.concat(
-                        [
-                            torch.eye(self.nx),
-                            torch.zeros(size=(self.nx, self.nwp)),
-                            Y,
-                            torch.zeros((self.nu, self.nwu)),
-                        ],
-                        dim=1,
-                    ),
-                    torch.concat(
-                        [
-                            torch.zeros((self.nzu, self.nx)),
-                            torch.zeros(size=(self.nzu, self.nwp)),
-                            torch.zeros((self.nzu, self.ny)),
-                            torch.eye(self.nwu),
-                        ],
-                        dim=1,
-                    ),
-                ],
-                dim=0,
-            )
-            .float()
-            .to(device)
-        )
-        T_s = (
-            torch.concat(
-                [
-                    torch.concat(
-                        [
-                            torch.zeros(size=(self.nx, self.nx + self.nwp)),
-                            X @ self.A_lin @ Y,
-                            torch.zeros(size=(self.nx, self.nwu)),
-                        ],
-                        dim=1,
-                    ),
-                    torch.zeros(
-                        size=(self.nu, self.nx + self.nwp + self.ny + self.nwu)
-                    ),
-                    torch.zeros(
-                        size=(self.nzu, self.nx + self.nwp + self.ny + self.nwu)
-                    ),
-                ],
-                dim=0,
-            )
-            .float()
-            .to(device)
-        )
+        T_l = torch.concat(
+            [
+                torch.concat(
+                    [
+                        U,
+                        X @ self.A_lin,
+                        torch.zeros((self.nx, self.nwu)).to(self.device),
+                    ],
+                    dim=1,
+                ),
+                torch.concat(
+                    [
+                        torch.zeros((self.nu, self.nx)),
+                        torch.eye(self.nu),
+                        torch.zeros((self.nu, self.nwu)),
+                    ],
+                    dim=1,
+                ).to(self.device),
+                torch.concat(
+                    [
+                        torch.zeros((self.nzu, self.nx)).to(self.device),
+                        torch.zeros((self.nzu, self.nu)).to(self.device),
+                        Lambda,
+                    ],
+                    dim=1,
+                ),
+            ],
+            dim=0,
+        ).float()
+        T_r = torch.concat(
+            [
+                torch.concat(
+                    [
+                        torch.zeros((self.nx, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nx, self.nwp)).to(self.device),
+                        V.T,
+                        torch.zeros((self.nx, self.nwu)).to(self.device),
+                    ],
+                    dim=1,
+                ),
+                torch.concat(
+                    [
+                        torch.zeros(size=(self.nwp, self.nx)),
+                        torch.eye(self.nwp),
+                        torch.zeros(size=(self.nwp, self.nx)),
+                        torch.zeros(size=(self.nwp, self.nwu)),
+                    ],
+                    dim=1,
+                ).to(self.device),
+                torch.concat(
+                    [
+                        torch.eye(self.nx).to(self.device),
+                        torch.zeros(size=(self.nx, self.nwp)).to(self.device),
+                        Y,
+                        torch.zeros((self.nu, self.nwu)).to(self.device),
+                    ],
+                    dim=1,
+                ),
+                torch.concat(
+                    [
+                        torch.zeros((self.nzu, self.nx)),
+                        torch.zeros(size=(self.nzu, self.nwp)),
+                        torch.zeros((self.nzu, self.ny)),
+                        torch.eye(self.nwu),
+                    ],
+                    dim=1,
+                ).to(self.device),
+            ],
+            dim=0,
+        ).float()
+        T_s = torch.concat(
+            [
+                torch.concat(
+                    [
+                        torch.zeros(size=(self.nx, self.nx + self.nwp)).to(self.device),
+                        X @ self.A_lin @ Y,
+                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
+                    ],
+                    dim=1,
+                ),
+                torch.zeros(size=(self.nu, self.nx + self.nwp + self.ny + self.nwu)).to(
+                    self.device
+                ),
+                torch.zeros(
+                    size=(self.nzu, self.nx + self.nwp + self.ny + self.nwu)
+                ).to(self.device),
+            ],
+            dim=0,
+        ).float()
         omega_0 = (
             torch.linalg.inv(T_l).float()
             @ (omega_tilde_0 - T_s.float())
@@ -1077,6 +1077,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             C2=C2_cal,
             D21=D21_cal,
             Delta=Delta_tilde,
+            device=self.device,
         ).to(device)
 
     def get_omega_tilde(self) -> torch.Tensor:
@@ -1227,20 +1228,20 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         P_21_1 = cp.bmat(
             [
                 [
-                    self.A_lin @ Y,
-                    self.A_lin,
-                    self.B_lin,
+                    self.A_lin.cpu() @ Y,
+                    self.A_lin.cpu(),
+                    self.B_lin.cpu(),
                     np.zeros(shape=(self.nx, self.nwu)),
                 ],
                 [
                     np.zeros(shape=(self.nu, self.nx)),
-                    X @ self.A_lin,
-                    X @ self.B_lin,
+                    X @ self.A_lin.cpu(),
+                    X @ self.B_lin.cpu(),
                     np.zeros(shape=(self.nx, self.nwu)),
                 ],
                 [
-                    self.C_lin @ Y,
-                    self.C_lin,
+                    self.C_lin.cpu() @ Y,
+                    self.C_lin.cpu(),
                     np.zeros(shape=(self.nzp, self.nwp)),
                     np.zeros(shape=(self.nzp, self.nwu)),
                 ],
@@ -1256,7 +1257,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             [
                 [
                     np.zeros(shape=(self.nx, self.nx)),
-                    self.A_lin,
+                    self.A_lin.cpu(),
                     np.zeros(shape=(self.nx, self.nzu)),
                 ],
                 [
@@ -1266,7 +1267,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
                 [
                     np.zeros(shape=(self.nzp, self.nx)),
-                    self.C_lin,
+                    self.C_lin.cpu(),
                     np.zeros(shape=(self.nzp, self.nzu)),
                 ],
                 [
@@ -1514,10 +1515,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     def get_constraints(self) -> torch.Tensor:
         L_x = self.construct_lower_triangular_matrix(
             L_flat=self.L_x_flat, diag_length=self.nx
-        )
+        ).to(self.device)
         L_y = self.construct_lower_triangular_matrix(
             L_flat=self.L_y_flat, diag_length=self.nx
-        )
+        ).to(self.device)
         X = L_x @ L_x.T
         Y = L_y @ L_y.T
         # U = torch.linalg.inv(Y) - X
@@ -1535,16 +1536,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         A_lin @ Y,
                         A_lin,
                         B_lin,
-                        torch.zeros(size=(self.nx, self.nwu)),
+                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
                 torch.concat(
                     [
-                        torch.zeros(size=(self.nu, self.nx)),
+                        torch.zeros(size=(self.nu, self.nx)).to(self.device),
                         X @ A_lin,
                         X @ B_lin,
-                        torch.zeros(size=(self.nx, self.nwu)),
+                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
@@ -1552,17 +1553,17 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     [
                         C_lin @ Y,
                         C_lin,
-                        torch.zeros(size=(self.nzp, self.nwp)),
-                        torch.zeros(size=(self.nzp, self.nwu)),
+                        torch.zeros(size=(self.nzp, self.nwp)).to(self.device),
+                        torch.zeros(size=(self.nzp, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
                 torch.concat(
                     [
-                        torch.zeros(size=(self.nzu, self.nx)),
-                        torch.zeros(size=(self.nzu, self.nx)),
-                        torch.zeros(size=(self.nzu, self.nwp)),
-                        torch.zeros(size=(self.nzu, self.nwu)),
+                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nzu, self.nwp)).to(self.device),
+                        torch.zeros(size=(self.nzu, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
@@ -1573,9 +1574,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             [
                 torch.concat(
                     [
-                        torch.zeros(size=(self.nx, self.nx)),
+                        torch.zeros(size=(self.nx, self.nx)).to(self.device),
                         A_lin,
-                        torch.zeros(size=(self.nx, self.nzu)),
+                        torch.zeros(size=(self.nx, self.nzu)).to(self.device),
                     ],
                     dim=1,
                 ),
@@ -1586,12 +1587,12 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nx, self.nzu)),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
-                        torch.zeros(size=(self.nzp, self.nx)),
+                        torch.zeros(size=(self.nzp, self.nx)).to(self.device),
                         C_lin,
-                        torch.zeros(size=(self.nzp, self.nzu)),
+                        torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
                     ],
                     dim=1,
                 ),
@@ -1602,7 +1603,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.eye(self.nzu),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
             ],
             dim=0,
         ).float()
@@ -1617,7 +1618,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nx, self.nwu)),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.zeros(size=(self.nwp, self.nx)),
@@ -1626,7 +1627,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nwp, self.nwu)),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.eye(self.ny),
@@ -1635,7 +1636,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.ny, self.nwu)),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.zeros(size=(self.nwu, self.nx)),
@@ -1644,7 +1645,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.eye(self.nwu),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
             ],
             dim=0,
         ).float()
@@ -1655,35 +1656,35 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 torch.concat(
                     [
                         Y,
-                        torch.eye(self.nx),
-                        torch.zeros(size=(self.nx, self.nwp)),
-                        torch.zeros(size=(self.nx, self.nwu)),
+                        torch.eye(self.nx).to(self.device),
+                        torch.zeros(size=(self.nx, self.nwp)).to(self.device),
+                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
                 torch.concat(
                     [
-                        torch.eye(self.nx),
+                        torch.eye(self.nx).to(self.device),
                         X,
-                        torch.zeros(size=(self.nx, self.nwp)),
-                        torch.zeros(size=(self.nx, self.nwu)),
+                        torch.zeros(size=(self.nx, self.nwp)).to(self.device),
+                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
                 torch.concat(
                     [
-                        torch.zeros(size=(self.nwp, self.nx)),
-                        torch.zeros(size=(self.nwp, self.nx)),
-                        self.gamma * torch.eye(self.nwp),
-                        torch.zeros(size=(self.nwp, self.nwu)),
+                        torch.zeros(size=(self.nwp, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nwp, self.nx)).to(self.device),
+                        self.gamma**2 * torch.eye(self.nwp).to(self.device),
+                        torch.zeros(size=(self.nwp, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
                 torch.concat(
                     [
-                        torch.zeros(size=(self.nzu, self.nx)),
-                        torch.zeros(size=(self.nzu, self.nx)),
-                        torch.zeros(size=(self.nzu, self.nwp)),
+                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nzu, self.nwp)).to(self.device),
                         Lambda,
                     ],
                     dim=1,
@@ -1696,18 +1697,18 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 torch.concat(
                     [
                         Y,
-                        torch.eye(self.nx),
-                        torch.zeros(size=(self.nx, self.nzp)),
-                        torch.zeros(size=(self.nx, self.nwu)),
+                        torch.eye(self.nx).to(self.device),
+                        torch.zeros(size=(self.nx, self.nzp)).to(self.device),
+                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
                 torch.concat(
                     [
-                        torch.eye(self.nx),
+                        torch.eye(self.nx).to(self.device),
                         X,
-                        torch.zeros(size=(self.nx, self.nzp)),
-                        torch.zeros(size=(self.nx, self.nwu)),
+                        torch.zeros(size=(self.nx, self.nzp)).to(self.device),
+                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
                 ),
@@ -1719,12 +1720,12 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nzp, self.nwu)),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
-                        torch.zeros(size=(self.nzu, self.nx)),
-                        torch.zeros(size=(self.nzu, self.nx)),
-                        torch.zeros(size=(self.nzu, self.nzp)),
+                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                        torch.zeros(size=(self.nzu, self.nzp)).to(self.device),
                         Lambda,
                     ],
                     dim=1,

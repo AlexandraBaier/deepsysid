@@ -2,6 +2,7 @@ import io
 import logging
 import os
 import random
+import zipfile
 from typing import List, Tuple
 
 import numpy as np
@@ -30,6 +31,18 @@ PELICAN_COLUMN_MAPPING = dict(
 )
 PELICAN_SAMPLING_TIME = 0.01
 
+TOY_DATASETS_DOWNLOAD_URL = (
+    'https://ipvs.informatik.uni-stuttgart.de/cloud/s'
+    '/XeLYrHRAaski4Dp/download'
+    '/StableHybridModel_ToyDatasets.zip'
+)
+TOY_DATASET_ZIP_BASE_NAME = 'StableHybridModel_ToyDatasets'
+TOY_DATASET_FOLDERNAMES_DICT = {
+    'cartpole': 'cartpole/initial_state_0_K_100_T_20_u_static_random',
+    'pendulum': 'pendulum/initial_state_0_K_100_T_20_u_static_random',
+    'coupled-msd': 'mass-spring-damper/initial_state_0_K_200_T_30_u_static_random',
+}
+
 INDUSTRIAL_ROBOT_DOWNLOAD_URL = (
     'https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/'
     'Robot_Identification_Benchmark_Without_Raw_Data.rar'
@@ -37,6 +50,26 @@ INDUSTRIAL_ROBOT_DOWNLOAD_URL = (
 INDUSTRIAL_ROBOT_SAMPLING_TIME = 0.1
 
 logger = logging.getLogger(__name__)
+
+
+def download_dataset_toy(target_directory: str) -> None:
+
+    logger.info(
+        f'Downloading toy datasets from "{TOY_DATASETS_DOWNLOAD_URL}". '
+        'This will take some time.'
+    )
+    print(target_directory)
+    target_directory = os.path.expanduser(target_directory)
+    zip_path = os.path.join(target_directory, f'{TOY_DATASET_ZIP_BASE_NAME}.zip')
+    response = requests.get(TOY_DATASETS_DOWNLOAD_URL, stream=True)
+
+    with open(zip_path, mode='wb') as f:
+        for chunk in response.iter_content(chunk_size=128):
+            if chunk:
+                f.write(chunk)
+
+    with zipfile.ZipFile(zip_path, mode='r') as f:
+        f.extractall(target_directory)
 
 
 def download_dataset_4_dof_simulated_ship(

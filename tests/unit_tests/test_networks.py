@@ -107,7 +107,9 @@ def test_lure_forward() -> None:
     def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
         return (2 / beta - alpha) * (torch.tanh(z) - ((alpha + beta) / 2) * z)
 
-    model = LureSystem(*get_lure_matrices(), Delta=Delta_tilde)
+    model = LureSystem(
+        *get_lure_matrices(), Delta=Delta_tilde, device=torch.device('cpu')
+    )
 
     _, x, w = model.forward(x0=x0, us=u, return_states=True)
     y = model.forward(x0=x0, us=u)
@@ -183,6 +185,52 @@ def test_hybrid_linearization_rnn_backward() -> None:
     loss = L(y, y_hat)
     loss.backward()
     opt.step()
+
+
+# def test_hybrid_linearization_rnn_backward_barrier() -> None:
+#     L = torch.nn.MSELoss()
+#     A_lin, B_lin, C_lin, _ = get_linear_matrices()
+#     model = HybridLinearizationRnn(
+#         A_lin=A_lin,
+#         B_lin=B_lin,
+#         C_lin=C_lin,
+#         alpha=0,
+#         beta=1,
+#         nwu=nw,
+#         nzu=nz,
+#         gamma=1.0,
+#     )
+#     model.set_lure_system()
+#     opt = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+#     # y = torch.zeros(size=(n_batch, N, ny))
+#     # u = torch.zeros(size=(n_batch, N, nu))
+#     # u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+#     # x0_lin = torch.zeros(size=(n_batch, nx, 1))
+#     # x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
+#     # x0_rnn = torch.zeros(size=(n_batch, nx, 1))
+#     barrier = model.get_barrier(1)
+#     P = model.get_constraints().detach().numpy()
+#     nxi = 2 * model.nx
+#     nzp = model.nzp
+#     nwp = model.nwp
+#     nzu = model.nzu
+#     nwu = model.nwu
+#     P_lambda = np.zeros((2 * (nxi + nzp + nzu), 2 * (nxi + nzp + nzu)))
+#     P_lambda[nxi + nzp : nxi + nzp + nzu, nxi + nwp : nxi + nwp + nwu] = -np.eye(nwu)
+#     P_lambda[nxi + nzp + nzu + nxi + nzp :, nxi + nwp + nwu + nxi + nwp :] = -np.eye(
+#         nwu
+#     )
+#     P_grad_lambda = -np.trace(P_lambda @ np.linalg.inv(P)) * np.eye(nwu)
+#     barrier.backward()
+#     print(
+#         f'lam grad {model.lam.grad.detach().numpy()}, '
+#         f'P_grad_lam {np.diag(P_grad_lambda)}'
+#     )
+
+#     assert (
+#         np.linalg.norm(torch.diag(model.lam.grad).detach().numpy() - P_grad_lambda)
+#         < 1e-4
+#     )
 
 
 def test_hybrid_linearization_rnn_backward_two_steps() -> None:

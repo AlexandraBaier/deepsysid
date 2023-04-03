@@ -1263,7 +1263,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             nwu=self.nwu,
             nzu=self.nzu,
             gamma=config.gamma,
+            device=self.device,
         ).to(self.device)
+        print(self._predictor.A_lin.device)
         self._predictor.set_lure_system()
 
         self.optimizer_pred = optim.Adam(
@@ -1325,6 +1327,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
                 barrier = self._predictor.get_barrier(t).to(self.device)
                 try:
+                    # barrier.backward()
                     (batch_loss + barrier).backward(retain_graph=True)
                 except RuntimeError as msg:
                     logger.warning(msg)
