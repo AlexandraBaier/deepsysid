@@ -473,6 +473,8 @@ class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self._initializer.eval()
         self._predictor.eval()
 
+        N, _ = control.shape
+
         initial_control = utils.normalize(
             initial_control, self.control_mean, self.control_std
         )
@@ -491,7 +493,11 @@ class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
             _, hx = self._initializer.forward(init_x)
             y, _ = self._predictor.forward(pred_x, hx=hx)
             y_np: NDArray[np.float64] = (
-                y.cpu().detach().squeeze().numpy().astype(np.float64)
+                y.cpu()
+                .detach()
+                .reshape(shape=(N, self.state_dim))
+                .numpy()
+                .astype(np.float64)
             )
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
@@ -1663,6 +1669,8 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
         ):
             raise ValueError('Model has not been trained and cannot simulate.')
 
+        N, _ = control.shape
+
         self._initializer.eval()
         self._predictor.eval()
 
@@ -1686,7 +1694,11 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
             _, hx = self._initializer.forward(init_x)
             y, _ = self._predictor.forward(pred_x, hx=hx)
             y_np: NDArray[np.float64] = (
-                y.cpu().detach().squeeze().numpy().astype(np.float64)
+                y.cpu()
+                .detach()
+                .reshape(shape=(N, self.state_dim))
+                .numpy()
+                .astype(np.float64)
             )
 
         y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
