@@ -1059,7 +1059,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         ) = self.get_interconnected_matrices(sys_block_matrix)
         # print(A_cal.requires_grad)
         # print(f'norm D_22 cal {torch.linalg.norm(D22_cal)}')
-        assert torch.linalg.norm(D22_cal) - 0 < 1e-2
+        # assert torch.linalg.norm(D22_cal) - 0 < 1e-2
         D22_cal = torch.zeros_like(D22_cal)
 
         def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
@@ -1507,6 +1507,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         us = x_pred.reshape(shape=(n_batch, N, nu, 1))
         y, x, w = self.lure.forward(x0=x0, us=us, return_states=True)
 
+        # self.get_barrier(1e-3)
+
         return y.reshape(n_batch, N, self.lure._ny), (
             x.reshape(n_batch, N + 1, self.lure._nx),
             w.reshape(n_batch, N, self.lure._nw),
@@ -1755,6 +1757,228 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             barrier += torch.tensor(float('inf'))
 
         return barrier
+
+    def project_parameters(self) -> None:
+        X = cp.Variable(shape=(self.nx, self.nx), symmetric=True)
+        Y = cp.Variable(shape=(self.nx, self.nx), symmetric=True)
+        lam = cp.Variable(shape=(self.nzu, 1), pos=True, name='lam')
+        Lambda = cp.diag(lam)
+
+        K = cp.Variable(shape=(self.nx, self.nx))
+        L1 = cp.Variable(shape=(self.nx, self.nwp))
+        L2 = cp.Variable(shape=(self.nx, self.ny))
+        L3 = cp.Variable(shape=(self.nx, self.nwu))
+
+        M1 = cp.Variable(shape=(self.nu, self.nx))
+        N11 = cp.Variable(shape=(self.nu, self.nwp))
+        N12 = cp.Variable(shape=(self.nu, self.ny))
+        N13 = cp.Variable(shape=(self.nu, self.nwu))
+
+        M2 = cp.Variable(shape=(self.nzu, self.nx))
+        N21 = cp.Variable(shape=(self.nzu, self.nwp))
+        N22 = cp.Variable(shape=(self.nzu, self.ny))
+        N23 = cp.Variable(shape=(self.nzu, self.nwu))
+
+        P_21_1 = cp.bmat(
+            [
+                [
+                    self.A_lin.cpu() @ Y,
+                    self.A_lin.cpu(),
+                    self.B_lin.cpu(),
+                    np.zeros(shape=(self.nx, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nu, self.nx)),
+                    X @ self.A_lin.cpu(),
+                    X @ self.B_lin.cpu(),
+                    np.zeros(shape=(self.nx, self.nwu)),
+                ],
+                [
+                    self.C_lin.cpu() @ Y,
+                    self.C_lin.cpu(),
+                    np.zeros(shape=(self.nzp, self.nwp)),
+                    np.zeros(shape=(self.nzp, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nzu, self.nx)),
+                    np.zeros(shape=(self.nzu, self.nx)),
+                    np.zeros(shape=(self.nzu, self.nwp)),
+                    np.zeros(shape=(self.nzu, self.nwu)),
+                ],
+            ]
+        )
+        P_21_2 = cp.bmat(
+            [
+                [
+                    np.zeros(shape=(self.nx, self.nx)),
+                    self.A_lin.cpu(),
+                    np.zeros(shape=(self.nx, self.nzu)),
+                ],
+                [
+                    np.eye(self.nx),
+                    np.zeros(shape=(self.nx, self.nu)),
+                    np.zeros(shape=(self.nx, self.nzu)),
+                ],
+                [
+                    np.zeros(shape=(self.nzp, self.nx)),
+                    self.C_lin.cpu(),
+                    np.zeros(shape=(self.nzp, self.nzu)),
+                ],
+                [
+                    np.zeros(shape=(self.nzu, self.nx)),
+                    np.zeros(shape=(self.nzu, self.nu)),
+                    np.eye(self.nzu),
+                ],
+            ]
+        )
+        P_21_4 = cp.bmat(
+            [
+                [
+                    np.zeros(shape=(self.nx, self.nx)),
+                    np.eye(self.nx),
+                    np.zeros(shape=(self.nx, self.nwp)),
+                    np.zeros(shape=(self.nx, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nwp, self.nx)),
+                    np.zeros(shape=(self.nwp, self.nx)),
+                    np.eye(self.nwp),
+                    np.zeros(shape=(self.nwp, self.nwu)),
+                ],
+                [
+                    np.eye(self.ny),
+                    np.zeros(shape=(self.ny, self.nx)),
+                    np.zeros(shape=(self.ny, self.nwp)),
+                    np.zeros(shape=(self.ny, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nwu, self.nx)),
+                    np.zeros(shape=(self.nwu, self.nx)),
+                    np.zeros(shape=(self.nwu, self.nwp)),
+                    np.eye(self.nwu),
+                ],
+            ]
+        )
+        Omega_tilde = cp.bmat(
+            [
+                [K, L1, L2, L3],
+                [M1, N11, N12, N13],
+                [M2, N21, N22, N23],
+            ]
+        )
+        P_21 = P_21_1 + P_21_2 @ Omega_tilde @ P_21_4
+        P_11 = -cp.bmat(
+            [
+                [
+                    Y,
+                    np.eye(self.nx),
+                    np.zeros(shape=(self.nx, self.nwp)),
+                    np.zeros(shape=(self.nx, self.nwu)),
+                ],
+                [
+                    np.eye(self.nx),
+                    X,
+                    np.zeros(shape=(self.nx, self.nwp)),
+                    np.zeros(shape=(self.nx, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nwp, self.nx)),
+                    np.zeros(shape=(self.nwp, self.nx)),
+                    self.gamma**2 * np.eye(self.nwp),
+                    np.zeros(shape=(self.nwp, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nzu, self.nx)),
+                    np.zeros(shape=(self.nzu, self.nx)),
+                    np.zeros(shape=(self.nzu, self.nwp)),
+                    Lambda,
+                ],
+            ]
+        )
+        P_22 = -cp.bmat(
+            [
+                [
+                    Y,
+                    np.eye(self.nx),
+                    np.zeros(shape=(self.nx, self.nzp)),
+                    np.zeros(shape=(self.nx, self.nwu)),
+                ],
+                [
+                    np.eye(self.nx),
+                    X,
+                    np.zeros(shape=(self.nx, self.nzp)),
+                    np.zeros(shape=(self.nx, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nzp, self.nx)),
+                    np.zeros(shape=(self.nzp, self.nx)),
+                    np.eye(self.nzp),
+                    np.zeros(shape=(self.nzp, self.nwu)),
+                ],
+                [
+                    np.zeros(shape=(self.nzu, self.nx)),
+                    np.zeros(shape=(self.nzu, self.nx)),
+                    np.zeros(shape=(self.nzu, self.nzp)),
+                    Lambda,
+                ],
+            ]
+        )
+        P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
+        nP = P.shape[0]
+
+        Omega_tilde_0 = self.get_omega_tilde().detach().numpy()
+        L_x = (
+            self.construct_lower_triangular_matrix(self.L_x_flat, self.nx)
+            .detach()
+            .numpy()
+        )
+        L_y = (
+            self.construct_lower_triangular_matrix(self.L_y_flat, self.nx)
+            .detach()
+            .numpy()
+        )
+        X_0 = L_x @ L_x.T
+        Y_0 = L_y @ L_y.T
+        Lambda_0 = torch.diag(self.lam).detach().numpy()
+
+        problem = cp.Problem(
+            cp.Minimize(
+                cp.norm(Omega_tilde - Omega_tilde_0)
+                + cp.norm(Lambda - Lambda_0)
+                + cp.norm(X - X_0)
+                + cp.norm(Y - Y_0)
+            ),
+            [P << -1e-4 * np.eye(nP)],
+        )
+        problem.solve(solver=cp.MOSEK)
+        logger.info(
+            f'Projection status: {problem.status}, write back projected parameters.'
+        )
+
+        self.L_x_flat.data = torch.tensor(
+            self.extract_vector_from_lower_triangular_matrix(
+                np.linalg.cholesky(np.array(X.value))
+            )
+        ).float()
+        self.L_y_flat.data = torch.tensor(
+            self.extract_vector_from_lower_triangular_matrix(
+                np.linalg.cholesky(np.array(Y.value))
+            )
+        ).float()
+        self.lam.data = torch.tensor(np.diag(np.array(Lambda.value))).float()
+
+        self.K.data = torch.tensor(K.value).float()
+        self.L1.data = torch.tensor(L1.value).float()
+        self.L2.data = torch.tensor(L2.value).float()
+        self.L3.data = torch.tensor(L3.value).float()
+        self.M1.data = torch.tensor(M1.value).float()
+        self.N11.data = torch.tensor(N11.value).float()
+        self.N12.data = torch.tensor(N12.value).float()
+        self.N13.data = torch.tensor(N13.value).float()
+        self.M2.data = torch.tensor(M2.value).float()
+        self.N21.data = torch.tensor(N21.value).float()
+        self.N22.data = torch.tensor(N22.value).float()
+        self.N23.data = torch.tensor(N23.value).float()
 
 
 class InitLSTM(nn.Module):

@@ -407,3 +407,21 @@ def test_hybrid_linearization_rnn_extract_vector_from_lower_triangular_matrix() 
     L_flat = model.extract_vector_from_lower_triangular_matrix(L)
 
     assert np.linalg.norm(L_test - L_flat) < 1e-10
+
+
+def test_hybrid_linearization_rnn_projection() -> None:
+    A_lin, B_lin, C_lin, _ = get_linear_matrices()
+    model = HybridLinearizationRnn(
+        A_lin=A_lin,
+        B_lin=B_lin,
+        C_lin=C_lin,
+        alpha=0,
+        beta=1,
+        nwu=nw,
+        nzu=nz,
+        gamma=1.0,
+    )
+    model.K.data = model.K.data + torch.eye(model.nx) * 20.0
+    assert not model.check_constraints()
+    model.project_parameters()
+    assert model.check_constraints()

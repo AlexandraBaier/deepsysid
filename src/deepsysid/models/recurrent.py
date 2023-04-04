@@ -1223,6 +1223,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     clip_gradient_norm: float
+    enforce_constraints_method: Literal['barrier', 'projection']
 
 
 class HybridConstrainedRnn(base.NormalizedControlStateModel):
@@ -1254,6 +1255,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.batch_size = config.batch_size
         self.epochs_initializer = config.epochs_initializer
         self.epochs_predictor = config.epochs_predictor
+        self.enforce_constraints_method = config.enforce_constraints_method
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -1304,12 +1306,15 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         barrier_value: List[np.float64] = []
         gradient_norm: List[np.float64] = []
         t = self.initial_decay_parameter
+        steps_without_projection = 50
+        steps_without_loss_decrease = 0
+        old_loss: torch.Tensor = torch.tensor(100.0)
 
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
             )
-            total_loss = 0.0
+            total_loss: torch.Tensor = torch.tensor(0.0)
             max_grad = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self._predictor.zero_grad()
@@ -1333,8 +1338,13 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
                 barrier = self._predictor.get_barrier(t).to(self.device)
                 try:
-                    # barrier.backward()
-                    (batch_loss + barrier).backward(retain_graph=True)
+                    if self.enforce_constraints_method == 'barrier':
+                        (batch_loss + barrier).backward(retain_graph=True)
+                    elif self.enforce_constraints_method == 'projection':
+                        batch_loss.backward()
+
+                    else:
+                        raise NotImplementedError
                 except RuntimeError as msg:
                     logger.warning(msg)
                     logger.info('Stop training, due to a runtime error.')
@@ -1363,20 +1373,22 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 max_grad += max(grads_norm)
 
                 self.optimizer_pred.step()
-                if not self._predictor.check_constraints():
-                    logger.info(
-                        f'Batch {batch_idx}, Epoch {i+1}'
-                        f'Constraints are not satisfied anymore.\t'
-                    )
-                    time_end_pred = time.time()
-                    time_total_pred = time_end_pred - time_start_pred
-                    return dict(
-                        index=np.asarray(i),
-                        epoch_loss_predictor=np.asarray(predictor_loss),
-                        barrier_value=np.asarray(barrier_value),
-                        gradient_norm=np.asarray(gradient_norm),
-                        training_time_predictor=np.asarray(time_total_pred),
-                    )
+
+                if self.enforce_constraints_method == 'barrier':
+                    if not self._predictor.check_constraints():
+                        logger.info(
+                            f'Batch {batch_idx}, Epoch {i+1}\t'
+                            f'Constraints are not satisfied anymore.\t'
+                        )
+                        time_end_pred = time.time()
+                        time_total_pred = time_end_pred - time_start_pred
+                        return dict(
+                            index=np.asarray(i),
+                            epoch_loss_predictor=np.asarray(predictor_loss),
+                            barrier_value=np.asarray(barrier_value),
+                            gradient_norm=np.asarray(gradient_norm),
+                            training_time_predictor=np.asarray(time_total_pred),
+                        )
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
@@ -1388,10 +1400,36 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             barrier_value.append(barrier.cpu().detach().numpy())
             gradient_norm.append(np.float64(max_grad))
 
+            if self.enforce_constraints_method == 'projection':
+                if (
+                    i % steps_without_projection == 0
+                    and i > 0
+                    and not self._predictor.check_constraints()
+                ):
+                    self._predictor.project_parameters()
+                    self._predictor.set_lure_system()
+                    if old_loss - total_loss.detach().numpy() < 0:
+                        steps_without_loss_decrease += 1
+                    if steps_without_loss_decrease > 10:
+                        logger.info(
+                            f'Batch {batch_idx}, Epoch {i+1}'
+                            f'Loss is not decreasing after projection.\t'
+                        )
+                        time_end_pred = time.time()
+                        time_total_pred = time_end_pred - time_start_pred
+                        return dict(
+                            index=np.asarray(i),
+                            epoch_loss_predictor=np.asarray(predictor_loss),
+                            barrier_value=np.asarray(barrier_value),
+                            gradient_norm=np.asarray(gradient_norm),
+                            training_time_predictor=np.asarray(time_total_pred),
+                        )
+                    old_loss = total_loss.detach().numpy()
             # decay t following the idea of interior point methods
-            if i % self.epochs_with_const_decay == 0 and i != 0:
-                t = t * 1 / self.decay_rate
-                logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+            elif self.enforce_constraints_method == 'barrier':
+                if i % self.epochs_with_const_decay == 0 and i != 0:
+                    t = t * 1 / self.decay_rate
+                    logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
         time_end_pred = time.time()
         time_total_pred = time_end_pred - time_start_pred
         logger.info(f'Training time for predictor {time_total_pred}s')
