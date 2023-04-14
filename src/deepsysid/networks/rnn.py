@@ -1926,6 +1926,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
         nP = P.shape[0]
 
+        device = self.get_omega_tilde().device
         Omega_tilde_0 = self.get_omega_tilde().cpu().detach().numpy()
         L_x = (
             self.construct_lower_triangular_matrix(self.L_x_flat, self.nx)
@@ -1957,30 +1958,38 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             f'Projection status: {problem.status}, write back projected parameters.'
         )
 
-        self.L_x_flat.data = torch.tensor(
-            self.extract_vector_from_lower_triangular_matrix(
-                np.linalg.cholesky(np.array(X.value))
+        self.L_x_flat.data = (
+            torch.tensor(
+                self.extract_vector_from_lower_triangular_matrix(
+                    np.linalg.cholesky(np.array(X.value))
+                )
             )
-        ).float()
-        self.L_y_flat.data = torch.tensor(
-            self.extract_vector_from_lower_triangular_matrix(
-                np.linalg.cholesky(np.array(Y.value))
+            .float()
+            .to(device)
+        )
+        self.L_y_flat.data = (
+            torch.tensor(
+                self.extract_vector_from_lower_triangular_matrix(
+                    np.linalg.cholesky(np.array(Y.value))
+                )
             )
-        ).float()
-        self.lam.data = torch.tensor(np.diag(np.array(Lambda.value))).float()
+            .float()
+            .to(device)
+        )
+        self.lam.data = torch.tensor(np.diag(np.array(Lambda.value))).float().to(device)
 
-        self.K.data = torch.tensor(K.value).float()
-        self.L1.data = torch.tensor(L1.value).float()
-        self.L2.data = torch.tensor(L2.value).float()
-        self.L3.data = torch.tensor(L3.value).float()
-        self.M1.data = torch.tensor(M1.value).float()
-        self.N11.data = torch.tensor(N11.value).float()
-        self.N12.data = torch.tensor(N12.value).float()
-        self.N13.data = torch.tensor(N13.value).float()
-        self.M2.data = torch.tensor(M2.value).float()
-        self.N21.data = torch.tensor(N21.value).float()
-        self.N22.data = torch.tensor(N22.value).float()
-        self.N23.data = torch.tensor(N23.value).float()
+        self.K.data = torch.tensor(K.value).float().to(device)
+        self.L1.data = torch.tensor(L1.value).float().to(device)
+        self.L2.data = torch.tensor(L2.value).float().to(device)
+        self.L3.data = torch.tensor(L3.value).float().to(device)
+        self.M1.data = torch.tensor(M1.value).float().to(device)
+        self.N11.data = torch.tensor(N11.value).float().to(device)
+        self.N12.data = torch.tensor(N12.value).float().to(device)
+        self.N13.data = torch.tensor(N13.value).float().to(device)
+        self.M2.data = torch.tensor(M2.value).float().to(device)
+        self.N21.data = torch.tensor(N21.value).float().to(device)
+        self.N22.data = torch.tensor(N22.value).float().to(device)
+        self.N23.data = torch.tensor(N23.value).float().to(device)
 
 
 class InitLSTM(nn.Module):
