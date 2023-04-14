@@ -1307,7 +1307,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         barrier_value: List[np.float64] = []
         gradient_norm: List[np.float64] = []
         t = self.initial_decay_parameter
-        steps_without_projection = 50
+        steps_without_projection = self.epochs_without_projection
         steps_without_loss_decrease = 0
         old_loss: torch.Tensor = torch.tensor(100.0)
 
