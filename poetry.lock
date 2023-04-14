@@ -374,18 +374,18 @@ test = ["pytest (>=6)"]
 
 [[package]]
 name = "filelock"
-version = "3.10.7"
+version = "3.11.0"
 description = "A platform independent file lock."
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "filelock-3.10.7-py3-none-any.whl", hash = "sha256:bde48477b15fde2c7e5a0713cbe72721cb5a5ad32ee0b8f419907960b9d75536"},
-    {file = "filelock-3.10.7.tar.gz", hash = "sha256:892be14aa8efc01673b5ed6589dbccb95f9a8596f0507e232626155495c18105"},
+    {file = "filelock-3.11.0-py3-none-any.whl", hash = "sha256:f08a52314748335c6460fc8fe40cd5638b85001225db78c2aa01c8c0db83b318"},
+    {file = "filelock-3.11.0.tar.gz", hash = "sha256:3618c0da67adcc0506b015fd11ef7faf1b493f0b40d87728e19986b536890c37"},
 ]
 
 [package.extras]
-docs = ["furo (>=2022.12.7)", "sphinx (>=6.1.3)", "sphinx-autodoc-typehints (>=1.22,!=1.23.4)"]
+docs = ["furo (>=2023.3.27)", "sphinx (>=6.1.3)", "sphinx-autodoc-typehints (>=1.22,!=1.23.4)"]
 testing = ["covdefaults (>=2.3)", "coverage (>=7.2.2)", "diff-cover (>=7.5)", "pytest (>=7.2.2)", "pytest-cov (>=4)", "pytest-mock (>=3.10)", "pytest-timeout (>=2.1)"]
 
 [[package]]
@@ -716,14 +716,14 @@ scipy = ">=0.13.2"
 
 [[package]]
 name = "packaging"
-version = "23.0"
+version = "23.1"
 description = "Core utilities for Python packages"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "packaging-23.0-py3-none-any.whl", hash = "sha256:714ac14496c3e68c99c29b00845f7a2b85f3bb6f1078fd9f72fd20f0570002b2"},
-    {file = "packaging-23.0.tar.gz", hash = "sha256:b6ad297f8907de0fa2fe1ccbd26fdaf387f5f47c7275fedf8cce89f99446cf97"},
+    {file = "packaging-23.1-py3-none-any.whl", hash = "sha256:994793af429502c4ea2ebf6bf664629d07c1a9fe974af92966e4b8d2df7edc61"},
+    {file = "packaging-23.1.tar.gz", hash = "sha256:a392980d2b6cffa644431898be54b0045151319d1e7ec34f0cfed48767dd334f"},
 ]
 
 [[package]]
@@ -982,18 +982,17 @@ files = [
 
 [[package]]
 name = "pytest"
-version = "7.2.2"
+version = "7.3.0"
 description = "pytest: simple powerful testing with Python"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pytest-7.2.2-py3-none-any.whl", hash = "sha256:130328f552dcfac0b1cec75c12e3f005619dc5f874f0a06e8ff7263f0ee6225e"},
-    {file = "pytest-7.2.2.tar.gz", hash = "sha256:c99ab0c73aceb050f68929bc93af19ab6db0558791c6a0715723abe9d0ade9d4"},
+    {file = "pytest-7.3.0-py3-none-any.whl", hash = "sha256:933051fa1bfbd38a21e73c3960cebdad4cf59483ddba7696c48509727e17f201"},
+    {file = "pytest-7.3.0.tar.gz", hash = "sha256:58ecc27ebf0ea643ebfdf7fb1249335da761a00c9f955bcd922349bcb68ee57d"},
 ]
 
 [package.dependencies]
-attrs = ">=19.2.0"
 colorama = {version = "*", markers = "sys_platform == \"win32\""}
 exceptiongroup = {version = ">=1.0.0rc8", markers = "python_version < \"3.11\""}
 iniconfig = "*"
@@ -1002,7 +1001,7 @@ pluggy = ">=0.12,<2.0"
 tomli = {version = ">=1.0.0", markers = "python_version < \"3.11\""}
 
 [package.extras]
-testing = ["argcomplete", "hypothesis (>=3.56)", "mock", "nose", "pygments (>=2.7.2)", "requests", "xmlschema"]
+testing = ["argcomplete", "attrs (>=19.2.0)", "hypothesis (>=3.56)", "mock", "nose", "pygments (>=2.7.2)", "requests", "xmlschema"]
 
 [[package]]
 name = "python-dateutil"
@@ -1083,31 +1082,31 @@ files = [
 
 [[package]]
 name = "qdldl"
-version = "0.1.5.post3"
+version = "0.1.7"
 description = "QDLDL, a free LDL factorization routine."
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "qdldl-0.1.5.post3-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:68e5bb0f9208024109a8e4b1df7079a35f0d6566df2e89e52770773a3d5a9fc9"},
-    {file = "qdldl-0.1.5.post3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f788112765fa9b696a76d353c98b922dcf2b89d7b0d0c08f22d1a3777ed0c5bd"},
-    {file = "qdldl-0.1.5.post3-cp310-cp310-win_amd64.whl", hash = "sha256:77edf89cf6ac1072180e5715c281a77c976d210126f8f561dbceb360ca537cec"},
-    {file = "qdldl-0.1.5.post3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:1f06f4b471062db4944091e04ed4bd4d03284709af0d0b5d2628e5e8561fd2f0"},
-    {file = "qdldl-0.1.5.post3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:968ececcc286a8c821271eba455beda03c2f9b4e302ad44913a454e171d718b2"},
-    {file = "qdldl-0.1.5.post3-cp311-cp311-win_amd64.whl", hash = "sha256:c78b4581d88725f96e55be80ce4d40bf33160dff4c1e4db6390e524cac396354"},
-    {file = "qdldl-0.1.5.post3-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:f36babe00b8a6a08de0036463dfdd1c0507373ff38533d0668d76dff36bd6c08"},
-    {file = "qdldl-0.1.5.post3-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a8f1d2bf5041fe35ce51585096e9061fc90c5d5cd42dc641d6436a16dc08983f"},
-    {file = "qdldl-0.1.5.post3-cp36-cp36m-win_amd64.whl", hash = "sha256:809f1a15a5a8c7b0f1e679d52b7078f6aaba1401fa50e6513f170f8989ac0477"},
-    {file = "qdldl-0.1.5.post3-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:949e545fa7b6bdb056a5e1d077307ecbd32e8ef03035f2ff25af6f38c18dab34"},
-    {file = "qdldl-0.1.5.post3-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4a5e1bea993e2dcd72ac8e368aa20e1741b6ac45c4a2cc3a8feb6acf6a80f959"},
-    {file = "qdldl-0.1.5.post3-cp37-cp37m-win_amd64.whl", hash = "sha256:925c17bc75c3052d77613e435139c5c8084d4d68f81661711cbbf42645dd11bf"},
-    {file = "qdldl-0.1.5.post3-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:126c0ae50d63d377869a63551b6e69af1532605f545720eb699f04dfaea1c5ca"},
-    {file = "qdldl-0.1.5.post3-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:82a496a900a16a9339f0ef315c960326b037fab243a2f01135f84b27155d10e0"},
-    {file = "qdldl-0.1.5.post3-cp38-cp38-win_amd64.whl", hash = "sha256:2d9bf5f35f49defa5a16f13d5a5bc427caab106515bcb0731340781b76416c95"},
-    {file = "qdldl-0.1.5.post3-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:ae796af01bca29c54d19f5c5b343d06a20ad557280232498982e5bd27556c4b8"},
-    {file = "qdldl-0.1.5.post3-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2459024755f370eb83b27cb56026963ff137de7c9a2b303ffb16682c63ae6763"},
-    {file = "qdldl-0.1.5.post3-cp39-cp39-win_amd64.whl", hash = "sha256:fdc475adb23ab765248db16cca9913a059faf793d7dc721c0162cecbeda39943"},
-    {file = "qdldl-0.1.5.post3.tar.gz", hash = "sha256:69c092f6e1fc23fb779a80a62e6fcdfe2eba05c925860248c4d6754f4736938f"},
+    {file = "qdldl-0.1.7-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:b82a44fc9822655c44a85e83de34c26fe5819e12dc498f62b1c0bc492b1ef539"},
+    {file = "qdldl-0.1.7-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d01706f31cadcf5035198922ccdf6507b96de5b97d3968bd5b8e0f42cde7deb3"},
+    {file = "qdldl-0.1.7-cp310-cp310-win_amd64.whl", hash = "sha256:3f3f5062c070f3b2716d32f05576c2d33cb6dae4da5a1d6054634ad6c84667b3"},
+    {file = "qdldl-0.1.7-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:64cd7c3b01bdc3fc0dafbbaac486beef5ca514ee2ef742e78d53a9dd291f1582"},
+    {file = "qdldl-0.1.7-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9b6ab860d32c66b64e4cb99fc78c757a3c8df5ac8f936924bd3d74bc3a90b2bd"},
+    {file = "qdldl-0.1.7-cp311-cp311-win_amd64.whl", hash = "sha256:2fb7c0f6bd45cd6282286aedb0bd2d74eb1fa31e61b72084c875abcad32d4b08"},
+    {file = "qdldl-0.1.7-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:3cadfb7d27a0e6f15d9fe5877c5d92dcae2bf2fb21bd2c014561845dd9e626ea"},
+    {file = "qdldl-0.1.7-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1f84dbd18f687a997a8a587e9b1e96671d6cfff5058c1cc77060f3efc2d47d02"},
+    {file = "qdldl-0.1.7-cp36-cp36m-win_amd64.whl", hash = "sha256:26d8a6c665a5c382c8a5d768e7e024ae85259e85db894363914366a258eb528c"},
+    {file = "qdldl-0.1.7-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:193422519eb5e003a8eada5f4d083f44c72cb36fd084ad283e8f6b01e1baf00a"},
+    {file = "qdldl-0.1.7-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7df01e253cb034f58f76a4d032c9e1bde769377ed67e0091a8e202ab9b2261d6"},
+    {file = "qdldl-0.1.7-cp37-cp37m-win_amd64.whl", hash = "sha256:09561896e194c44f49301f3df236d517a10ac6f9f814595172af17e01f55f172"},
+    {file = "qdldl-0.1.7-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:3210eadf24a674e63f82df7a042fc98b4ca19931f903aa5ed92d0566b476c5d0"},
+    {file = "qdldl-0.1.7-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3582fa07f567de0f28e4faa32cc00315cc400aed53b35ad6f0593261eaaaf417"},
+    {file = "qdldl-0.1.7-cp38-cp38-win_amd64.whl", hash = "sha256:1d21d4f931574ed33890966febc4799ed6adffdb097203af0086afc80019015c"},
+    {file = "qdldl-0.1.7-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:a3baacd244cc57251f80cc3682c06f0590317f1841f4d7a5d91f47793fb1aa9d"},
+    {file = "qdldl-0.1.7-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5caa5fddea56ef0a459f12feef02841ac544ed7ee875543231737005795f6e19"},
+    {file = "qdldl-0.1.7-cp39-cp39-win_amd64.whl", hash = "sha256:5d55855ae06ba6150585420b67679d0d3361b3e5f88495625f8c4f35caaabc90"},
+    {file = "qdldl-0.1.7.tar.gz", hash = "sha256:6c86639d11e301e78af2cce885249a286f675cce96d0e6d60f5b14f859d0f10e"},
 ]
 
 [package.dependencies]
@@ -1232,31 +1231,28 @@ test = ["asv", "gmpy2", "mpmath", "pytest", "pytest-cov", "pytest-xdist", "sciki
 
 [[package]]
 name = "scs"
-version = "3.2.2"
+version = "3.2.3"
 description = "scs: splitting conic solver"
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "scs-3.2.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:14ffecb2e09811f976ae3957ffdf482d9e9fa3224c671028146925c9f226a3f9"},
-    {file = "scs-3.2.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9d631cfac998b9fbb7173059e62ceae95367de261e002c146fa991363996e7f1"},
-    {file = "scs-3.2.2-cp310-cp310-win_amd64.whl", hash = "sha256:324bb179191291a93bcb798dac04375c7b5b66aa6b868f9155887ecc629084da"},
-    {file = "scs-3.2.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:a5877bc447a84e6ad0538376d9783496bec1cd78d0c5b0e92c0867cc09b817aa"},
-    {file = "scs-3.2.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:70458d8e1c729ce447386caa001b48c61c21ab937b531ad0345b792de8f45a6e"},
-    {file = "scs-3.2.2-cp311-cp311-win_amd64.whl", hash = "sha256:502681de679db3d03906f4d04b0360d20e269d84e31a09b0723b16a0917c5d9b"},
-    {file = "scs-3.2.2-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:4934a88363bef6797ea46024b5a9182b3c5ce1e8f03f6534a8516fdc1f08966c"},
-    {file = "scs-3.2.2-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:280679c2610c66892f8b41c04045eb45084241f6b8f99c933e5172e5564026d8"},
-    {file = "scs-3.2.2-cp36-cp36m-win_amd64.whl", hash = "sha256:bb5ace2196525d29ebf37a421513eed8b06e1966c568e3a8d003a13d7186d9a7"},
-    {file = "scs-3.2.2-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:700732c009ebc2244be129663667d6e7bc1db22926ddb12559b229f97d11ef36"},
-    {file = "scs-3.2.2-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6df4c5b1bf9a14f8c092bf555bd0be00593658cabe6b4ac218c5f255c2612de9"},
-    {file = "scs-3.2.2-cp37-cp37m-win_amd64.whl", hash = "sha256:e2f0ef31ca1dd53bb7431521640820a1181f4f61bdf6c5f8af28a160af1660c7"},
-    {file = "scs-3.2.2-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:91012aa6e1597aa02a73356f4d3d14e9e0628741b3d437462f6d9f3e59ffb209"},
-    {file = "scs-3.2.2-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:341acbc6cb82da17a65b19fd4eb345752410c8b9d27e70d1b867078a77937e53"},
-    {file = "scs-3.2.2-cp38-cp38-win_amd64.whl", hash = "sha256:81ff652616520cdbed23e337d19a660dea09b97fff6aa27a278c89e5695bb8aa"},
-    {file = "scs-3.2.2-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:a436227d9e71bc3510ef67cf3b4921af1ea8d79486cd538059af91ea89d78601"},
-    {file = "scs-3.2.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ca69d8121cc21a5f0334ce0615a4c995be6f9044ea40dd4124f2a69c7f20ed56"},
-    {file = "scs-3.2.2-cp39-cp39-win_amd64.whl", hash = "sha256:d6b69c800f8aea092b66524b0f8c145515462fc013d5a79a8a3083d9535d64db"},
-    {file = "scs-3.2.2.tar.gz", hash = "sha256:7206a2ad27ca031d693d65cbcbcfc661498f3983838079a66579bcc784b25293"},
+    {file = "scs-3.2.3-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9d7f7fd2d2cd88938c159b15e8915d9536610e50a9c34ecf36ce0290807afe55"},
+    {file = "scs-3.2.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:368194620918301bf5309a35a7cd0444f1b1992b182c0a29033c26eb97b3dcb2"},
+    {file = "scs-3.2.3-cp310-cp310-win_amd64.whl", hash = "sha256:2d835a74c283be73bff6e1978d3ae77a60d9e87db1fdd12916464fa2a1dda517"},
+    {file = "scs-3.2.3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:81511fda3254c0d29089443dcd2305e81d203509e4d77afd160e9174b15ad75a"},
+    {file = "scs-3.2.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:715ca4532de39b462bd393f9e8b4bf57be4122e20f0780d00db3cab1450a585d"},
+    {file = "scs-3.2.3-cp311-cp311-win_amd64.whl", hash = "sha256:fcf4b985a787135b3e83682a4c5b9bce9c6290cfead1d7225c38f34f5ead7187"},
+    {file = "scs-3.2.3-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:91f5194cfabe354c9b1f0ea1de82114028d81c5a4a633177b8da2fe36f301758"},
+    {file = "scs-3.2.3-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c0d15f21e9053c5df37dab0d700da55fcc71f2f454748f364b9de594988b2ab3"},
+    {file = "scs-3.2.3-cp37-cp37m-win_amd64.whl", hash = "sha256:6a80727167ad73151ced202a1ac6c0c7644b00b2e2607edec8a8807fc0443ac8"},
+    {file = "scs-3.2.3-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:79d7d6c42ee636821460d317b8250945ce04363a47a63aef6b1eae0bd7a418fc"},
+    {file = "scs-3.2.3-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e6f64d23247797cfa289095fb5ddea6eeff5adf98961e953da90233278827e0c"},
+    {file = "scs-3.2.3-cp38-cp38-win_amd64.whl", hash = "sha256:9a14a7c80efb34b469eb4dbaf26a9104dd2ca93e477985f948d8f28cd4b1a2ba"},
+    {file = "scs-3.2.3-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:3eb601738b260e3dcad117f3e02aceaca5d1e8eac2be225be1c0f9cbf83e75cb"},
+    {file = "scs-3.2.3-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f1b24176de97ecedf698596086f85da6dad472fe38a4b21cf4b460f87cae2c37"},
+    {file = "scs-3.2.3-cp39-cp39-win_amd64.whl", hash = "sha256:ddaa5af34a0e1f636d312eb1901bd407383f0b04dda50fba7242d56e618c0966"},
+    {file = "scs-3.2.3.tar.gz", hash = "sha256:e3bd779e7e977e3ae5a2f2035aa4c2a309e29082d59a722d5d6592edc4bdb4b3"},
 ]
 
 [package.dependencies]

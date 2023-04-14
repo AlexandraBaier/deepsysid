@@ -1926,7 +1926,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
         nP = P.shape[0]
 
-        Omega_tilde_0 = self.get_omega_tilde().detach().numpy()
+        Omega_tilde_0 = self.get_omega_tilde().cpu().detach().numpy()
         L_x = (
             self.construct_lower_triangular_matrix(self.L_x_flat, self.nx)
             .detach()
@@ -1939,7 +1939,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         )
         X_0 = L_x @ L_x.T
         Y_0 = L_y @ L_y.T
-        Lambda_0 = torch.diag(self.lam).detach().numpy()
+        Lambda_0 = torch.diag(self.lam).cpu().detach().numpy()
 
         problem = cp.Problem(
             cp.Minimize(
