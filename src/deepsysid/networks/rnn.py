@@ -1929,11 +1929,13 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         Omega_tilde_0 = self.get_omega_tilde().cpu().detach().numpy()
         L_x = (
             self.construct_lower_triangular_matrix(self.L_x_flat, self.nx)
+            .cpu()
             .detach()
             .numpy()
         )
         L_y = (
             self.construct_lower_triangular_matrix(self.L_y_flat, self.nx)
+            .cpu()
             .detach()
             .numpy()
         )

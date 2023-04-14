@@ -1273,7 +1273,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             gamma=config.gamma,
             device=self.device,
         ).to(self.device)
-        print(self._predictor.A_lin.device)
         self._predictor.set_lure_system()
 
         self.optimizer_pred = optim.Adam(
