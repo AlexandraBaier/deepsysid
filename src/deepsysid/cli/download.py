@@ -58,7 +58,6 @@ def download_dataset_toy(target_directory: str) -> None:
         f'Downloading toy datasets from "{TOY_DATASETS_DOWNLOAD_URL}". '
         'This will take some time.'
     )
-    print(target_directory)
     target_directory = os.path.expanduser(target_directory)
     zip_path = os.path.join(target_directory, f'{TOY_DATASET_ZIP_BASE_NAME}.zip')
     response = requests.get(TOY_DATASETS_DOWNLOAD_URL, stream=True)

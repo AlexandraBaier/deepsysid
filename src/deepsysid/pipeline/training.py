@@ -37,7 +37,7 @@ def train_model(
     # Initialize model
     model = initialize_model(configuration, model_name, device_name)
     # Train model
-    logger.info(f'Training model on {device_name} if implemented.')
+    logger.info(f'Training model {model_name} on {device_name} if implemented.')
     metadata = model.train(
         control_seqs=controls, state_seqs=states, initial_seqs=initial_states
     )

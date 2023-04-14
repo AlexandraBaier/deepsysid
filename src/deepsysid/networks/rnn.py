@@ -1319,10 +1319,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
             ]
         )
-        logger.info(
-            f'sizes: P_21_1 {P_21_1.shape}, P_21_2 {P_21_2.shape}, '
-            f'P_21_3 {P_21_3.shape}, P_21_4 {P_21_4.shape}'
-        )
+        # logger.info(
+        #     f'sizes: P_21_1 {P_21_1.shape}, P_21_2 {P_21_2.shape}, '
+        #     f'P_21_3 {P_21_3.shape}, P_21_4 {P_21_4.shape}'
+        # )
 
         P_21 = P_21_1 + P_21_2 @ P_21_3 @ P_21_4
         P_11 = -cp.bmat(
