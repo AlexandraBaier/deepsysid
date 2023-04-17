@@ -1403,7 +1403,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             self._predictor.project_parameters()
                             self._predictor.set_lure_system()
                         bls_iter += 1
-                    backtracking_iter.append(bls_iter)
+                backtracking_iter.append(bls_iter)
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
