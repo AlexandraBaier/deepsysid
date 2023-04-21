@@ -57,6 +57,8 @@ class GridSearchTestConfiguration(BaseModel):
 
 class SessionConfiguration(BaseModel):
     total_runs_for_best_models: int
+    training_trajectory: Optional[List[str]]
+    training_scalar: Optional[List[str]]
 
 
 class ExperimentGridSearchSettings(BaseModel):
