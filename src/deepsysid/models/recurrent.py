@@ -1223,7 +1223,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_initializer: int
     epochs_predictor: int
     clip_gradient_norm: float
-    enforce_constraints_method: Literal['barrier', 'projection']
+    enforce_constraints_method: Optional[Literal['barrier', 'projection']]
     epochs_without_projection: int
 
 
@@ -1342,7 +1342,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 try:
                     if self.enforce_constraints_method == 'barrier':
                         (batch_loss + barrier).backward(retain_graph=True)
-                    elif self.enforce_constraints_method == 'projection':
+                    elif (self.enforce_constraints_method == 'projection') or (
+                        self.enforce_constraints_method is None
+                    ):
                         batch_loss.backward()
 
                     else:
