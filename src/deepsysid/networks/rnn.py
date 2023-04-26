@@ -951,21 +951,21 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
     def set_lure_system(self) -> None:
         omega_tilde_0 = self.get_omega_tilde()
-        device = omega_tilde_0.device
+        device = self.device
 
         # construct X, Y, and Lambda
         # print(f'L x flat: {self.L_x_flat}')
         L_x = self.construct_lower_triangular_matrix(
             L_flat=self.L_x_flat, diag_length=self.nx
-        )
+        ).to(device)
         L_y = self.construct_lower_triangular_matrix(
             L_flat=self.L_y_flat, diag_length=self.nx
-        )
+        ).to(device)
         X = L_x @ L_x.T
         Y = L_y @ L_y.T
         # print(X)
         # print(Y)
-        Lambda = torch.diag(input=self.lam).to(self.device)
+        Lambda = torch.diag(input=self.lam).to(device)
         # print(Lambda)
 
         # 2. Determine non-singular U,V with V U^T = I - Y X
