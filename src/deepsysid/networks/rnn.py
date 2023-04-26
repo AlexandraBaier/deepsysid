@@ -950,9 +950,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         return np.hstack(vector_list)
 
     def set_lure_system(self) -> None:
-        omega_tilde_0 = self.get_omega_tilde()
         device = self.device
-
+        omega_tilde_0 = self.get_omega_tilde().to(device)
+        
         # construct X, Y, and Lambda
         # print(f'L x flat: {self.L_x_flat}')
         L_x = self.construct_lower_triangular_matrix(
