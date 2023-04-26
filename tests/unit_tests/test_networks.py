@@ -362,7 +362,7 @@ def test_hybrid_linearization_rnn_check_constraints() -> None:
         nzu=nz,
         gamma=1.0,
     )
-    model.set_lure_system()
+    model.initialize_lmi()
     assert model.check_constraints()
 
 

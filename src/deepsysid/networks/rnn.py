@@ -748,40 +748,32 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         self.gamma = gamma
 
-        # 1. solve synthesis inequalities to find feasible parameter set
-        omega_tilde_0_numpy, X, Y, Lambda = self.get_initial_parameters()
-
-        (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23) = self.get_matrices(
-            omega_tilde_0_numpy
+        L_flat_size = self.extract_vector_from_lower_triangular_matrix(
+            np.zeros(shape=(self.nx, self.nx))
+        ).shape[0]
+        self.L_x_flat = torch.nn.Parameter(
+            0.1 * torch.ones(size=(L_flat_size,)).float()
+        )
+        self.L_y_flat = torch.nn.Parameter(
+            0.1 * torch.ones(size=(L_flat_size,)).float()
         )
 
-        # self.X = torch.nn.Parameter(torch.tensor(X).float())
-        L_x = np.linalg.cholesky(a=X)
-        L_x_flat = self.extract_vector_from_lower_triangular_matrix(L_x)
-        self.L_x_flat = torch.nn.Parameter(torch.tensor(L_x_flat).float())
-        # self.Y = torch.nn.Parameter(torch.tensor(Y).float())
-        L_y = np.linalg.cholesky(a=Y)
-        L_y_flat = self.extract_vector_from_lower_triangular_matrix(L_y)
-        self.L_y_flat = torch.nn.Parameter(torch.tensor(L_y_flat).float())
-        # self.L_y = torch.nn.Parameter(torch.tensor(L_y).float())
+        self.lam = torch.nn.Parameter(0.1 * torch.ones(size=(self.nzu,)).float())
 
-        # self.Lambda = torch.nn.Parameter(torch.tensor(Lambda).float())
-        self.lam = torch.nn.Parameter(torch.tensor(np.diag(Lambda)).float())
+        self.K = torch.nn.Parameter(0.1 * torch.eye(self.nx).float())
+        self.L1 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwp)).float())
+        self.L2 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.ny)).float())
+        self.L3 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwu)).float())
 
-        self.K = torch.nn.Parameter(torch.tensor(K).float())
-        self.L1 = torch.nn.Parameter(torch.tensor(L1).float())
-        self.L2 = torch.nn.Parameter(torch.tensor(L2).float())
-        self.L3 = torch.nn.Parameter(torch.tensor(L3).float())
+        self.M1 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nx)).float())
+        self.N11 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nwp)).float())
+        self.N12 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.ny)).float())
+        self.N13 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nwu)).float())
 
-        self.M1 = torch.nn.Parameter(torch.tensor(M1).float())
-        self.N11 = torch.nn.Parameter(torch.tensor(N11).float())
-        self.N12 = torch.nn.Parameter(torch.tensor(N12).float())
-        self.N13 = torch.nn.Parameter(torch.tensor(N13).float())
-
-        self.M2 = torch.nn.Parameter(torch.tensor(M2).float())
-        self.N21 = torch.nn.Parameter(torch.tensor(N21).float())
-        self.N22 = torch.nn.Parameter(torch.tensor(N22).float())
-        self.N23 = torch.nn.Parameter(torch.tensor(N23).float())
+        self.M2 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nx)).float())
+        self.N21 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nwp)).float())
+        self.N22 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.ny)).float())
+        self.N23 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nwu)).float())
 
         self.S_s = torch.from_numpy(
             np.concatenate(
@@ -895,6 +887,41 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 dtype=np.float32,
             )
         ).to(device)
+
+        self.set_lure_system()
+
+    def initialize_lmi(self) -> None:
+        # 1. solve synthesis inequalities to find feasible parameter set
+        omega_tilde_0_numpy, X, Y, Lambda = self.get_initial_parameters()
+
+        (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23) = self.get_matrices(
+            omega_tilde_0_numpy
+        )
+
+        L_x = np.linalg.cholesky(a=X)
+        L_x_flat = self.extract_vector_from_lower_triangular_matrix(L_x)
+        self.L_x_flat.data = torch.tensor(L_x_flat).float()
+
+        L_y = np.linalg.cholesky(a=Y)
+        L_y_flat = self.extract_vector_from_lower_triangular_matrix(L_y)
+        self.L_y_flat.data = torch.tensor(L_y_flat).float()
+
+        self.lam.data = torch.tensor(np.diag(Lambda)).float()
+
+        self.K.data = torch.tensor(K).float()
+        self.L1.data = torch.tensor(L1).float()
+        self.L2.data = torch.tensor(L2).float()
+        self.L3.data = torch.tensor(L3).float()
+
+        self.M1.data = torch.tensor(M1).float()
+        self.N11.data = torch.tensor(N11).float()
+        self.N12.data = torch.tensor(N12).float()
+        self.N13.data = torch.tensor(N13).float()
+
+        self.M2.data = torch.tensor(M2).float()
+        self.N21.data = torch.tensor(N21).float()
+        self.N22.data = torch.tensor(N22).float()
+        self.N23.data = torch.tensor(N23).float()
 
     def construct_lower_triangular_matrix(
         self, L_flat: torch.Tensor, diag_length: int

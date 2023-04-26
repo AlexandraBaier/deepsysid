@@ -1217,12 +1217,11 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_with_const_decay: int
     num_recurrent_layers_init: int
     dropout: float
-    sequence_length: int
+    sequence_length: List[int]
     learning_rate: float
     batch_size: int
-    epochs_initializer: int
     epochs_predictor: int
-    clip_gradient_norm: float
+    clip_gradient_norm: Optional[float]
     enforce_constraints_method: Optional[Literal['barrier', 'projection']]
     epochs_without_projection: int
 
@@ -1254,7 +1253,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.sequence_length = config.sequence_length
         self.learning_rate = config.learning_rate
         self.batch_size = config.batch_size
-        self.epochs_initializer = config.epochs_initializer
         self.epochs_predictor = config.epochs_predictor
         self.epochs_without_projection = config.epochs_without_projection
         self.enforce_constraints_method = config.enforce_constraints_method
@@ -1275,7 +1273,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             gamma=config.gamma,
             device=self.device,
         ).to(self.device)
-        self._predictor.set_lure_system()
 
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
@@ -1298,9 +1295,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
 
-        predictor_dataset = RecurrentPredictorInitialDataset(
-            us, ys, x0s, self.sequence_length
-        )
+        self._predictor.initialize_lmi()
+        self._predictor.set_lure_system()
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1311,128 +1307,51 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         steps_without_loss_decrease = 0
         old_loss: torch.Tensor = torch.tensor(100.0)
 
-        for i in range(self.epochs_predictor):
-            data_loader = data.DataLoader(
-                predictor_dataset, self.batch_size, shuffle=True, drop_last=True
+        for seq_len in self.sequence_length:
+            predictor_dataset = RecurrentPredictorInitialDataset(us, ys, x0s, seq_len)
+            self.optimizer_pred = optim.Adam(
+                self._predictor.parameters(), lr=self.learning_rate
             )
-            total_loss: torch.Tensor = torch.tensor(0.0)
-            max_grad: List[np.float64] = list()
-            backtracking_iter: List[int] = list()
-            for batch_idx, batch in enumerate(data_loader):
-                self._predictor.zero_grad()
-                try:
-                    self._predictor.set_lure_system()
-                except AssertionError as msg:
-                    logger.warning(msg)
+            logger.info(f'Sequence length {seq_len}, reset optimizer')
 
-                # Predict and optimize
-                zp_hat, _ = self._predictor.forward(
-                    x_pred=batch['wp'].float().to(self.device),
-                    hx=(
-                        batch['x0'].float().to(self.device),
-                        batch['x0'].float().to(self.device),
-                    ),
+            for i in range(self.epochs_predictor):
+                data_loader = data.DataLoader(
+                    predictor_dataset, self.batch_size, shuffle=True, drop_last=True
                 )
-                zp_hat = zp_hat.to(self.device)
-                batch_loss = self.loss.forward(
-                    zp_hat, batch['zp'].float().to(self.device)
-                )
+                total_loss: torch.Tensor = torch.tensor(0.0)
+                max_grad: List[np.float64] = list()
+                backtracking_iter: List[int] = list()
+                for batch_idx, batch in enumerate(data_loader):
+                    self._predictor.zero_grad()
 
-                barrier = self._predictor.get_barrier(t).to(self.device)
-                try:
-                    if self.enforce_constraints_method == 'barrier':
-                        (batch_loss + barrier).backward(retain_graph=True)
-                    elif (self.enforce_constraints_method == 'projection') or (
-                        self.enforce_constraints_method is None
-                    ):
-                        batch_loss.backward()
-
-                    else:
-                        raise NotImplementedError
-                except RuntimeError as msg:
-                    logger.warning(msg)
-                    logger.info('Stop training, due to a runtime error.')
-                    time_end_pred = time.time()
-                    time_total_pred = time_end_pred - time_start_pred
-                    return dict(
-                        index=np.asarray(i),
-                        epoch_loss_predictor=np.asarray(predictor_loss),
-                        barrier_value=np.asarray(barrier_value),
-                        gradient_norm=np.asarray(gradient_norm),
-                        training_time_predictor=np.asarray(time_total_pred),
+                    # Predict and optimize
+                    zp_hat, _ = self._predictor.forward(
+                        x_pred=batch['wp'].float().to(self.device),
+                        hx=(
+                            batch['x0'].float().to(self.device),
+                            batch['x0'].float().to(self.device),
+                        ),
                     )
-                total_loss += batch_loss.item()
-
-                torch.nn.utils.clip_grad_norm_(
-                    parameters=self._predictor.parameters(),
-                    max_norm=self.clip_gradient_norm,
-                )
-
-                # gradient infos
-                grads_norm = [
-                    torch.linalg.norm(p.grad)
-                    for p in filter(
-                        lambda p: p.grad is not None, self._predictor.parameters()
+                    zp_hat = zp_hat.to(self.device)
+                    batch_loss = self.loss.forward(
+                        zp_hat, batch['zp'].float().to(self.device)
                     )
-                ]
-                max_grad.append(max(grads_norm).cpu().detach().numpy())
 
-                # save old parameter set
-                old_pars = [
-                    par.clone().detach() for par in self._predictor.parameters()
-                ]
-
-                self.optimizer_pred.step()
-
-                bls_iter = int(0)
-                if self.enforce_constraints_method == 'barrier':
-                    max_iter = 100
-                    alpha = 0.9
-                    while not self._predictor.check_constraints():
-                        for old_par, new_par in zip(
-                            old_pars, self._predictor.parameters()
+                    barrier = torch.tensor(0.0).to(self.device)
+                    try:
+                        if self.enforce_constraints_method == 'barrier':
+                            barrier = self._predictor.get_barrier(t).to(self.device)
+                            (batch_loss + barrier).backward(retain_graph=True)
+                        elif (self.enforce_constraints_method == 'projection') or (
+                            self.enforce_constraints_method is None
                         ):
-                            new_par.data = (
-                                alpha * old_par.clone() + (1 - alpha) * new_par.data
-                            )
+                            batch_loss.backward()
 
-                        if bls_iter > max_iter - 1:
-                            logger.info(
-                                f'BLS did not find feasible parameter set'
-                                f'after {bls_iter} iterations.'
-                                f'Project parameters back to feasible set ...'
-                            )
-                            self._predictor.project_parameters()
-                            self._predictor.set_lure_system()
-                        bls_iter += 1
-                backtracking_iter.append(bls_iter)
-
-            logger.info(
-                f'Epoch {i + 1}/{self.epochs_predictor}\t'
-                f'Total Loss (Predictor): {total_loss:1f} \t'
-                f'Barrier: {barrier:1f}\t'
-                f'Backtracking Line Search iteration: {max(backtracking_iter)}\t'
-                f'Max accumulated gradient norm: {np.max(max_grad):1f}'
-            )
-            predictor_loss.append(np.float64(total_loss))
-            barrier_value.append(barrier.cpu().detach().numpy())
-            gradient_norm.append(np.float64(np.mean(max_grad)))
-
-            if self.enforce_constraints_method == 'projection':
-                if (
-                    i % steps_without_projection == 0
-                    and i > 0
-                    and not self._predictor.check_constraints()
-                ):
-                    self._predictor.project_parameters()
-                    self._predictor.set_lure_system()
-                    if old_loss - total_loss.detach().numpy() < 0:
-                        steps_without_loss_decrease += 1
-                    if steps_without_loss_decrease > 10:
-                        logger.info(
-                            f'Batch {batch_idx}, Epoch {i+1}'
-                            f'Loss is not decreasing after projection.\t'
-                        )
+                        else:
+                            raise NotImplementedError
+                    except RuntimeError as msg:
+                        logger.warning(msg)
+                        logger.info('Stop training, due to a runtime error.')
                         time_end_pred = time.time()
                         time_total_pred = time_end_pred - time_start_pred
                         return dict(
@@ -1442,12 +1361,105 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             gradient_norm=np.asarray(gradient_norm),
                             training_time_predictor=np.asarray(time_total_pred),
                         )
-                    old_loss = total_loss.detach().numpy()
-            # decay t following the idea of interior point methods
-            elif self.enforce_constraints_method == 'barrier':
-                if i % self.epochs_with_const_decay == 0 and i != 0:
-                    t = t * 1 / self.decay_rate
-                    logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+                    total_loss += batch_loss.item()
+
+                    if self.clip_gradient_norm is not None:
+                        torch.nn.utils.clip_grad_norm_(
+                            parameters=self._predictor.parameters(),
+                            max_norm=self.clip_gradient_norm,
+                        )
+
+                    # gradient infos
+                    grads_norm = [
+                        torch.linalg.norm(p.grad)
+                        for p in filter(
+                            lambda p: p.grad is not None, self._predictor.parameters()
+                        )
+                    ]
+                    max_grad.append(max(grads_norm).cpu().detach().numpy())
+
+                    # save old parameter set
+                    old_pars = [
+                        par.clone().detach() for par in self._predictor.parameters()
+                    ]
+
+                    self.optimizer_pred.step()
+                    try:
+                        self._predictor.set_lure_system()
+                    except AssertionError as msg:
+                        logger.warning(msg)
+
+                    bls_iter = int(0)
+                    if self.enforce_constraints_method == 'barrier':
+                        max_iter = 100
+                        alpha = 0.9
+                        while not self._predictor.check_constraints():
+                            for old_par, new_par in zip(
+                                old_pars, self._predictor.parameters()
+                            ):
+                                new_par.data = (
+                                    alpha * old_par.clone() + (1 - alpha) * new_par.data
+                                )
+
+                            if bls_iter > max_iter - 1:
+                                logger.info(
+                                    f'BLS did not find feasible parameter set'
+                                    f'after {bls_iter} iterations.'
+                                    f'Training is stopped.'
+                                )
+                                time_end_pred = time.time()
+                                time_total_pred = time_end_pred - time_start_pred
+                                return dict(
+                                    index=np.asarray(i),
+                                    epoch_loss_predictor=np.asarray(predictor_loss),
+                                    barrier_value=np.asarray(barrier_value),
+                                    gradient_norm=np.asarray(gradient_norm),
+                                    training_time_predictor=np.asarray(time_total_pred),
+                                )
+                            bls_iter += 1
+                    backtracking_iter.append(bls_iter)
+
+                logger.info(
+                    f'Epoch {i + 1}/{self.epochs_predictor}\t'
+                    f'Total Loss (Predictor): {total_loss:1f} \t'
+                    f'Barrier: {barrier:1f}\t'
+                    f'Backtracking Line Search iteration: {max(backtracking_iter)}\t'
+                    f'Max accumulated gradient norm: {np.max(max_grad):1f}'
+                )
+                predictor_loss.append(np.float64(total_loss))
+                barrier_value.append(barrier.cpu().detach().numpy())
+                gradient_norm.append(np.float64(np.mean(max_grad)))
+
+                if self.enforce_constraints_method == 'projection':
+                    if (
+                        i % steps_without_projection == 0
+                        and i > 0
+                        and not self._predictor.check_constraints()
+                    ):
+                        self._predictor.project_parameters()
+                        self._predictor.set_lure_system()
+                        if old_loss - total_loss.detach().numpy() < 0:
+                            steps_without_loss_decrease += 1
+                        if steps_without_loss_decrease > 10:
+                            logger.info(
+                                f'Batch {batch_idx}, Epoch {i+1}'
+                                f'Loss is not decreasing after projection.\t'
+                            )
+                            time_end_pred = time.time()
+                            time_total_pred = time_end_pred - time_start_pred
+                            return dict(
+                                index=np.asarray(i),
+                                epoch_loss_predictor=np.asarray(predictor_loss),
+                                barrier_value=np.asarray(barrier_value),
+                                gradient_norm=np.asarray(gradient_norm),
+                                training_time_predictor=np.asarray(time_total_pred),
+                            )
+                        old_loss = total_loss.detach().numpy()
+                # decay t following the idea of interior point methods
+                elif self.enforce_constraints_method == 'barrier':
+                    if i % self.epochs_with_const_decay == 0 and i != 0:
+                        t = t * 1 / self.decay_rate
+                        logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
         time_end_pred = time.time()
         time_total_pred = time_end_pred - time_start_pred
         logger.info(f'Training time for predictor {time_total_pred}s')
