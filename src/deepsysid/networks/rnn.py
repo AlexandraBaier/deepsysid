@@ -1067,9 +1067,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             dim=0,
         ).float()
         omega_0 = (
-            torch.linalg.inv(T_l).float()
-            @ (omega_tilde_0 - T_s.float())
-            @ torch.linalg.inv(T_r).float()
+            torch.linalg.inv(T_l).float().to(device)
+            @ (omega_tilde_0 - T_s.float().to(device))
+            @ torch.linalg.inv(T_r).float().to(device)
         )
         sys_block_matrix = self.S_s + self.S_l @ omega_0 @ self.S_r
         assert not any(torch.isnan(sys_block_matrix).flatten().tolist())
