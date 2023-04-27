@@ -34,7 +34,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         pass
 
@@ -89,7 +89,7 @@ class FixedWindowModel(
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> None:
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]

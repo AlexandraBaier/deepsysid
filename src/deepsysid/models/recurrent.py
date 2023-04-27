@@ -97,7 +97,7 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -363,7 +363,7 @@ class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -636,7 +636,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -926,7 +926,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -1282,7 +1282,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -1323,6 +1323,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 backtracking_iter: List[int] = list()
                 for batch_idx, batch in enumerate(data_loader):
                     self._predictor.zero_grad()
+                    try:
+                        self._predictor.set_lure_system()
+                    except AssertionError as msg:
+                        logger.warning(msg)
 
                     # Predict and optimize
                     zp_hat, _ = self._predictor.forward(
@@ -1384,10 +1388,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     ]
 
                     self.optimizer_pred.step()
-                    try:
-                        self._predictor.set_lure_system()
-                    except AssertionError as msg:
-                        logger.warning(msg)
 
                     bls_iter = int(0)
                     if self.enforce_constraints_method == 'barrier':
@@ -1633,7 +1633,7 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -1887,7 +1887,7 @@ class LSTMCombinedInitModel(base.DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []

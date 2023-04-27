@@ -758,22 +758,46 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             0.1 * torch.ones(size=(L_flat_size,)).float().to(device)
         )
 
-        self.lam = torch.nn.Parameter(0.1 * torch.ones(size=(self.nzu,)).float().to(device))
+        self.lam = torch.nn.Parameter(
+            0.1 * torch.ones(size=(self.nzu,)).float().to(device)
+        )
 
         self.K = torch.nn.Parameter(0.1 * torch.eye(self.nx).float().to(device))
-        self.L1 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwp)).float().to(device))
-        self.L2 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.ny)).float().to(device))
-        self.L3 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwu)).float().to(device))
+        self.L1 = torch.nn.Parameter(
+            torch.zeros(size=(self.nx, self.nwp)).float().to(device)
+        )
+        self.L2 = torch.nn.Parameter(
+            torch.zeros(size=(self.nx, self.ny)).float().to(device)
+        )
+        self.L3 = torch.nn.Parameter(
+            torch.zeros(size=(self.nx, self.nwu)).float().to(device)
+        )
 
-        self.M1 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nx)).float().to(device))
-        self.N11 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nwp)).float().to(device))
-        self.N12 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.ny)).float().to(device))
-        self.N13 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nwu)).float().to(device))
+        self.M1 = torch.nn.Parameter(
+            torch.zeros(size=(self.nu, self.nx)).float().to(device)
+        )
+        self.N11 = torch.nn.Parameter(
+            torch.zeros(size=(self.nu, self.nwp)).float().to(device)
+        )
+        self.N12 = torch.nn.Parameter(
+            torch.zeros(size=(self.nu, self.ny)).float().to(device)
+        )
+        self.N13 = torch.nn.Parameter(
+            torch.zeros(size=(self.nu, self.nwu)).float().to(device)
+        )
 
-        self.M2 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nx)).float().to(device))
-        self.N21 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nwp)).float().to(device))
-        self.N22 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.ny)).float().to(device))
-        self.N23 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nwu)).float().to(device))
+        self.M2 = torch.nn.Parameter(
+            torch.zeros(size=(self.nzu, self.nx)).float().to(device)
+        )
+        self.N21 = torch.nn.Parameter(
+            torch.zeros(size=(self.nzu, self.nwp)).float().to(device)
+        )
+        self.N22 = torch.nn.Parameter(
+            torch.zeros(size=(self.nzu, self.ny)).float().to(device)
+        )
+        self.N23 = torch.nn.Parameter(
+            torch.zeros(size=(self.nzu, self.nwu)).float().to(device)
+        )
 
         self.S_s = torch.from_numpy(
             np.concatenate(
@@ -952,7 +976,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     def set_lure_system(self) -> None:
         device = self.device
         omega_tilde_0 = self.get_omega_tilde().to(device)
-        
+
         # construct X, Y, and Lambda
         # print(f'L x flat: {self.L_x_flat}')
         L_x = self.construct_lower_triangular_matrix(

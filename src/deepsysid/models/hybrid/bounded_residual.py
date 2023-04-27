@@ -201,7 +201,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        initial_seqs: Optional[List[NDArray[np.float64]]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_teacher = []
