@@ -1349,7 +1349,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                         elif (self.enforce_constraints_method == 'projection') or (
                             self.enforce_constraints_method is None
                         ):
-                            batch_loss.backward(retain_graph=True)
+                            batch_loss.backward()
 
                         else:
                             raise NotImplementedError
