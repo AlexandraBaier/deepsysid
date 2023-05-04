@@ -1401,8 +1401,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                         zp_hat, batch['zp'].float().to(self.device)
                     )
 
-                    # barrier = torch.tensor(0.0).to(self.device)
-                    barrier = self._predictor.get_barrier(t).to(self.device)
+                    barrier = torch.tensor(0.0).to(self.device)
+                    # barrier = self._predictor.get_barrier(t).to(self.device)
                     try:
                         if self.enforce_constraints_method == 'barrier':
                             barrier = self._predictor.get_barrier(t).to(self.device)

@@ -1561,7 +1561,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         B_lin = self.B_lin
         C_lin = self.C_lin
         Lambda = torch.diag(self.lam)
-        omega_tilde = self.get_omega_tilde().float()
+        omega_tilde = self.get_omega_tilde().float().to(self.device)
 
         P_21_1 = torch.concat(
             [
@@ -1603,7 +1603,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ),
             ],
             dim=0,
-        ).float()
+        ).float().to(self.device)
         P_21_2 = torch.concat(
             [
                 torch.concat(
@@ -1640,7 +1640,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ).to(self.device),
             ],
             dim=0,
-        ).float()
+        ).float().to(self.device)
 
         P_21_4 = torch.concat(
             [
@@ -1682,7 +1682,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ).to(self.device),
             ],
             dim=0,
-        ).float()
+        ).float().to(self.device)
 
         P_21 = P_21_1 + P_21_2 @ omega_tilde @ P_21_4
         P_11 = -torch.concat(

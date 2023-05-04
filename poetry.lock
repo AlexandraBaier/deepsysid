@@ -2548,4 +2548,4 @@ torch-cpu = ["torch"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "df3f0af12269d773646707c79e9615e5aeecc3bde6557cda69e08ff23f027df4"
+content-hash = "90de4989e281a8872435fdf415a12b2b88a2572aecd91f251cf2bb2e03e28de1"
