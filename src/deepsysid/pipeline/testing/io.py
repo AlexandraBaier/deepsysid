@@ -1,6 +1,6 @@
 import dataclasses
 import os
-from typing import Dict, Iterator, List, Literal, Optional
+from typing import Dict, Iterator, List, Literal
 
 import h5py
 import numpy as np
@@ -109,12 +109,15 @@ def _save_test_sequence_result_to_hdf_group(
 ) -> None:
     inputs_grp = group.create_group('inputs')
     outputs_grp = group.create_group('outputs')
+    initial_states_grp = group.create_group('initial_states')
     additional_sequence_metadata_grp = group.create_group('metadata')
 
     for input_name, input_data in sequence.inputs.items():
         inputs_grp.create_dataset(input_name, data=input_data)
     for output_name, output_data in sequence.outputs.items():
         outputs_grp.create_dataset(output_name, data=output_data)
+    for is_name, is_data in sequence.initial_states.items():
+        initial_states_grp.create_dataset(is_name, data=is_data)
     for metadata_name, metadata_data in sequence.metadata.items():
         additional_sequence_metadata_grp.create_dataset(
             metadata_name, data=metadata_data
@@ -127,7 +130,7 @@ class SimulateTestSample:
     initial_state: NDArray[np.float64]
     true_control: NDArray[np.float64]
     true_state: NDArray[np.float64]
-    x0: Optional[NDArray[np.float64]]
+    x0: NDArray[np.float64]
     file_name: str
 
 

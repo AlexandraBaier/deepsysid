@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 from numpy.typing import NDArray
 from torch import nn
+from . import utils
 
 logger = logging.getLogger(__name__)
 
@@ -747,22 +748,23 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.C_lin = torch.tensor(C_lin, dtype=torch.float32).to(device)
 
         self.gamma = gamma
+        epsilon = 1e-3
 
         L_flat_size = self.extract_vector_from_lower_triangular_matrix(
             np.zeros(shape=(self.nx, self.nx))
         ).shape[0]
         self.L_x_flat = torch.nn.Parameter(
-            0.1 * torch.ones(size=(L_flat_size,)).float().to(device)
+            epsilon * torch.ones(size=(L_flat_size,)).float().to(device)
         )
         self.L_y_flat = torch.nn.Parameter(
-            0.1 * torch.ones(size=(L_flat_size,)).float().to(device)
+            -epsilon * torch.ones(size=(L_flat_size,)).float().to(device)
         )
 
         self.lam = torch.nn.Parameter(
-            0.1 * torch.ones(size=(self.nzu,)).float().to(device)
+            epsilon * torch.ones(size=(self.nzu,)).float().to(device)
         )
 
-        self.K = torch.nn.Parameter(0.1 * torch.eye(self.nx).float().to(device))
+        self.K = torch.nn.Parameter(epsilon * torch.eye(self.nx).float().to(device))
         self.L1 = torch.nn.Parameter(
             torch.zeros(size=(self.nx, self.nwp)).float().to(device)
         )
@@ -973,20 +975,21 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         return np.hstack(vector_list)
 
-    def set_lure_system(self) -> None:
+    def set_lure_system(self) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
         device = self.device
         omega_tilde_0 = self.get_omega_tilde().to(device)
 
         # construct X, Y, and Lambda
         # print(f'L x flat: {self.L_x_flat}')
+        eps = 1e-3
         L_x = self.construct_lower_triangular_matrix(
             L_flat=self.L_x_flat, diag_length=self.nx
         ).to(device)
         L_y = self.construct_lower_triangular_matrix(
             L_flat=self.L_y_flat, diag_length=self.nx
         ).to(device)
-        X = L_x @ L_x.T
-        Y = L_y @ L_y.T
+        X = L_x @ L_x.T + eps * torch.eye(self.nx).to(device)
+        Y = L_y @ L_y.T + eps * torch.eye(self.nx).to(device)
         # print(X)
         # print(Y)
         Lambda = torch.diag(input=self.lam).to(device)
@@ -995,10 +998,11 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # 2. Determine non-singular U,V with V U^T = I - Y X
         U = torch.linalg.inv(Y) - X
         V = Y
+        # print(f'norm(VU^T + YX -I): {torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device))}')
         # print(f'round {torch.round(V@U.T + Y@X, decimals=2)}')
-        assert (
-            torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device)) < 0.5
-        )
+        # assert (
+        #     torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device)) < 0.5
+        # )
 
         # 3. transform to original parameters
         T_l = torch.concat(
@@ -1095,8 +1099,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             @ (omega_tilde_0 - T_s.float().to(device))
             @ torch.linalg.inv(T_r).float().to(device)
         )
+        # print(f'norm of T_l^(-1): {torch.linalg.norm(torch.linalg.inv(T_l))}\t norm of T_r^(-1): {torch.linalg.norm(torch.linalg.inv(T_r))} \t norm of omega tilde: {torch.linalg.norm(omega_tilde_0)} \t norm of T_s: {torch.linalg.norm(T_s)}')
         sys_block_matrix = self.S_s + self.S_l @ omega_0 @ self.S_r
-        assert not any(torch.isnan(sys_block_matrix).flatten().tolist())
+        # print(f'norm of S_s: {torch.linalg.norm(self.S_s)}\t norm of S_l:{torch.linalg.norm(self.S_l)}\t norm of S_r:{torch.linalg.norm(self.S_r)}\t norm omega: {torch.linalg.norm(omega_0)}')
+        # assert not any(torch.isnan(sys_block_matrix).flatten().tolist())
         (
             A_cal,
             B1_cal,
@@ -1130,6 +1136,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             Delta=Delta_tilde,
             device=self.device,
         ).to(device)
+
+        return (omega_0.cpu().detach().numpy(), sys_block_matrix.cpu().detach().numpy())
 
     def get_omega_tilde(self) -> torch.Tensor:
 
@@ -1328,7 +1336,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
             ]
         )
-        P_21_3 = cp.bmat(
+        Omega_tilde = cp.bmat(
             [
                 [K, L1, L2, L3],
                 [M1, N11, N12, N13],
@@ -1375,7 +1383,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         #     f'P_21_3 {P_21_3.shape}, P_21_4 {P_21_4.shape}'
         # )
 
-        P_21 = P_21_1 + P_21_2 @ P_21_3 @ P_21_4
+        P_21 = P_21_1 + P_21_2 @ Omega_tilde @ P_21_4
         P_11 = -cp.bmat(
             [
                 [
@@ -1433,15 +1441,13 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             ]
         )
         P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
-        nP = P.shape[0]
 
         # 1. run: use nontrivial objective
         t = cp.Variable(shape=(1))
 
-        def get_feasibility_constraint(t: Union[cp.Variable, np.float64]) -> List:
-            return [P << t * np.eye(nP)]
-
-        problem = cp.Problem(cp.Minimize(expr=t), get_feasibility_constraint(t))
+        problem = cp.Problem(
+            cp.Minimize(expr=t), utils.get_feasibility_constraint(P, t)
+        )
         problem.solve(solver=cp.MOSEK)
         logger.info(
             f'1. run: feasibility, problem status {problem.status}, t_star = {t.value}'
@@ -1450,32 +1456,13 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         assert t.value < 0
         t_fixed = np.float64(t.value + 0.1)
 
-        # feasibility_constraint = [P << -1e-4 * np.eye(nP)]
-
         # 2. run: parameter bounds
         alpha = cp.Variable(shape=(1))
 
-        def get_bounding_inequalities(alpha: Union[cp.Variable, np.float64]) -> List:
-            constraints = [(X << alpha * np.eye(self.nx))]
-            constraints.append(Y << alpha * np.eye(self.nx))
-            constraints.append(
-                cp.bmat(
-                    [
-                        [alpha * np.eye(self.nx + self.nu + self.nzu), P_21_3],
-                        [
-                            P_21_3.T,
-                            alpha * np.eye(self.nx + self.nwp + self.ny + self.nwu),
-                        ],
-                    ]
-                )
-                >> 0
-            )
-            return constraints
-
         problem = cp.Problem(
             objective=cp.Minimize(expr=alpha),
-            constraints=get_feasibility_constraint(t_fixed)
-            + get_bounding_inequalities(alpha),
+            constraints=utils.get_feasibility_constraint(P, t_fixed)
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
         )
         problem.solve(solver=cp.MOSEK)
 
@@ -1485,22 +1472,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             f'alpha_star = {alpha.value}'
         )
 
-        alpha_fixed = np.float64(alpha.value + 1.0)
+        alpha_fixed = np.float64(alpha.value + 0.5)
 
         # 3. run: make U and V well conditioned
         beta = cp.Variable(shape=(1))
 
-        def get_conditioning_constraints(beta: Union[cp.Variable, np.float64]) -> List:
-            constraints = [
-                cp.bmat([[Y, beta * np.eye(self.nx)], [beta * np.eye(self.nx), X]]) >> 0
-            ]
-            return constraints
-
         problem = cp.Problem(
             objective=cp.Maximize(expr=beta),
-            constraints=get_feasibility_constraint(t_fixed)
-            + get_bounding_inequalities(alpha_fixed)
-            + get_conditioning_constraints(beta),
+            constraints=utils.get_feasibility_constraint(P, t_fixed)
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
+            + utils.get_conditioning_constraints(X, Y, beta),
         )
         problem.solve(solver=cp.MOSEK)
         logger.info(
@@ -1809,7 +1790,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         return barrier
 
-    def project_parameters(self) -> None:
+    def project_parameters(self, write_parameter: bool = True) -> np.float64:
+        if self.check_constraints():
+            logger.info('No projection necessary, constraints are satisfied.')
+            return np.float64(0.0)
         X = cp.Variable(shape=(self.nx, self.nx), symmetric=True)
         Y = cp.Variable(shape=(self.nx, self.nx), symmetric=True)
         lam = cp.Variable(shape=(self.nzu, 1), pos=True, name='lam')
@@ -1995,6 +1979,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         Y_0 = L_y @ L_y.T
         Lambda_0 = torch.diag(self.lam).cpu().detach().numpy()
 
+        feasibility_constraint = [P << -1e-4 * np.eye(nP)]
+
         problem = cp.Problem(
             cp.Minimize(
                 cp.norm(Omega_tilde - Omega_tilde_0)
@@ -2002,13 +1988,55 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 + cp.norm(X - X_0)
                 + cp.norm(Y - Y_0)
             ),
-            [P << -1e-4 * np.eye(nP)],
+            feasibility_constraint,
+        )
+        problem.solve(solver=cp.MOSEK)
+
+        d = np.linalg.norm(Omega_tilde.value - Omega_tilde_0)
+        +np.linalg.norm(Lambda.value - Lambda_0)
+        +np.linalg.norm(X.value - X_0)
+        +np.linalg.norm(Y.value - Y_0)
+
+        logger.info(
+            f'1. run: projection. '
+            f'problem status {problem.status},'
+            f'||X-X_0|| + ||Y-Y_0|| + ||Omega - Omega_0|| + ||Lambda-Lambda_0|| = {d}'
+        )
+
+        alpha = cp.Variable(shape=(1,))
+        problem = cp.Problem(
+            cp.Minimize(expr=alpha),
+            feasibility_constraint
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
         )
         problem.solve(solver=cp.MOSEK)
         logger.info(
-            f'Projection status: {problem.status}, write back projected parameters.'
+            f'2. run: parameter bounds. '
+            f'problem status {problem.status},'
+            f'alpha_star = {alpha.value}'
         )
 
+        alpha_fixed = np.float64(alpha.value + 0.1)
+
+        beta = cp.Variable(shape=(1,))
+        problem = cp.Problem(
+            cp.Maximize(expr=beta),
+            feasibility_constraint
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
+            + utils.get_conditioning_constraints(Y, X, beta),
+        )
+        problem.solve(solver=cp.MOSEK)
+        logger.info(
+            f'3. run: coupling conditions. '
+            f'problem status {problem.status},'
+            f'beta_star = {beta.value}'
+        )
+
+        if not write_parameter:
+            logger.info('Return distance.')
+            return np.float64(d)
+
+        logger.info('Write back projected parameters.')
         self.L_x_flat.data = (
             torch.tensor(
                 self.extract_vector_from_lower_triangular_matrix(
@@ -2041,6 +2069,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.N21.data = torch.tensor(N21.value).float().to(device)
         self.N22.data = torch.tensor(N22.value).float().to(device)
         self.N23.data = torch.tensor(N23.value).float().to(device)
+
+        return np.float64(d)
 
 
 class InitLSTM(nn.Module):

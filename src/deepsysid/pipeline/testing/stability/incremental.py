@@ -232,5 +232,6 @@ class IncrementalStabilityTest(BaseStabilityTest):
                     model.state_std,
                 ),
             ),
+            initial_states=dict(),
             metadata=dict(stability_gain=np.array([gamma_2])),
         )

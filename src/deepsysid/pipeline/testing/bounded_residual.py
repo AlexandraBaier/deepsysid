@@ -38,6 +38,7 @@ class BoundedResidualInferenceTest(BaseTest):
         control_ls = []
         pred_state_ls = []
         true_state_ls = []
+        initial_states = []
         file_names = []
         thresholds = []
         for threshold in self.thresholds:
@@ -57,13 +58,17 @@ class BoundedResidualInferenceTest(BaseTest):
                 true_state_ls.append(sample.true_state)
                 file_names.append(sample.file_name)
                 thresholds.append(threshold)
+                initial_states.append(sample.x0)
 
         sequences = []
-        for md, c, ps, ts in zip(metadata_ls, control_ls, pred_state_ls, true_state_ls):
+        for md, c, ps, ts, xs in zip(
+            metadata_ls, control_ls, pred_state_ls, true_state_ls, initial_states
+        ):
             sequences.append(
                 TestSequenceResult(
                     inputs=dict(control=c),
                     outputs=dict(true_state=ts, pred_state=ps),
+                    initial_states=dict(initial_state=xs),
                     metadata=md,
                 )
             )

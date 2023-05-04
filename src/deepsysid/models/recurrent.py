@@ -4,6 +4,8 @@ import logging
 import time
 from typing import Dict, List, Literal, Optional, Tuple
 
+import mlflow
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -1235,12 +1237,57 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
 
+        self.control_dim = len(config.control_names)  # external input
+        self.state_dim = len(config.state_names)  # output
+
         self.nwu = config.nwu
         self.nzu = self.nwu
-        self.nx = len(config.A_lin)
-        self.ny = len(config.C_lin)
-        self.control_dim = len(config.control_names)
-        self.state_dim = len(config.state_names)
+
+        nx = len(config.A_lin)
+        self.extend_state = False
+        if nx < self.nwu:
+            self.extend_state = True
+            self.e = self.nwu - nx
+            A_lin_tilde = np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            np.array(config.A_lin, dtype=np.float64),
+                            np.zeros(shape=(nx, self.e)),
+                        ],
+                        axis=1,
+                    ),
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.e, nx)),
+                            np.zeros(shape=(self.e, self.e)),
+                        ],
+                        axis=1,
+                    ),
+                ],
+                axis=0,
+            )
+            B_lin_tilde = np.concatenate(
+                [
+                    np.array(config.B_lin, dtype=np.float64),
+                    np.zeros(shape=(self.e, self.control_dim)),
+                ],
+                axis=0,
+            )
+            C_lin_tilde = np.concatenate(
+                [
+                    np.array(config.C_lin, dtype=np.float64),
+                    np.zeros(shape=(self.state_dim, self.e)),
+                ],
+                axis=1,
+            )
+        else:
+            A_lin_tilde = np.array(config.A_lin, dtype=np.float64)
+            B_lin_tilde = np.array(config.B_lin, dtype=np.float64)
+            C_lin_tilde = np.array(config.C_lin, dtype=np.float64)
+
+        self.nx = A_lin_tilde.shape[0]
+        self.ny = C_lin_tilde.shape[0]
 
         self.initial_decay_parameter = config.initial_decay_parameter
         self.decay_rate = config.decay_rate
@@ -1263,9 +1310,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             raise ValueError('loss can only be "mse"')
 
         self._predictor = rnn.HybridLinearizationRnn(
-            A_lin=np.array(config.A_lin, dtype=np.float64),
-            B_lin=np.array(config.B_lin, dtype=np.float64),
-            C_lin=np.array(config.C_lin, dtype=np.float64),
+            A_lin=A_lin_tilde,
+            B_lin=B_lin_tilde,
+            C_lin=C_lin_tilde,
             alpha=config.alpha,
             beta=config.beta,
             nwu=self.nwu,
@@ -1288,6 +1335,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         ys = state_seqs
         self._predictor.train()
         self._predictor.to(self.device)
+        step = 0
 
         self._control_mean, self._control_std = utils.mean_stddev(us)
         self._state_mean, self._state_std = utils.mean_stddev(ys)
@@ -1296,7 +1344,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             x0s: List[NDArray[np.float64]] = initial_seqs
 
         self._predictor.initialize_lmi()
-        self._predictor.set_lure_system()
+        # d = self._predictor.project_parameters(write_parameter=False)
+        # mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1315,6 +1364,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             logger.info(f'Sequence length {seq_len}, reset optimizer')
 
             for i in range(self.epochs_predictor):
+                step += 1
                 data_loader = data.DataLoader(
                     predictor_dataset, self.batch_size, shuffle=True, drop_last=True
                 )
@@ -1328,12 +1378,22 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     except AssertionError as msg:
                         logger.warning(msg)
 
+                    if self.extend_state:
+                        x0 = torch.concat(
+                            [
+                                batch['x0'].float(),
+                                torch.zeros(size=(self.batch_size, self.e)),
+                            ],
+                            dim=1,
+                        ).to(self.device)
+                    else:
+                        x0 = batch['x0'].float().to(self.device)
                     # Predict and optimize
                     zp_hat, _ = self._predictor.forward(
                         x_pred=batch['wp'].float().to(self.device),
                         hx=(
-                            batch['x0'].float().to(self.device),
-                            batch['x0'].float().to(self.device),
+                            x0,
+                            torch.zeros_like(x0).to(self.device),
                         ),
                     )
                     zp_hat = zp_hat.to(self.device)
@@ -1341,15 +1401,16 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                         zp_hat, batch['zp'].float().to(self.device)
                     )
 
-                    barrier = torch.tensor(0.0).to(self.device)
+                    # barrier = torch.tensor(0.0).to(self.device)
+                    barrier = self._predictor.get_barrier(t).to(self.device)
                     try:
                         if self.enforce_constraints_method == 'barrier':
                             barrier = self._predictor.get_barrier(t).to(self.device)
-                            (batch_loss + barrier).backward(retain_graph=True)
+                            (batch_loss + barrier).backward()
                         elif (self.enforce_constraints_method == 'projection') or (
                             self.enforce_constraints_method is None
                         ):
-                            batch_loss.backward(retain_graph=True)
+                            batch_loss.backward()
 
                         else:
                             raise NotImplementedError
@@ -1380,6 +1441,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             lambda p: p.grad is not None, self._predictor.parameters()
                         )
                     ]
+                    # print(f'Loss: {batch_loss:.2f}\t max grad: {max(grads_norm):.2f}')
                     max_grad.append(max(grads_norm).cpu().detach().numpy())
 
                     # save old parameter set
@@ -1418,6 +1480,46 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                                 )
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
+
+                # mlflow.log_metric('Predictor Loss', total_loss, step=step)
+                # mlflow.log_metric('Barrier', barrier, step=step)
+                # if (step - 1) % 5 == 0:
+                #     nx = self._predictor.nx
+                #     nwp = self._predictor.nwp
+                #     lin = rnn.Linear(
+                #         A=self._predictor.A_lin,
+                #         B=self._predictor.B_lin,
+                #         C=self._predictor.C_lin,
+                #         D=torch.tensor([[0.0]]),
+                #     ).to(self.device)
+                #     y_lin = (
+                #         lin.forward(
+                #             x0[0, :].reshape(1, nx, 1),
+                #             batch['wp'][0, :, :]
+                #             .reshape(1, seq_len, nwp, 1)
+                #             .float()
+                #             .to(self.device),
+                #         )[0]
+                #         .cpu()
+                #         .detach()
+                #         .numpy()
+                #     )
+                #     result = utils.TrainingPrediction(
+                #         u=batch['wp'][0, :, :],
+                #         zp=batch['zp'][0, :, :],
+                #         zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                #         y_lin=y_lin[:, :, 0],
+                #     )
+                #     # mlflow.log_figure(
+                #     #     figure=utils.plot_input(result=result),
+                #     #     artifact_file=f'input_{step-1}.png'
+                #     # )
+                #     mlflow.log_figure(
+                #         figure=utils.plot_outputs(result=result),
+                #         artifact_file=f'output_{step-1}.png',
+                #     )
+                #     d = self._predictor.project_parameters(write_parameter=False)
+                #     mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
                 logger.info(
                     f'Epoch {i + 1}/{self.epochs_predictor}\t'
@@ -1462,7 +1564,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                         logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
         time_end_pred = time.time()
         time_total_pred = time_end_pred - time_start_pred
-        logger.info(f'Training time for predictor {time_total_pred}s')
+
+        logger.info(
+            f'Training time for predictor (HH:MM:SS) {time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred)))}'
+        )
 
         return dict(
             index=np.asarray(i),
@@ -1494,11 +1599,20 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         with torch.no_grad():
             pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
-            x0_torch = (
-                torch.from_numpy(x0).reshape(shape=(self.nx, 1)).float().to(self.device)
-            )
+            x0_1_torch = torch.from_numpy(x0)
+            if self.extend_state:
+                x0_torch = (
+                    torch.concat([x0_1_torch, torch.zeros(size=(self.e,))], dim=0)
+                    .reshape(shape=(self.nx, 1))
+                    .float()
+                    .to(self.device)
+                )
+            else:
+                x0_torch = x0_1_torch.reshape(shape=(-1, 1)).float().to(self.device)
 
-            y, _ = self._predictor.forward(pred_x, hx=(x0_torch, x0_torch))
+            y, _ = self._predictor.forward(
+                pred_x, hx=(x0_torch, torch.zeros_like(x0_torch))
+            )
             y_np: NDArray[np.float64] = (
                 y.cpu().detach().numpy().reshape((N, self.ny)).astype(np.float64)
             )
@@ -1517,6 +1631,15 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         # torch.save(self._initializer.state_dict(), file_path[0])
         torch.save(self._predictor.state_dict(), file_path[1])
+        # mlflow.pytorch.log_state_dict(
+        #     state_dict=self._predictor.state_dict(), artifact_path='model'
+        # )
+        omega, sys_block_matrix = self._predictor.set_lure_system()
+        np.savetxt(file_path[3], omega, delimiter=',', fmt='%.2f')
+        np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.2f')
+        # mlflow.log_artifact(file_path[3], "model")
+        # mlflow.log_artifact(file_path[4], "model")
+
         with open(file_path[2], mode='w') as f:
             json.dump(
                 {
@@ -1543,7 +1666,13 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self._control_std = np.array(norm['control_std'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
-        return 'initializer.pth', 'predictor.pth', 'json'
+        return (
+            'initializer.pth',
+            'predictor.pth',
+            'json',
+            'omega.csv',
+            'cal_block_matrix.csv',
+        )
 
     def get_parameter_count(self) -> int:
         # technically parameter counts of both networks are equal
