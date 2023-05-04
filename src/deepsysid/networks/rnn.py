@@ -1684,7 +1684,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             dim=0,
         ).float().to(self.device)
 
-        P_21 = P_21_1 + P_21_2 @ omega_tilde @ P_21_4
+        P_21 = P_21_1.to(self.device) + P_21_2.to(self.device) @ omega_tilde.to(self.device) @ P_21_4.to(self.device)
         P_11 = -torch.concat(
             [
                 torch.concat(
