@@ -1566,7 +1566,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         A_lin = self.A_lin
         B_lin = self.B_lin
         C_lin = self.C_lin
-        Lambda = torch.diag(self.lam)
+        Lambda = torch.diag(self.lam).to(self.device)
         omega_tilde = self.get_omega_tilde().float().to(self.device)
 
         P_21_1 = torch.concat(
