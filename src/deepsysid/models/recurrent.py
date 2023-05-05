@@ -1402,6 +1402,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     try:
                         if self.enforce_constraints_method == 'barrier':
                             barrier = self._predictor.get_barrier(t).to(self.device)
+                            print(f'batch_loss device {batch_loss.device}, barrier device {barrier.device}')
                             (batch_loss + barrier).backward()
                         elif (self.enforce_constraints_method == 'projection') or (
                             self.enforce_constraints_method is None
