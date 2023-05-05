@@ -1339,8 +1339,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
 
-        # self._predictor.initialize_lmi()
-        self._predictor.project_parameters()
+        self._predictor.initialize_lmi()
+        # self._predictor.project_parameters()
         # mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
         time_start_pred = time.time()

@@ -2009,34 +2009,34 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             f'||X-X_0|| + ||Y-Y_0|| + ||Omega - Omega_0|| + ||Lambda-Lambda_0|| = {d}'
         )
 
-        # alpha = cp.Variable(shape=(1,))
-        # problem = cp.Problem(
-        #     cp.Minimize(expr=alpha),
-        #     feasibility_constraint
-        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
-        # )
-        # problem.solve(solver=cp.MOSEK)
-        # logger.info(
-        #     f'2. run: parameter bounds. '
-        #     f'problem status {problem.status},'
-        #     f'alpha_star = {alpha.value}'
-        # )
+        alpha = cp.Variable(shape=(1,))
+        problem = cp.Problem(
+            cp.Minimize(expr=alpha),
+            feasibility_constraint
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
+        )
+        problem.solve(solver=cp.MOSEK)
+        logger.info(
+            f'2. run: parameter bounds. '
+            f'problem status {problem.status},'
+            f'alpha_star = {alpha.value}'
+        )
 
-        # alpha_fixed = np.float64(alpha.value + 0.1)
+        alpha_fixed = np.float64(alpha.value + 0.1)
 
-        # beta = cp.Variable(shape=(1,))
-        # problem = cp.Problem(
-        #     cp.Maximize(expr=beta),
-        #     feasibility_constraint
-        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
-        #     + utils.get_conditioning_constraints(Y, X, beta),
-        # )
-        # problem.solve(solver=cp.MOSEK)
-        # logger.info(
-        #     f'3. run: coupling conditions. '
-        #     f'problem status {problem.status},'
-        #     f'beta_star = {beta.value}'
-        # )
+        beta = cp.Variable(shape=(1,))
+        problem = cp.Problem(
+            cp.Maximize(expr=beta),
+            feasibility_constraint
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
+            + utils.get_conditioning_constraints(Y, X, beta),
+        )
+        problem.solve(solver=cp.MOSEK)
+        logger.info(
+            f'3. run: coupling conditions. '
+            f'problem status {problem.status},'
+            f'beta_star = {beta.value}'
+        )
 
         if not write_parameter:
             logger.info('Return distance.')
