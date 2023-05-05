@@ -996,9 +996,15 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # print(Lambda)
 
         # 2. Determine non-singular U,V with V U^T = I - Y X
-        U = torch.linalg.inv(Y) - X
-        V = Y
-        # print(f'norm(VU^T + YX -I): {torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device))}')
+        # U = torch.linalg.inv(Y) - X
+        # V = Y
+        U = torch.eye(self.nx).to(device)
+        V = torch.eye(self.nx).to(device) - Y @ X
+        e = torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device))
+        if e > 0:
+            logger.info(f'Min absolute eigenvalues: X {min(torch.abs(torch.linalg.eig(X)[0]))}, Y {min(torch.abs(torch.linalg.eig(Y)[0]))}')
+            logger.info(f'||VU^T + YX -I||: {e}')
+            logger.info(f'VU^T + YX = {torch.round(V@U.T + Y@X, decimals=2)}')
         # print(f'round {torch.round(V@U.T + Y@X, decimals=2)}')
         # assert (
         #     torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device)) < 0.5
