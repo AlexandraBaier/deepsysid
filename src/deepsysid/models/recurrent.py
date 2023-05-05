@@ -1395,34 +1395,32 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     zp_hat = zp_hat.to(self.device)
                     batch_loss = self.loss.forward(
                         zp_hat, batch['zp'].float().to(self.device)
-                    ).to(self.device)
+                    )
 
                     barrier = torch.tensor(0.0).to(self.device)
-                    # barrier = self._predictor.get_barrier(t).to(self.device)
-                    # try:
-                    if self.enforce_constraints_method == 'barrier':
-                        barrier = self._predictor.get_barrier(t).to(self.device)
-                        print(f'batch_loss device {batch_loss.device}, barrier device {barrier.device}')
-                        (batch_loss + barrier).backward()
-                    elif (self.enforce_constraints_method == 'projection') or (
-                        self.enforce_constraints_method is None
-                    ):
-                        batch_loss.backward()
+                    try:
+                        if self.enforce_constraints_method == 'barrier':
+                            barrier = self._predictor.get_barrier(t).to(self.device)
+                            (batch_loss + barrier).backward()
+                        elif (self.enforce_constraints_method == 'projection') or (
+                            self.enforce_constraints_method is None
+                        ):
+                            batch_loss.backward()
 
-                    else:
-                        raise NotImplementedError
-                    # except RuntimeError as msg:
-                    #     logger.warning(msg)
-                    #     logger.info('Stop training, due to a runtime error.')
-                    #     time_end_pred = time.time()
-                    #     time_total_pred = time_end_pred - time_start_pred
-                    #     return dict(
-                    #         index=np.asarray(i),
-                    #         epoch_loss_predictor=np.asarray(predictor_loss),
-                    #         barrier_value=np.asarray(barrier_value),
-                    #         gradient_norm=np.asarray(gradient_norm),
-                    #         training_time_predictor=np.asarray(time_total_pred),
-                    #     )
+                        else:
+                            raise NotImplementedError
+                    except RuntimeError as msg:
+                        logger.warning(msg)
+                        logger.info('Stop training, due to a runtime error.')
+                        time_end_pred = time.time()
+                        time_total_pred = time_end_pred - time_start_pred
+                        return dict(
+                            index=np.asarray(i),
+                            epoch_loss_predictor=np.asarray(predictor_loss),
+                            barrier_value=np.asarray(barrier_value),
+                            gradient_norm=np.asarray(gradient_norm),
+                            training_time_predictor=np.asarray(time_total_pred),
+                        )
                     total_loss += batch_loss.item()
 
                     if self.clip_gradient_norm is not None:
