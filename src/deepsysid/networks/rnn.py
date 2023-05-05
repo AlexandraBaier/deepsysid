@@ -1701,7 +1701,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.eye(self.nx).to(self.device),
@@ -1710,7 +1710,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.zeros(size=(self.nwp, self.nx)).to(self.device),
@@ -1719,7 +1719,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nwp, self.nwu)).to(self.device),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.zeros(size=(self.nzu, self.nx)).to(self.device),
@@ -1728,7 +1728,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         Lambda,
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
             ],
             dim=0,
         ).float()
@@ -1742,7 +1742,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.eye(self.nx).to(self.device),
@@ -1751,7 +1751,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
                 torch.concat(
                     [
                         torch.zeros(size=(self.nzp, self.nx)),
@@ -1769,14 +1769,14 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         Lambda,
                     ],
                     dim=1,
-                ),
+                ).to(self.device),
             ],
             dim=0,
         ).float()
         P = torch.concat(
             [torch.concat([P_11, P_21.T], dim=1), torch.concat([P_21, P_22], dim=1)],
             dim=0,
-        )
+        ).to(self.device)
 
         return P
 
