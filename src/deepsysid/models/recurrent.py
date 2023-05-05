@@ -1214,18 +1214,16 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     alpha: float
     beta: float
     loss: Literal['mse']
-    initial_decay_parameter: float
+    initial_decay_parameter: Optional[float]
     decay_rate: float
-    epochs_with_const_decay: int
-    num_recurrent_layers_init: int
-    dropout: float
+    epochs_with_const_decay: Optional[int]
     sequence_length: List[int]
     learning_rate: float
     batch_size: int
     epochs_predictor: int
     clip_gradient_norm: Optional[float]
     enforce_constraints_method: Optional[Literal['barrier', 'projection']]
-    epochs_without_projection: int
+    epochs_without_projection: Optional[int]
 
 
 class HybridConstrainedRnn(base.NormalizedControlStateModel):
@@ -1293,8 +1291,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.decay_rate = config.decay_rate
         self.epochs_with_const_decay = config.epochs_with_const_decay
 
-        self.num_recurrent_layers_init = config.num_recurrent_layers_init
-        self.dropout = config.dropout
         self.clip_gradient_norm = config.clip_gradient_norm
 
         self.sequence_length = config.sequence_length
@@ -1343,15 +1339,14 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
 
-        self._predictor.initialize_lmi()
-        # d = self._predictor.project_parameters(write_parameter=False)
+        # self._predictor.initialize_lmi()
+        self._predictor.project_parameters()
         # mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
         barrier_value: List[np.float64] = []
         gradient_norm: List[np.float64] = []
-        t = self.initial_decay_parameter
         steps_without_projection = self.epochs_without_projection
         steps_without_loss_decrease = 0
         old_loss: torch.Tensor = torch.tensor(100.0)
@@ -1362,6 +1357,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 self._predictor.parameters(), lr=self.learning_rate
             )
             logger.info(f'Sequence length {seq_len}, reset optimizer')
+            t = self.initial_decay_parameter
 
             for i in range(self.epochs_predictor):
                 step += 1
@@ -1448,8 +1444,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     old_pars = [
                         par.clone().detach() for par in self._predictor.parameters()
                     ]
-
+                    
                     self.optimizer_pred.step()
+                    # if np.isnan(self._predictor.L_x_flat.cpu().detach().numpy()).any():
+                    #     logger.info(f'{old_pars}')
 
                     bls_iter = int(0)
                     if self.enforce_constraints_method == 'barrier':

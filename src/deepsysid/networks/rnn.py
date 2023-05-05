@@ -975,42 +975,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         return np.hstack(vector_list)
 
-    def set_lure_system(self) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
-        device = self.device
-        omega_tilde_0 = self.get_omega_tilde().to(device)
 
-        # construct X, Y, and Lambda
-        # print(f'L x flat: {self.L_x_flat}')
-        eps = 1e-3
-        L_x = self.construct_lower_triangular_matrix(
-            L_flat=self.L_x_flat, diag_length=self.nx
-        ).to(device)
-        L_y = self.construct_lower_triangular_matrix(
-            L_flat=self.L_y_flat, diag_length=self.nx
-        ).to(device)
-        X = L_x @ L_x.T + eps * torch.eye(self.nx).to(device)
-        Y = L_y @ L_y.T + eps * torch.eye(self.nx).to(device)
-        # print(X)
-        # print(Y)
-        Lambda = torch.diag(input=self.lam).to(device)
-        # print(Lambda)
+    def get_T(self, X: torch.Tensor, Y: torch.Tensor, U: torch.Tensor, V:torch.Tensor, Lambda: torch.Tensor)-> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
-        # 2. Determine non-singular U,V with V U^T = I - Y X
-        # U = torch.linalg.inv(Y) - X
-        # V = Y
-        U = torch.eye(self.nx).to(device)
-        V = torch.eye(self.nx).to(device) - Y @ X
-        e = torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device))
-        if e > 0:
-            logger.info(f'Min absolute eigenvalues: X {min(torch.abs(torch.linalg.eig(X)[0]))}, Y {min(torch.abs(torch.linalg.eig(Y)[0]))}')
-            logger.info(f'||VU^T + YX -I||: {e}')
-            logger.info(f'VU^T + YX = {torch.round(V@U.T + Y@X, decimals=2)}')
-        # print(f'round {torch.round(V@U.T + Y@X, decimals=2)}')
-        # assert (
-        #     torch.linalg.norm(V @ U.T + Y @ X - torch.eye(self.nx, device=device)) < 0.5
-        # )
-
-        # 3. transform to original parameters
         T_l = torch.concat(
             [
                 torch.concat(
@@ -1100,15 +1067,48 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             ],
             dim=0,
         ).float()
+
+        return (T_l, T_r, T_s)
+    
+    def get_coupling_matrices(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        L_x = self.construct_lower_triangular_matrix(
+            L_flat=self.L_x_flat, diag_length=self.nx
+        ).to(self.device)
+        L_y = self.construct_lower_triangular_matrix(
+            L_flat=self.L_y_flat, diag_length=self.nx
+        ).to(self.device)
+
+        X = L_x @ L_x.T 
+        Y = L_y @ L_y.T
+
+        # 2. Determine non-singular U,V with V U^T = I - Y X
+        # U = torch.linalg.inv(Y) - X
+        # V = Y
+        U = torch.eye(self.nx).to(self.device)
+        V = torch.eye(self.nx).to(self.device) - Y @ X
+
+        return (X,Y,U,V)
+
+
+    def set_lure_system(self) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+        device = self.device
+        omega_tilde_0 = self.get_omega_tilde().to(device)
+
+        # construct X, Y, and Lambda
+        X, Y, U, V = self.get_coupling_matrices()
+
+        Lambda = torch.diag(input=self.lam).to(device)
+
+        # transform to original parameters
+        T_l, T_r, T_s = self.get_T(X, Y, U, V, Lambda)
         omega_0 = (
             torch.linalg.inv(T_l).float().to(device)
             @ (omega_tilde_0 - T_s.float().to(device))
             @ torch.linalg.inv(T_r).float().to(device)
         )
-        # print(f'norm of T_l^(-1): {torch.linalg.norm(torch.linalg.inv(T_l))}\t norm of T_r^(-1): {torch.linalg.norm(torch.linalg.inv(T_r))} \t norm of omega tilde: {torch.linalg.norm(omega_tilde_0)} \t norm of T_s: {torch.linalg.norm(T_s)}')
+
         sys_block_matrix = self.S_s + self.S_l @ omega_0 @ self.S_r
-        # print(f'norm of S_s: {torch.linalg.norm(self.S_s)}\t norm of S_l:{torch.linalg.norm(self.S_l)}\t norm of S_r:{torch.linalg.norm(self.S_r)}\t norm omega: {torch.linalg.norm(omega_0)}')
-        # assert not any(torch.isnan(sys_block_matrix).flatten().tolist())
+
         (
             A_cal,
             B1_cal,
@@ -1126,7 +1126,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         D22_cal = torch.zeros_like(D22_cal)
 
         def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
-            return (2 / self.beta - self.alpha) * (
+            return (2 / (self.beta - self.alpha)) * (
                 torch.tanh(z) - ((self.alpha + self.beta) / 2) * z
             )
 
@@ -2009,34 +2009,34 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             f'||X-X_0|| + ||Y-Y_0|| + ||Omega - Omega_0|| + ||Lambda-Lambda_0|| = {d}'
         )
 
-        alpha = cp.Variable(shape=(1,))
-        problem = cp.Problem(
-            cp.Minimize(expr=alpha),
-            feasibility_constraint
-            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
-        )
-        problem.solve(solver=cp.MOSEK)
-        logger.info(
-            f'2. run: parameter bounds. '
-            f'problem status {problem.status},'
-            f'alpha_star = {alpha.value}'
-        )
+        # alpha = cp.Variable(shape=(1,))
+        # problem = cp.Problem(
+        #     cp.Minimize(expr=alpha),
+        #     feasibility_constraint
+        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
+        # )
+        # problem.solve(solver=cp.MOSEK)
+        # logger.info(
+        #     f'2. run: parameter bounds. '
+        #     f'problem status {problem.status},'
+        #     f'alpha_star = {alpha.value}'
+        # )
 
-        alpha_fixed = np.float64(alpha.value + 0.1)
+        # alpha_fixed = np.float64(alpha.value + 0.1)
 
-        beta = cp.Variable(shape=(1,))
-        problem = cp.Problem(
-            cp.Maximize(expr=beta),
-            feasibility_constraint
-            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
-            + utils.get_conditioning_constraints(Y, X, beta),
-        )
-        problem.solve(solver=cp.MOSEK)
-        logger.info(
-            f'3. run: coupling conditions. '
-            f'problem status {problem.status},'
-            f'beta_star = {beta.value}'
-        )
+        # beta = cp.Variable(shape=(1,))
+        # problem = cp.Problem(
+        #     cp.Maximize(expr=beta),
+        #     feasibility_constraint
+        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
+        #     + utils.get_conditioning_constraints(Y, X, beta),
+        # )
+        # problem.solve(solver=cp.MOSEK)
+        # logger.info(
+        #     f'3. run: coupling conditions. '
+        #     f'problem status {problem.status},'
+        #     f'beta_star = {beta.value}'
+        # )
 
         if not write_parameter:
             logger.info('Return distance.')
