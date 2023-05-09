@@ -5,7 +5,6 @@ import time
 from typing import Dict, List, Literal, Optional, Tuple
 
 import mlflow
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -1214,9 +1213,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     alpha: float
     beta: float
     loss: Literal['mse']
-    initial_decay_parameter: Optional[float]
     decay_rate: float
-    epochs_with_const_decay: Optional[int]
     sequence_length: List[int]
     learning_rate: float
     batch_size: int
@@ -1224,6 +1221,9 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     clip_gradient_norm: Optional[float]
     enforce_constraints_method: Optional[Literal['barrier', 'projection']]
     epochs_without_projection: Optional[int]
+    initial_decay_parameter: float
+    epochs_with_const_decay: Optional[int]
+    mlflow_tracking_uri: Optional[str]
 
 
 class HybridConstrainedRnn(base.NormalizedControlStateModel):
@@ -1231,6 +1231,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
     def __init__(self, config: HybridConstrainedRnnConfig):
         super().__init__(config)
+
+        if config.mlflow_tracking_uri is not None:
+            mlflow.set_tracking_uri(config.mlflow_tracking_uri)
 
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
@@ -1289,7 +1292,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         self.initial_decay_parameter = config.initial_decay_parameter
         self.decay_rate = config.decay_rate
-        self.epochs_with_const_decay = config.epochs_with_const_decay
+        if config.epochs_with_const_decay is not None:
+            self.epochs_with_const_decay = config.epochs_with_const_decay
 
         self.clip_gradient_norm = config.clip_gradient_norm
 
@@ -1297,8 +1301,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.learning_rate = config.learning_rate
         self.batch_size = config.batch_size
         self.epochs_predictor = config.epochs_predictor
-        self.epochs_without_projection = config.epochs_without_projection
-        self.enforce_constraints_method = config.enforce_constraints_method
+        if config.epochs_without_projection is not None:
+            self.epochs_without_projection = config.epochs_without_projection
+        if config.enforce_constraints_method is not None:
+            self.enforce_constraints_method = config.enforce_constraints_method
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -1339,9 +1345,11 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
 
-        self._predictor.initialize_lmi()
-        # self._predictor.project_parameters()
-        # mlflow.log_metric('d_to_feasible_pars', d, step=step)
+        # self._predictor.initialize_lmi()
+
+        d = self._predictor.project_parameters()
+        if mlflow.active_run():
+            mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1400,11 +1408,11 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     barrier = torch.tensor(0.0).to(self.device)
                     try:
                         if self.enforce_constraints_method == 'barrier':
-                            barrier = self._predictor.get_barrier(t).to(self.device)
+                            barrier = self._predictor.get_barrier(
+                                torch.tensor(t, device=self.device)
+                            )
                             (batch_loss + barrier).backward()
-                        elif (self.enforce_constraints_method == 'projection') or (
-                            self.enforce_constraints_method is None
-                        ):
+                        elif self.enforce_constraints_method == 'projection':
                             batch_loss.backward()
 
                         else:
@@ -1443,10 +1451,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     old_pars = [
                         par.clone().detach() for par in self._predictor.parameters()
                     ]
-                    
+
                     self.optimizer_pred.step()
-                    # if np.isnan(self._predictor.L_x_flat.cpu().detach().numpy()).any():
-                    #     logger.info(f'{old_pars}')
 
                     bls_iter = int(0)
                     if self.enforce_constraints_method == 'barrier':
@@ -1478,45 +1484,42 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
 
-                # mlflow.log_metric('Predictor Loss', total_loss, step=step)
-                # mlflow.log_metric('Barrier', barrier, step=step)
-                # if (step - 1) % 5 == 0:
-                #     nx = self._predictor.nx
-                #     nwp = self._predictor.nwp
-                #     lin = rnn.Linear(
-                #         A=self._predictor.A_lin,
-                #         B=self._predictor.B_lin,
-                #         C=self._predictor.C_lin,
-                #         D=torch.tensor([[0.0]]),
-                #     ).to(self.device)
-                #     y_lin = (
-                #         lin.forward(
-                #             x0[0, :].reshape(1, nx, 1),
-                #             batch['wp'][0, :, :]
-                #             .reshape(1, seq_len, nwp, 1)
-                #             .float()
-                #             .to(self.device),
-                #         )[0]
-                #         .cpu()
-                #         .detach()
-                #         .numpy()
-                #     )
-                #     result = utils.TrainingPrediction(
-                #         u=batch['wp'][0, :, :],
-                #         zp=batch['zp'][0, :, :],
-                #         zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
-                #         y_lin=y_lin[:, :, 0],
-                #     )
-                #     # mlflow.log_figure(
-                #     #     figure=utils.plot_input(result=result),
-                #     #     artifact_file=f'input_{step-1}.png'
-                #     # )
-                #     mlflow.log_figure(
-                #         figure=utils.plot_outputs(result=result),
-                #         artifact_file=f'output_{step-1}.png',
-                #     )
-                #     d = self._predictor.project_parameters(write_parameter=False)
-                #     mlflow.log_metric('d_to_feasible_pars', d, step=step)
+                if mlflow.active_run():
+                    mlflow.log_metric('Predictor Loss', total_loss, step=step)
+                    mlflow.log_metric('Barrier', barrier, step=step)
+                    if (step - 1) % 5 == 0:
+                        nx = self._predictor.nx
+                        nwp = self._predictor.nwp
+                        lin = rnn.Linear(
+                            A=self._predictor.A_lin,
+                            B=self._predictor.B_lin,
+                            C=self._predictor.C_lin,
+                            D=torch.tensor([[0.0]]),
+                        ).to(self.device)
+                        y_lin = (
+                            lin.forward(
+                                x0[0, :].reshape(1, nx, 1),
+                                batch['wp'][0, :, :]
+                                .reshape(1, seq_len, nwp, 1)
+                                .float()
+                                .to(self.device),
+                            )[0]
+                            .cpu()
+                            .detach()
+                            .numpy()
+                        )
+                        result = utils.TrainingPrediction(
+                            u=batch['wp'][0, :, :],
+                            zp=batch['zp'][0, :, :],
+                            zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                            y_lin=y_lin[:, :, 0],
+                        )
+                        mlflow.log_figure(
+                            figure=utils.plot_outputs(result=result),
+                            artifact_file=f'output_{step-1}.png',
+                        )
+                        d = self._predictor.project_parameters(write_parameter=False)
+                        mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
                 logger.info(
                     f'Epoch {i + 1}/{self.epochs_predictor}\t'
@@ -1563,7 +1566,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         time_total_pred = time_end_pred - time_start_pred
 
         logger.info(
-            f'Training time for predictor (HH:MM:SS) {time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred)))}'
+            f'Training time for predictor (HH:MM:SS) '
+            f'{time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred)))}'
         )
 
         return dict(
@@ -1590,6 +1594,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             raise ValueError('Model has not been trained and cannot simulate.')
 
         self._predictor.eval()
+        self._predictor.set_lure_system()
 
         u = control
         N, nu = control.shape
@@ -1626,14 +1631,13 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         ):
             raise ValueError('Model has not been trained and cannot be saved.')
 
-        # torch.save(self._initializer.state_dict(), file_path[0])
         torch.save(self._predictor.state_dict(), file_path[1])
+        omega, sys_block_matrix = self._predictor.set_lure_system()
+        np.savetxt(file_path[3], omega, delimiter=',', fmt='%.4f')
+        np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.4f')
         # mlflow.pytorch.log_state_dict(
         #     state_dict=self._predictor.state_dict(), artifact_path='model'
         # )
-        omega, sys_block_matrix = self._predictor.set_lure_system()
-        np.savetxt(file_path[3], omega, delimiter=',', fmt='%.2f')
-        np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.2f')
         # mlflow.log_artifact(file_path[3], "model")
         # mlflow.log_artifact(file_path[4], "model")
 

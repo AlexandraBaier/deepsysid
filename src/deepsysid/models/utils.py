@@ -1,11 +1,11 @@
-from typing import List, Tuple, TypeVar, Optional
+import dataclasses
+from typing import List, Optional, Tuple, TypeVar
 
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from numpy.typing import NDArray
-import dataclasses
-import matplotlib.pyplot as plt
-import matplotlib
 
 TensorType = TypeVar('TensorType', torch.Tensor, NDArray[np.float64])
 
@@ -65,7 +65,7 @@ def plot_outputs(result: TrainingPrediction) -> matplotlib.figure.Figure:
     t = np.linspace(0, seq_len - 1, seq_len)
     for element, ax in zip(range(ny), axs[:, 0]):
         ax.plot(t, result.zp[:, element], '--', label=r'$z_p$')
-        ax.plot(t, result.zp_hat[:, element], label=r'$\\hat{z}_p$')
+        ax.plot(t, result.zp_hat[:, element], label=r'$\hat{z}_p$')
         ax.plot(t, result.y_lin[:, element], '--', label=r'$y_{lin}$')
         ax.set_title(f'$z_{element+1}$')
         ax.grid()

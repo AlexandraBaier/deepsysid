@@ -175,8 +175,7 @@ def test_constrained_hybrid_rnn(tmp_path: pathlib.Path) -> None:
         epochs_initializer=2,
         epochs_predictor=2,
         loss='mse',
-        # clip_gradient_norm=0.1,
-        # enforce_constraints_method='barrier',
+        enforce_constraints_method='barrier',
         epochs_without_projection=50,
     )
     pipeline.run_cartpole_pipeline(

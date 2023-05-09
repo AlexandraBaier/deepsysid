@@ -1,6 +1,7 @@
+from typing import List, Union
+
 import cvxpy as cp
 import numpy as np
-from typing import Union, List
 
 
 def get_feasibility_constraint(
