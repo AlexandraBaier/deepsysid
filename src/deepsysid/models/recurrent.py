@@ -1219,8 +1219,8 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     batch_size: int
     epochs_predictor: int
     clip_gradient_norm: Optional[float]
-    enforce_constraints_method: Optional[Literal['barrier', 'projection']]
-    epochs_without_projection: Optional[int]
+    enforce_constraints_method: Literal['barrier', 'projection']
+    epochs_without_projection: int
     initial_decay_parameter: float
     epochs_with_const_decay: Optional[int]
     mlflow_tracking_uri: Optional[str]
@@ -1301,10 +1301,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.learning_rate = config.learning_rate
         self.batch_size = config.batch_size
         self.epochs_predictor = config.epochs_predictor
-        if config.epochs_without_projection is not None:
-            self.epochs_without_projection = config.epochs_without_projection
-        if config.enforce_constraints_method is not None:
-            self.enforce_constraints_method = config.enforce_constraints_method
+        self.epochs_without_projection = config.epochs_without_projection
+        self.enforce_constraints_method = config.enforce_constraints_method
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
