@@ -27,17 +27,21 @@ def train_model(
     os.makedirs(model_directory, exist_ok=True)
 
     # Load dataset
-    controls, states = load_simulation_data(
+    controls, states, initial_states = load_simulation_data(
         directory=dataset_directory,
         control_names=configuration.control_names,
         state_names=configuration.state_names,
+        initial_state_names=configuration.initial_state_names,
     )
 
     # Initialize model
     model = initialize_model(configuration, model_name, device_name)
     # Train model
-    logger.info(f'Training model on {device_name} if implemented.')
-    metadata = model.train(control_seqs=controls, state_seqs=states)
+    logger.info(f'Training model {model_name} on {device_name} if implemented.')
+    metadata = model.train(
+        control_seqs=controls, state_seqs=states, initial_seqs=initial_states
+    )
+
     # Save model metadata
     if metadata is not None:
         save_training_metadata(metadata, model_directory, model_name)

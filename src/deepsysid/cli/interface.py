@@ -23,6 +23,7 @@ from .download import (
     download_dataset_4_dof_simulated_ship,
     download_dataset_industrial_robot,
     download_dataset_pelican_quadcopter,
+    download_dataset_toy,
 )
 
 CONFIGURATION_ENV_VAR = 'CONFIGURATION'
@@ -148,9 +149,23 @@ class DeepSysIdCommandLineInterface:
         )
         self.download_4dof_sim_ship_parser.set_defaults(func=download_4dof_sim_ship)
 
+        self.download_toy_dataset_parser = self.download_subparsers.add_parser(
+            'toy_dataset',
+            help=(
+                'Downloads Coupled MSD, Pole on a Cart, ',
+                'Single pendulum with torque input, ',
+                'see https://github.com/Dany-L/statesim for details.',
+            ),
+        )
+        self.download_toy_dataset_parser.add_argument(
+            'target', help='Target directory for dataset.'
+        )
+        self.download_toy_dataset_parser.set_defaults(func=download_toy_dataset)
+
         self.download_pelican_parser = self.download_subparsers.add_parser(
             'pelican', help='Downloads https://github.com/wavelab/pelican_dataset.'
         )
+
         self.download_pelican_parser.add_argument(
             'target', help='Target directory for dataset.'
         )
@@ -373,6 +388,13 @@ def session(args: argparse.Namespace) -> None:
 
     manager.run_session(callback=save_report)
     save_report(manager.get_session_report())
+
+
+def download_toy_dataset(args: argparse.Namespace) -> None:
+    target_dir = args.target
+
+    setup_root_logger()
+    download_dataset_toy(target_directory=target_dir)
 
 
 def download_4dof_sim_ship(args: argparse.Namespace) -> None:

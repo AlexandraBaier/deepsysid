@@ -41,6 +41,7 @@ def test_experiment_session_manager_new_and_test_best_successful(
             horizon_size=get_horizon_size(),
             control_names=get_4dof_ship_control_names(),
             state_names=get_4dof_ship_state_names(),
+            initial_state_names=get_4dof_ship_state_names(),
             target_metric='d1',
             metrics=dict(
                 d1=GridSearchMetricConfiguration(

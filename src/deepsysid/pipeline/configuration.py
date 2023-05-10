@@ -57,6 +57,8 @@ class GridSearchTestConfiguration(BaseModel):
 
 class SessionConfiguration(BaseModel):
     total_runs_for_best_models: int
+    training_trajectory: Optional[List[str]]
+    training_scalar: Optional[List[str]]
 
 
 class ExperimentGridSearchSettings(BaseModel):
@@ -65,6 +67,7 @@ class ExperimentGridSearchSettings(BaseModel):
     horizon_size: int
     control_names: List[str]
     state_names: List[str]
+    initial_state_names: List[str]
     additional_tests: Dict[str, GridSearchTestConfiguration]
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
@@ -97,6 +100,7 @@ class ExperimentConfiguration(BaseModel):
     horizon_size: int
     control_names: List[str]
     state_names: List[str]
+    initial_state_names: List[str]
     metrics: Dict[str, ExperimentMetricConfiguration]
     explanation_metrics: Optional[Dict[str, ExperimentExplanationMetricConfiguration]]
     target_metric: str
@@ -125,6 +129,7 @@ class ExperimentConfiguration(BaseModel):
                 device_name=device_name,
                 control_names=template.settings.control_names,
                 state_names=template.settings.state_names,
+                initial_state_names=template.settings.initial_state_names,
                 time_delta=template.settings.time_delta,
                 window_size=template.settings.window_size,
                 horizon_size=template.settings.horizon_size,
@@ -233,6 +238,7 @@ class ExperimentConfiguration(BaseModel):
             horizon_size=template.settings.horizon_size,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
+            initial_state_names=template.settings.initial_state_names,
             models=models,
             target_metric=template.settings.target_metric,
             metrics=metrics,

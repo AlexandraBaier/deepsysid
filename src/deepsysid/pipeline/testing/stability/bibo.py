@@ -196,5 +196,6 @@ class BiboStabilityTest(BaseStabilityTest):
                     y_hat_a.cpu().detach().numpy(), model.state_mean, model.state_std
                 )
             ),
+            initial_states=dict(),
             metadata=dict(stability_gain=np.array([gamma_2])),
         )

@@ -18,6 +18,7 @@ class DynamicIdentificationModelConfig(BaseModel):
     device_name: str = 'cpu'
     control_names: List[str]
     state_names: List[str]
+    initial_state_names: Optional[List[str]]
     time_delta: float
 
 
@@ -33,6 +34,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         pass
 
@@ -42,6 +44,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> Union[
         NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
     ]:
@@ -86,6 +89,7 @@ class FixedWindowModel(
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> None:
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]
@@ -121,6 +125,7 @@ class FixedWindowModel(
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         """
         Multi-step prediction of system states given control inputs and initial window.

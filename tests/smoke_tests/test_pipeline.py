@@ -14,6 +14,7 @@ from deepsysid.models.linear import LinearLag, LinearModel, QuadraticControlLag
 from deepsysid.models.narx import NARXDenseNetwork
 from deepsysid.models.recurrent import (
     ConstrainedRnn,
+    HybridConstrainedRnn,
     LSTMCombinedInitModel,
     LSTMInitModel,
     LtiRnnInit,
@@ -23,6 +24,7 @@ from deepsysid.models.recurrent import (
 from deepsysid.models.switching.klinreg import KLinearRegressionARXModel
 from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
 
+from ..unit_tests import test_networks
 from . import pipeline
 
 
@@ -140,6 +142,43 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
         nonlinearity='torch.nn.Tanh()',
     )
     pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_constrained_hybrid_rnn(tmp_path: pathlib.Path) -> None:
+    model_name = 'HybridConstrainedRnn'
+    model_class = 'deepsysid.models.recurrent.HybridConstrainedRnn'
+    A_lin, B_lin, C_lin, D_lin = test_networks.get_linear_matrices()
+    config = HybridConstrainedRnn.CONFIG(
+        control_names=pipeline.get_cartpole_control_names(),
+        state_names=pipeline.get_cartpole_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        A_lin=A_lin.tolist(),
+        B_lin=B_lin.tolist(),
+        C_lin=C_lin.tolist(),
+        D_lin=D_lin.tolist(),
+        nwu=10,
+        nzu=10,
+        alpha=0.0,
+        beta=1.0,
+        gamma=1.0,
+        initial_decay_parameter=1e-3,
+        decay_rate=10,
+        epochs_with_const_decay=1,
+        num_recurrent_layers_init=3,
+        dropout=0.25,
+        sequence_length=[3],
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+        enforce_constraints_method='barrier',
+        epochs_without_projection=50,
+    )
+    pipeline.run_cartpole_pipeline(
         tmp_path, model_name, model_class, model_config=config
     )
 

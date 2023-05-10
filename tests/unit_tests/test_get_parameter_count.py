@@ -38,6 +38,7 @@ def test_linear_model():
     model.train(
         control_seqs=[np.random.normal(0, 1, (batch_size, control_dim))],
         state_seqs=[np.random.normal(0, 1, (batch_size, state_dim))],
+        initial_seqs=None,
     )
     assert model.get_parameter_count() == parameter_count
 
@@ -67,6 +68,7 @@ def test_linear_lag():
     model.train(
         control_seqs=[np.random.normal(0, 1, (batch_size, control_dim))],
         state_seqs=[np.random.normal(0, 1, (batch_size, state_dim))],
+        initial_seqs=None,
     )
     assert model.get_parameter_count() == parameter_count
 
@@ -96,5 +98,6 @@ def test_quadratic_control_lag():
     model.train(
         control_seqs=[np.random.normal(0, 1, (batch_size, control_dim))],
         state_seqs=[np.random.normal(0, 1, (batch_size, state_dim))],
+        initial_seqs=None,
     )
     assert model.get_parameter_count() == parameter_count

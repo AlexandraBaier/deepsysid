@@ -1,6 +1,6 @@
 import abc
 import dataclasses
-from typing import Dict, List, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type
 
 import numpy as np
 from numpy.typing import NDArray
@@ -18,6 +18,7 @@ class ModelInput:
     initial_control: NDArray[np.float64]
     initial_state: NDArray[np.float64]
     control: NDArray[np.float64]
+    x0: Optional[NDArray[np.float64]]
 
 
 @dataclasses.dataclass

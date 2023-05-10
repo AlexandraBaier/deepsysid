@@ -51,7 +51,9 @@ def explain_model(
     training_inputs, training_outputs = zip(
         *[
             (
-                ModelInput(sim.initial_control, sim.initial_state, sim.true_control),
+                ModelInput(
+                    sim.initial_control, sim.initial_state, sim.true_control, sim.x0
+                ),
                 sim.true_state,
             )
             for sim in split_simulations(
@@ -63,7 +65,7 @@ def explain_model(
     )
 
     model_inputs = [
-        ModelInput(sim.initial_control, sim.initial_state, sim.true_control)
+        ModelInput(sim.initial_control, sim.initial_state, sim.true_control, sim.x0)
         for sim in split_simulations(
             configuration.window_size, configuration.horizon_size, explained_simulations
         )

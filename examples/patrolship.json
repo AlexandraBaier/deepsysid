@@ -21,6 +21,15 @@
       "alpha_x",
       "alpha_y"
     ],
+    "initial_state_names": [
+      "u",
+      "v",
+      "p",
+      "r",
+      "phi",
+      "alpha_x",
+      "alpha_y"
+    ],
     "additional_tests": {
       "bibo_stability": {
         "test_class": "deepsysid.pipeline.testing.stability.bibo.BiboStabilityTest",

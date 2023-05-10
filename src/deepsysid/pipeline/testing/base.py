@@ -15,6 +15,7 @@ TestResultMetadata = Dict[str, Union[List[str], List[float], List[int]]]
 class TestSimulation:
     control: NDArray[np.float64]
     state: NDArray[np.float64]
+    initial_state: NDArray[np.float64]
     file_name: str
 
 
@@ -22,6 +23,7 @@ class TestSimulation:
 class TestSequenceResult:
     inputs: Dict[str, NDArray[np.float64]]
     outputs: Dict[str, NDArray[np.float64]]
+    initial_states: Dict[str, NDArray[np.float64]]
     metadata: Dict[str, NDArray[np.float64]]
 
 

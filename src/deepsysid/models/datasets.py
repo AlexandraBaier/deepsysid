@@ -186,6 +186,106 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
         }
 
 
+class RecurrentPredictorInitialDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
+    def __init__(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        initial_state_seqs: List[NDArray[np.float64]],
+        sequence_length: int,
+    ):
+        self.sequence_length = sequence_length
+        self.control_dim = control_seqs[0].shape[1]
+        self.state_dim = state_seqs[0].shape[1]
+        self.initial_state_dim = initial_state_seqs[0].shape[1]
+        self.wp_init, self.zp_init, self.wp, self.zp, self.x0 = self.__load_data(
+            control_seqs, state_seqs, initial_state_seqs
+        )
+
+    def __load_data(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        initial_state_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+    ]:
+        wp_init_seq = list()
+        zp_init_seq = list()
+        wp_seq = list()
+        zp_seq = list()
+        x0_seq = list()
+
+        for control, state, initial_state in zip(
+            control_seqs, state_seqs, initial_state_seqs
+        ):
+            n_samples = int(
+                (control.shape[0] - 2 * self.sequence_length) / self.sequence_length
+            )
+
+            wp_init = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim + self.state_dim),
+                dtype=np.float64,
+            )
+            zp_init = np.zeros((n_samples, self.state_dim), dtype=np.float64)
+            wp = np.zeros(
+                (n_samples, self.sequence_length, self.control_dim), dtype=np.float64
+            )
+            zp = np.zeros(
+                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
+            )
+
+            x0 = np.zeros(shape=(n_samples, self.initial_state_dim), dtype=np.float64)
+
+            for idx in range(n_samples):
+                time = idx * self.sequence_length
+
+                wp_init[idx, :, :] = np.hstack(
+                    (
+                        control[time : time + self.sequence_length],
+                        state[time : time + self.sequence_length, :],
+                    )
+                )
+                zp_init[idx, :] = state[time + self.sequence_length - 1, :]
+                wp[idx, :, :] = control[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
+                zp[idx, :, :] = state[
+                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                ]
+                x0[idx, :] = initial_state[time + self.sequence_length, :]
+
+            wp_init_seq.append(wp_init)
+            zp_init_seq.append(zp_init)
+            wp_seq.append(wp)
+            zp_seq.append(zp)
+            x0_seq.append(x0)
+
+        return (
+            np.vstack(wp_init_seq),
+            np.vstack(zp_init_seq),
+            np.vstack(wp_seq),
+            np.vstack(zp_seq),
+            np.vstack(x0_seq),
+        )
+
+    def __len__(self) -> int:
+        return self.wp_init.shape[0]
+
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
+        return {
+            'wp_init': self.wp_init[idx],
+            'zp_init': self.zp_init[idx],
+            'wp': self.wp[idx],
+            'zp': self.zp[idx],
+            'x0': self.x0[idx],
+        }
+
+
 class RecurrentInitializerPredictorDataset(data.Dataset):
     def __init__(
         self,
