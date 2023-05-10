@@ -1,10 +1,11 @@
 import copy
+import importlib
 import json
 import logging
 import time
+from types import ModuleType
 from typing import Dict, List, Literal, Optional, Tuple
 
-import mlflow
 import numpy as np
 import torch
 import torch.nn as nn
@@ -683,6 +684,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
         gradient_norm: List[np.float64] = []
+        last_index = 0
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
@@ -712,6 +714,8 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
                 )
                 self.optimizer_pred.step()
 
+                last_index = i
+
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
                 f'Total Loss (Predictor): {total_loss:1f} \t'
@@ -729,7 +733,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         )
 
         return dict(
-            index=np.asarray(i),
+            index=np.asarray(last_index),
             epoch_loss_initializer=np.asarray(initializer_loss),
             epoch_loss_predictor=np.asarray(predictor_loss),
             gradient_norm=np.asarray(gradient_norm),
@@ -1232,8 +1236,14 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
     def __init__(self, config: HybridConstrainedRnnConfig):
         super().__init__(config)
 
-        if config.mlflow_tracking_uri is not None:
-            mlflow.set_tracking_uri(config.mlflow_tracking_uri)
+        self.mlflow: Optional[ModuleType] = None
+        try:
+            self.mlflow = importlib.import_module('mlflow')
+        except ImportError:
+            self.mlflow = None
+
+        if self.mlflow is not None and config.mlflow_tracking_uri is not None:
+            self.mlflow.set_tracking_uri(config.mlflow_tracking_uri)
 
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
@@ -1346,8 +1356,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         # self._predictor.initialize_lmi()
 
         d = self._predictor.project_parameters()
-        if mlflow.active_run():
-            mlflow.log_metric('d_to_feasible_pars', d, step=step)
+        if self.mlflow is not None and self.mlflow.active_run():
+            self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1482,9 +1492,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
 
-                if mlflow.active_run():
-                    mlflow.log_metric('Predictor Loss', total_loss, step=step)
-                    mlflow.log_metric('Barrier', barrier, step=step)
+                if self.mlflow is not None and self.mlflow.active_run():
+                    self.mlflow.log_metric('Predictor Loss', total_loss, step=step)
+                    self.mlflow.log_metric('Barrier', barrier, step=step)
                     if (step - 1) % 5 == 0:
                         nx = self._predictor.nx
                         nwp = self._predictor.nwp
@@ -1512,12 +1522,12 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
                             y_lin=y_lin[:, :, 0],
                         )
-                        mlflow.log_figure(
+                        self.mlflow.log_figure(
                             figure=utils.plot_outputs(result=result),
                             artifact_file=f'output_{step-1}.png',
                         )
                         d = self._predictor.project_parameters(write_parameter=False)
-                        mlflow.log_metric('d_to_feasible_pars', d, step=step)
+                        self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
                 logger.info(
                     f'Epoch {i + 1}/{self.epochs_predictor}\t'
@@ -1617,7 +1627,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 y.cpu().detach().numpy().reshape((N, self.ny)).astype(np.float64)
             )
 
-        # y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
         return y_np
 
     def save(self, file_path: Tuple[str, ...]) -> None:
@@ -1633,11 +1642,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         omega, sys_block_matrix = self._predictor.set_lure_system()
         np.savetxt(file_path[3], omega, delimiter=',', fmt='%.4f')
         np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.4f')
-        # mlflow.pytorch.log_state_dict(
-        #     state_dict=self._predictor.state_dict(), artifact_path='model'
-        # )
-        # mlflow.log_artifact(file_path[3], "model")
-        # mlflow.log_artifact(file_path[4], "model")
 
         with open(file_path[2], mode='w') as f:
             json.dump(
@@ -1651,9 +1655,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             )
 
     def load(self, file_path: Tuple[str, ...]) -> None:
-        # self._initializer.load_state_dict(
-        #     torch.load(file_path[0], map_location=self.device_name)
-        # )
         self._predictor.load_state_dict(
             torch.load(file_path[1], map_location=self.device_name)
         )
