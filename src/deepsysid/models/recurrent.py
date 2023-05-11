@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from types import ModuleType
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Callable, Any
 
 import numpy as np
 import torch
@@ -1236,14 +1236,15 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
     def __init__(self, config: HybridConstrainedRnnConfig):
         super().__init__(config)
 
-        self.mlflow: Optional[ModuleType] = None
-        try:
-            self.mlflow = importlib.import_module('mlflow')
-        except ImportError:
-            self.mlflow = None
+        # self.mlflow: Optional[ModuleType] = None
+        # try:
+        #     self.mlflow = importlib.import_module('mlflow')
+        # except ImportError:
+        #     self.mlflow = None
 
-        if self.mlflow is not None and config.mlflow_tracking_uri is not None:
-            self.mlflow.set_tracking_uri(config.mlflow_tracking_uri)
+        # if self.mlflow is not None and config.mlflow_tracking_uri is not None:
+        #     self.mlflow.set_tracking_uri(config.mlflow_tracking_uri)
+        #     self.mlflow.create_experiment('test123')
 
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
@@ -1339,6 +1340,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        callback: Callable[[Dict[str, Any]], None] = lambda _:None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
@@ -1355,9 +1357,14 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         # self._predictor.initialize_lmi()
 
-        d = self._predictor.project_parameters()
-        if self.mlflow is not None and self.mlflow.active_run():
-            self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
+        self._predictor.project_parameters()
+        # callback({
+        #     'metric':[
+        #         ['Dist to feasible par set', d, 0]
+        #     ]
+        # })
+        # if mlflow is not None and self.mlflow.active_run():
+        #     mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1492,42 +1499,45 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
 
-                if self.mlflow is not None and self.mlflow.active_run():
-                    self.mlflow.log_metric('Predictor Loss', total_loss, step=step)
-                    self.mlflow.log_metric('Barrier', barrier, step=step)
-                    if (step - 1) % 5 == 0:
-                        nx = self._predictor.nx
-                        nwp = self._predictor.nwp
-                        lin = rnn.Linear(
-                            A=self._predictor.A_lin,
-                            B=self._predictor.B_lin,
-                            C=self._predictor.C_lin,
-                            D=torch.tensor([[0.0]]),
-                        ).to(self.device)
-                        y_lin = (
-                            lin.forward(
-                                x0[0, :].reshape(1, nx, 1),
-                                batch['wp'][0, :, :]
-                                .reshape(1, seq_len, nwp, 1)
-                                .float()
-                                .to(self.device),
-                            )[0]
-                            .cpu()
-                            .detach()
-                            .numpy()
-                        )
-                        result = utils.TrainingPrediction(
-                            u=batch['wp'][0, :, :],
-                            zp=batch['zp'][0, :, :],
-                            zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
-                            y_lin=y_lin[:, :, 0],
-                        )
-                        self.mlflow.log_figure(
-                            figure=utils.plot_outputs(result=result),
-                            artifact_file=f'output_{step-1}.png',
-                        )
-                        d = self._predictor.project_parameters(write_parameter=False)
-                        self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
+                callback(
+                    {'metric': [
+                        ['Predictor loss', total_loss, step],
+                        ['Barrier', barrier, step]
+                    ]}
+                )
+                if (step - 1) % 20 == 0:
+                    nx = self._predictor.nx
+                    nwp = self._predictor.nwp
+                    lin = rnn.Linear(
+                        A=self._predictor.A_lin,
+                        B=self._predictor.B_lin,
+                        C=self._predictor.C_lin,
+                        D=torch.tensor([[0.0]]),
+                    ).to(self.device)
+                    y_lin = (
+                        lin.forward(
+                            x0[0, :].reshape(1, nx, 1),
+                            batch['wp'][0, :, :]
+                            .reshape(1, seq_len, nwp, 1)
+                            .float()
+                            .to(self.device),
+                        )[0]
+                        .cpu()
+                        .detach()
+                        .numpy()
+                    )
+                    result = utils.TrainingPrediction(
+                        u=batch['wp'][0, :, :],
+                        zp=batch['zp'][0, :, :],
+                        zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                        y_lin=y_lin[:, :, 0],
+                    )
+                    # d = self._predictor.project_parameters(write_parameter=False)
+                    callback({
+                        'figures':[
+                            [utils.plot_outputs(result=result), f'output_{step-1}.png']
+                        ]
+                    })
 
                 logger.info(
                     f'Epoch {i + 1}/{self.epochs_predictor}\t'
@@ -1762,6 +1772,7 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        callback: Callable[[Dict[str, Any]], None] = lambda _:None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []

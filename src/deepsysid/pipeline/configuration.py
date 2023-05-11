@@ -14,6 +14,10 @@ from .metrics import BaseMetricConfig, retrieve_metric_class
 from .testing.base import BaseTestConfig, retrieve_test_class
 
 
+class TrackingConfiguration(BaseModel):
+    tracking_class: str
+    parameters: Dict[str, Any]
+
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
     parameters: DynamicIdentificationModelConfig
@@ -73,6 +77,7 @@ class ExperimentGridSearchSettings(BaseModel):
     metrics: Dict[str, GridSearchMetricConfiguration]
     explanation_metrics: Optional[Dict[str, GridSearchExplanationMetricConfiguration]]
     session: Optional[SessionConfiguration]
+    tracker: Optional[Dict[str, TrackingConfiguration]]
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -108,6 +113,7 @@ class ExperimentConfiguration(BaseModel):
     models: Dict[str, ExperimentModelConfiguration]
     explainers: Optional[Dict[str, ExperimentExplainerConfiguration]]
     session: Optional[SessionConfiguration]
+    tracker: Optional[Dict[str, TrackingConfiguration]]
 
     @root_validator
     def check_target_metric_in_metrics(cls, values):
@@ -246,6 +252,7 @@ class ExperimentConfiguration(BaseModel):
             additional_tests=tests,
             explainers=explainers,
             session=template.settings.session,
+            tracker=template.settings.tracker
         )
 
 

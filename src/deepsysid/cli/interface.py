@@ -5,6 +5,8 @@ import os
 import sys
 import time
 from typing import Optional
+from types import ModuleType
+import importlib
 
 from ..pipeline.configuration import (
     ExperimentConfiguration,
@@ -246,7 +248,6 @@ def train(args: argparse.Namespace) -> None:
         dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
         models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
     )
-
 
 def test(args: argparse.Namespace) -> None:
     if 'device_idx' in args:
