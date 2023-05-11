@@ -37,7 +37,7 @@ TOY_DATASETS_DOWNLOAD_URL = (
     '/ToyDatasets.zip'
 )
 
-TOY_DATASET_ZIP_BASE_NAME = 'ToyDatasets'
+TOY_DATASET_ZIP_BASE_NAME = 'ToyDataset'
 TOY_DATASET_FOLDERNAMES_DICT = {
     'cartpole': 'cartpole/initial_state-0_K-200_T-30',
     'pendulum': 'pendulum/initial_state-0_K-200_T-30',
