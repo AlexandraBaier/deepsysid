@@ -33,14 +33,15 @@ PELICAN_SAMPLING_TIME = 0.01
 
 TOY_DATASETS_DOWNLOAD_URL = (
     'https://ipvs.informatik.uni-stuttgart.de/cloud/s'
-    '/XeLYrHRAaski4Dp/download'
-    '/StableHybridModel_ToyDatasets.zip'
+    '/iswY6Q8wCqFLgji/download'
+    '/ToyDatasets.zip'
 )
-TOY_DATASET_ZIP_BASE_NAME = 'StableHybridModel_ToyDatasets'
+
+TOY_DATASET_ZIP_BASE_NAME = 'ToyDatasets'
 TOY_DATASET_FOLDERNAMES_DICT = {
-    'cartpole': 'cartpole/initial_state_0_K_100_T_20_u_static_random',
-    'pendulum': 'pendulum/initial_state_0_K_100_T_20_u_static_random',
-    'coupled-msd': 'mass-spring-damper/initial_state_0_K_200_T_30_u_static_random',
+    'cartpole': 'cartpole/initial_state-0_K-200_T-30',
+    'pendulum': 'pendulum/initial_state-0_K-200_T-30',
+    'coupled-msd': 'coupled-msd/initial_state-0_K-200_T-1000',
 }
 
 INDUSTRIAL_ROBOT_DOWNLOAD_URL = (

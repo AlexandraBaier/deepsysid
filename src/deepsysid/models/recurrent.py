@@ -862,6 +862,7 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     bias: bool
     nonlinearity: str
     log_min_max_real_eigenvalues: Optional[bool] = False
+    clip_gradient_norm: Optional[float] = False
 
 
 class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
@@ -893,6 +894,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self.epochs_predictor = config.epochs_predictor
 
         self.log_min_max_real_eigenvalues = config.log_min_max_real_eigenvalues
+        self.clip_gradient_norm = config.clip_gradient_norm
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -1003,6 +1005,12 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 total_loss += batch_loss.item()
                 (batch_loss + barrier).backward()
 
+                if self.clip_gradient_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(
+                        parameters=self._predictor.parameters(),
+                        max_norm=self.clip_gradient_norm,
+                    )
+
                 # gradient infos
                 grads_norm = [
                     torch.linalg.norm(p.grad)
@@ -1075,7 +1083,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 f'Total Loss (Predictor): {total_loss:1f} \t'
                 f'Barrier: {barrier:1f}\t'
                 f'Backtracking Line Search iteration: {bls_iter}\t'
-                f'Max accumulated gradient norm: {max_grad:1f}'
+                f'Max gradient norm: {(max_grad/len(data_loader)):1f}'
             )
             predictor_loss.append(np.float64(total_loss))
             barrier_value.append(barrier.cpu().detach().numpy())
@@ -1223,9 +1231,10 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     batch_size: int
     epochs_predictor: int
     clip_gradient_norm: Optional[float]
-    enforce_constraints_method: Literal['barrier', 'projection']
     epochs_without_projection: int
     initial_decay_parameter: float
+    extend_state: bool
+    enforce_constraints_method: Optional[Literal['barrier', 'projection']] = None
     epochs_with_const_decay: Optional[int]
     mlflow_tracking_uri: Optional[str]
 
@@ -1255,8 +1264,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.nzu = self.nwu
 
         nx = len(config.A_lin)
-        self.extend_state = False
-        if nx < self.nwu:
+        self.extend_state = config.extend_state
+        if nx < self.nwu and self.extend_state:
             self.extend_state = True
             self.e = self.nwu - nx
             A_lin_tilde = np.concatenate(
@@ -1355,8 +1364,11 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         # self._predictor.initialize_lmi()
 
-        d = self._predictor.project_parameters()
-        if self.mlflow is not None and self.mlflow.active_run():
+        if self.enforce_constraints_method is not None:
+            d = self._predictor.project_parameters()
+        else:
+            d = self._predictor.project_parameters(write_parameter=False)
+        if self.mlflow is not None:
             self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
         time_start_pred = time.time()
@@ -1385,11 +1397,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 backtracking_iter: List[int] = list()
                 for batch_idx, batch in enumerate(data_loader):
                     self._predictor.zero_grad()
-                    try:
-                        self._predictor.set_lure_system()
-                    except AssertionError as msg:
-                        logger.warning(msg)
-
                     if self.extend_state:
                         x0 = torch.concat(
                             [
@@ -1414,20 +1421,19 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     )
 
                     barrier = torch.tensor(0.0).to(self.device)
-                    try:
-                        if self.enforce_constraints_method == 'barrier':
-                            barrier = self._predictor.get_barrier(
-                                torch.tensor(t, device=self.device)
-                            )
-                            (batch_loss + barrier).backward()
-                        elif self.enforce_constraints_method == 'projection':
-                            batch_loss.backward()
+                    if self.enforce_constraints_method == 'barrier':
+                        barrier = self._predictor.get_barrier(
+                            torch.tensor(t, device=self.device)
+                        )
+                        (batch_loss + barrier).backward()
+                    elif (
+                        self.enforce_constraints_method == 'projection'
+                        or self.enforce_constraints_method is None
+                    ):
+                        batch_loss.backward()
 
-                        else:
-                            raise NotImplementedError
-                    except RuntimeError as msg:
-                        logger.warning(msg)
-                        logger.info('Stop training, due to a runtime error.')
+                    if torch.isnan(batch_loss):
+                        logger.info('Stop training. Batch loss is None.')
                         time_end_pred = time.time()
                         time_total_pred = time_end_pred - time_start_pred
                         return dict(
@@ -1461,6 +1467,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     ]
 
                     self.optimizer_pred.step()
+                    try:
+                        self._predictor.set_lure_system()
+                    except AssertionError as msg:
+                        logger.warning(msg)
 
                     bls_iter = int(0)
                     if self.enforce_constraints_method == 'barrier':
@@ -1492,10 +1502,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
 
-                if self.mlflow is not None and self.mlflow.active_run():
+                if self.mlflow is not None:
                     self.mlflow.log_metric('Predictor Loss', total_loss, step=step)
                     self.mlflow.log_metric('Barrier', barrier, step=step)
-                    if (step - 1) % 5 == 0:
+                    if (step - 1) % 50 == 0:
                         nx = self._predictor.nx
                         nwp = self._predictor.nwp
                         lin = rnn.Linear(
@@ -1526,8 +1536,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             figure=utils.plot_outputs(result=result),
                             artifact_file=f'output_{step-1}.png',
                         )
-                        d = self._predictor.project_parameters(write_parameter=False)
-                        self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
+                        # d = self._predictor.project_parameters(write_parameter=False)
+                        # self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
 
                 logger.info(
                     f'Epoch {i + 1}/{self.epochs_predictor}\t'

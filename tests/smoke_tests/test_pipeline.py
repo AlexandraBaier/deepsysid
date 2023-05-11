@@ -173,6 +173,7 @@ def test_constrained_hybrid_rnn(tmp_path: pathlib.Path) -> None:
         batch_size=2,
         epochs_initializer=2,
         epochs_predictor=2,
+        extend_state=True,
         loss='mse',
         enforce_constraints_method='barrier',
         epochs_without_projection=50,

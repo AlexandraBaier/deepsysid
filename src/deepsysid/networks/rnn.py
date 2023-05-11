@@ -410,7 +410,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         logger.info(
             'Initialize Parameter by values that satisfy LMI constraints, solve SDP ...'
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.MOSEK)
         # check if t is negative
         # max_eig_lmi = np.max(np.real(np.linalg.eig(M.value)[0]))
 
@@ -1577,7 +1577,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         problem = cp.Problem(
             cp.Minimize(expr=t), utils.get_feasibility_constraint(P, t)
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.MOSEK)
         logger.info(
             f'1. run: feasibility, problem status {problem.status}, t_star = {t.value}'
         )
@@ -1593,7 +1593,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             constraints=utils.get_feasibility_constraint(P, t_fixed)
             + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.MOSEK)
 
         logger.info(
             f'2. run: parameter bounds, '
@@ -1612,7 +1612,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
             + utils.get_conditioning_constraints(X, Y, beta),
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.MOSEK)
         logger.info(
             f'3. run: coupling condition,'
             f'problem status {problem.status},'
@@ -2128,7 +2128,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             ),
             feasibility_constraint,
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.MOSEK)
 
         d = np.linalg.norm(Omega_tilde.value - Omega_tilde_0)
         +np.linalg.norm(Lambda.value - Lambda_0)
@@ -2147,7 +2147,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             feasibility_constraint
             + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.MOSEK)
         logger.info(
             f'2. run: parameter bounds. '
             f'problem status {problem.status},'
@@ -2163,7 +2163,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
             + utils.get_conditioning_constraints(Y, X, beta),
         )
-        problem.solve(solver=cp.SCS)
+        problem.solve(solver=cp.MOSEK)
         logger.info(
             f'3. run: coupling conditions. '
             f'problem status {problem.status},'
