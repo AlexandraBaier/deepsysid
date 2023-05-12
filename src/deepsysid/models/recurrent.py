@@ -1510,9 +1510,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                         nx = self._predictor.nx
                         nwp = self._predictor.nwp
                         lin = rnn.Linear(
-                            A=self._predictor.A_lin,
-                            B=self._predictor.B_lin,
-                            C=self._predictor.C_lin,
+                            A=self._predictor.A_lin.to(self.device),
+                            B=self._predictor.B_lin.to(self.device),
+                            C=self._predictor.C_lin.to(self.device),
                             D=torch.tensor([[0.0]]).to(self.device),
                         ).to(self.device)
                         y_lin = (
