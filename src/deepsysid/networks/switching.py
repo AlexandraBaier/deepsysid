@@ -178,14 +178,11 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         states = torch.zeros(
             size=(batch_size, sequence_length, self.state_dim), device=state.device
         )
-        A = torch.zeros(
-            size=(batch_size, sequence_length, self.state_dim, self.state_dim),
-            device=state.device,
-        )
         for time in range(sequence_length):
             state = A[:, time] @ state.unsqueeze(-1) + B[:, time] @ control[
                 :, time
             ].unsqueeze(-1)
             state = state.squeeze(-1)
             states[:, time] = state
+
         return states, (h0, c0), A, B
