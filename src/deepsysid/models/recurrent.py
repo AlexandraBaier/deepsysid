@@ -1266,7 +1266,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         nx = len(config.A_lin)
         self.extend_state = config.extend_state
         if nx < self.nwu and self.extend_state:
-            self.extend_state = True
+            self.extend_state = (nx < self.nwu and self.extend_state)
             self.e = self.nwu - nx
             A_lin_tilde = np.concatenate(
                 [
