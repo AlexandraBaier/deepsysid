@@ -636,9 +636,10 @@ class Linear(nn.Module):
         Tuple[torch.Tensor, torch.Tensor],
         Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
     ]:
+        device = self.A.device
         n_batch, N, _, _ = us.shape
-        x = torch.zeros(size=(n_batch, N + 1, self._nx, 1))
-        y = torch.zeros(size=(n_batch, N, self._ny, 1))
+        x = torch.zeros(size=(n_batch, N + 1, self._nx, 1)).to(device)
+        y = torch.zeros(size=(n_batch, N, self._ny, 1)).to(device)
         x[:, 0, :, :] = x0
 
         for k in range(N):
