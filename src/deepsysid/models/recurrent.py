@@ -1397,10 +1397,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 backtracking_iter: List[int] = list()
                 for batch_idx, batch in enumerate(data_loader):
                     self._predictor.zero_grad()
-                    try:
-                        self._predictor.set_lure_system()
-                    except AssertionError as msg:
-                        logger.warning(msg)
                     if self.extend_state:
                         x0 = torch.concat(
                             [
@@ -1472,6 +1468,11 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
                     self.optimizer_pred.step()
 
+                    try:
+                        self._predictor.set_lure_system()
+                    except AssertionError as msg:
+                        logger.warning(msg)
+
                     bls_iter = int(0)
                     if self.enforce_constraints_method == 'barrier':
                         max_iter = 100
@@ -1512,11 +1513,11 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             A=self._predictor.A_lin,
                             B=self._predictor.B_lin,
                             C=self._predictor.C_lin,
-                            D=torch.tensor([[0.0]]),
+                            D=torch.tensor([[0.0]]).to(self.device),
                         ).to(self.device)
                         y_lin = (
                             lin.forward(
-                                x0[0, :].reshape(1, nx, 1),
+                                x0[0, :].reshape(1, nx, 1).to(self.device),
                                 batch['wp'][0, :, :]
                                 .reshape(1, seq_len, nwp, 1)
                                 .float()
@@ -1527,8 +1528,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             .numpy()
                         )
                         result = utils.TrainingPrediction(
-                            u=batch['wp'][0, :, :],
-                            zp=batch['zp'][0, :, :],
+                            u=batch['wp'][0, :, :].cpu().detach().numpy(),
+                            zp=batch['zp'][0, :, :].cpu().detach().numpy(),
                             zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
                             y_lin=y_lin[:, :, 0],
                         )
