@@ -39,15 +39,18 @@ class SwitchingLSTMExplainer(BaseExplainer):
                 'prior to computing explanations.'
             )
 
-        state_dim = initial_state.shape[1]
         control_dim = initial_control.shape[1]
+        state_dim = model.state_dim
         window_size = initial_state.shape[0]
         horizon_size = control.shape[0]
 
-        _, metadata = model.simulate(initial_control, initial_state, control, None)
+        _, metadata = model.simulate(initial_control, initial_state, control)
         system_matrices = [mat for mat in metadata['system_matrices'].squeeze(0)]
         control_matrices = [mat for mat in metadata['control_matrices'].squeeze(0)]
-        weights = self.construct_feature_weights(system_matrices, control_matrices)
+        output_matrix = model.predictor.output_matrix.cpu().detach().numpy()
+        weights = self.construct_feature_weights(
+            system_matrices, control_matrices, output_matrix
+        )
 
         intercept = model.state_mean
 
@@ -90,6 +93,7 @@ class SwitchingLSTMExplainer(BaseExplainer):
         self,
         system_matrices: List[NDArray[np.float64]],
         control_matrices: List[NDArray[np.float64]],
+        output_matrix: NDArray[np.float64],
     ) -> NDArray[np.float64]:
         weights: List[List[np.ndarray]] = []
         for At, Bt in zip(system_matrices, control_matrices):
@@ -98,5 +102,8 @@ class SwitchingLSTMExplainer(BaseExplainer):
             else:
                 weights.append([(At @ weight) for weight in weights[-1]] + [Bt])
 
-        weights_np = np.hstack(weights[-1])
-        return weights_np
+        # Currently, weights map to state space. We need them in output space.
+        # Map them to output space as follows:
+        feature_weights = [output_matrix @ weight for weight in weights[-1]]
+        feature_weights_np = np.hstack(feature_weights)
+        return feature_weights_np
