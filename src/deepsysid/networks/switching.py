@@ -9,6 +9,7 @@ Switching mechanisms
 
 """
 import abc
+import dataclasses
 from typing import Optional, Tuple
 
 import numpy as np
@@ -17,16 +18,108 @@ import torch.nn as nn
 from torch.nn import LSTM
 
 
+@dataclasses.dataclass
+class SwitchingLSTMOutput:
+    outputs: torch.Tensor
+    states: torch.Tensor
+    hx: Tuple[torch.Tensor, torch.Tensor]
+    system_matrices: torch.Tensor
+    control_matrices: torch.Tensor
+
+    def __post_init__(self) -> None:
+        if not (len(self.outputs.shape) == 3):
+            raise ValueError(
+                f'outputs should be a 3-dimensional tensor (batch, time, output), '
+                f'but is not: {self.outputs.shape = }.'
+            )
+        if not (len(self.states.shape) == 3):
+            raise ValueError(
+                f'states should be a 3-dimensional tensor (batch, time, state), '
+                f'but is not: {self.states.shape = }.'
+            )
+        if not (len(self.system_matrices.shape) == 4):
+            raise ValueError(
+                f'system_matrices should be a 4-dimensional tensor '
+                f'(batch, time, state, state) but is not: '
+                f'{self.system_matrices.shape = }.'
+            )
+        if not (len(self.control_matrices.shape) == 4):
+            raise ValueError(
+                f'control_matrices should be a 4-dimensional tensor '
+                f'(batch, time, state, control) but is not: '
+                f'{self.control_matrices.shape = }.'
+            )
+        if not (
+            self.outputs.shape[0]
+            == self.states.shape[0]
+            == self.system_matrices.shape[0]
+            == self.control_matrices.shape[0]
+        ):
+            raise ValueError(
+                f'Batch dimension (dimension 0) of outputs, states, system_matrices '
+                f'and control_matrices needs to match, but does not match: '
+                f'{self.outputs.shape = }, '
+                f'{self.states.shape = }, '
+                f'{self.system_matrices.shape = }, '
+                f'{self.control_matrices.shape = }.'
+            )
+
+        if not (
+            self.outputs.shape[1]
+            == self.states.shape[1]
+            == self.system_matrices.shape[1]
+            == self.control_matrices.shape[1]
+        ):
+            raise ValueError(
+                f'Time dimension (dimension 1) of outputs, states, system_matrices '
+                f'and control_matrices needs to match, but does not match: '
+                f'{self.outputs.shape = }, '
+                f'{self.states.shape = }, '
+                f'{self.system_matrices.shape = }, '
+                f'{self.control_matrices.shape = }.'
+            )
+
+        if not (
+            self.states.shape[2]
+            == self.system_matrices.shape[2]
+            == self.control_matrices.shape[2]
+        ):
+            raise ValueError(
+                f'State dimension (dimension 2) of states, system_matrices '
+                f'and control_matrices needs to match, but does not match: '
+                f'{self.states.shape = }, {self.system_matrices.shape = }, '
+                f'{self.control_matrices.shape = }.'
+            )
+
+
 class SwitchingBaseLSTM(nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def forward(
         self,
         control: torch.Tensor,
-        state: torch.Tensor,
+        previous_output: torch.Tensor,
+        previous_state: Optional[torch.Tensor] = None,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[
-        torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor
-    ]:
+    ) -> SwitchingLSTMOutput:
+        """
+        :control: (batch, time, control)
+        :previous_output: (batch, output)
+        :previous_state: (batch, state) or None
+        :hx: hx = (h0, c0) or None
+        :returns: SwitchingLSTMOutput
+            with .outputs.shape = (batch, time, output)
+                 .states.shape = (batch, time, state)
+                 .system_matrices = (batch, time, state, state)
+                 .control_matrices = (batch, time, state, control)
+        """
+        pass
+
+    @property
+    @abc.abstractmethod
+    def output_matrix(self) -> torch.Tensor:
+        """
+        :returns: .shape = (output, state)
+        """
         pass
 
 
@@ -35,14 +128,22 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
         self,
         control_dim: int,
         state_dim: int,
+        output_dim: int,
         recurrent_dim: int,
         num_recurrent_layers: int,
         dropout: float,
-    ):
+    ) -> None:
         super().__init__()
+
+        if not (state_dim >= output_dim):
+            raise ValueError(
+                'state_dim must be larger or equal to output_dim, '
+                f'but {state_dim = } < {output_dim }.'
+            )
 
         self.control_dim = control_dim
         self.state_dim = state_dim
+        self.output_dim = output_dim
         self.recurrent_dim = recurrent_dim
 
         self.lstm = LSTM(
@@ -59,23 +160,15 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
         self.gen_B = nn.Linear(
             in_features=recurrent_dim, out_features=state_dim * control_dim, bias=True
         )
+        self.C = nn.Linear(in_features=state_dim, out_features=output_dim, bias=False)
 
     def forward(
         self,
         control: torch.Tensor,
-        state: torch.Tensor,
+        previous_output: torch.Tensor,
+        previous_state: Optional[torch.Tensor] = None,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[
-        torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor
-    ]:
-        """
-        :control: (batch, time, control)
-        :state: (batch, state)
-        :returns: (batch, time, state),
-                hx:=(h,c),
-                A.shape = (batch, time, state, state),
-                B.shape = (batch, time, state, control)
-        """
+    ) -> SwitchingLSTMOutput:
         batch_size = control.shape[0]
         sequence_length = control.shape[1]
 
@@ -92,8 +185,16 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
         )
 
         states = torch.zeros(
-            size=(batch_size, sequence_length, self.state_dim), device=state.device
+            size=(batch_size, sequence_length, self.state_dim), device=control.device
         )
+        if previous_state is None:
+            state = torch.zeros(
+                size=(batch_size, self.state_dim), device=control.device
+            )
+            state[:, : self.output_dim] = previous_output
+        else:
+            state = previous_state
+
         for time in range(sequence_length):
             state = (
                 A[:, time] @ state.unsqueeze(-1)
@@ -102,7 +203,19 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
             state = state
             states[:, time] = state
 
-        return states, (h0, c0), A, B
+        outputs = self.C.forward(states)
+
+        return SwitchingLSTMOutput(
+            outputs=outputs,
+            states=states,
+            hx=(h0, c0),
+            system_matrices=A,
+            control_matrices=B,
+        )
+
+    @property
+    def output_matrix(self) -> torch.Tensor:
+        return self.C.weight
 
 
 class StableSwitchingLSTM(SwitchingBaseLSTM):
@@ -110,14 +223,22 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         self,
         control_dim: int,
         state_dim: int,
+        output_dim: int,
         recurrent_dim: int,
         num_recurrent_layers: int,
         dropout: float,
-    ):
+    ) -> None:
         super().__init__()
+
+        if not (state_dim >= output_dim):
+            raise ValueError(
+                'state_dim must be larger or equal to output_dim, '
+                f'but {state_dim = } < {output_dim }.'
+            )
 
         self.control_dim = control_dim
         self.state_dim = state_dim
+        self.output_dim = output_dim
         self.recurrent_dim = recurrent_dim
 
         self.lstm = LSTM(
@@ -139,23 +260,15 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         self.gen_B = nn.Linear(
             in_features=recurrent_dim, out_features=state_dim * control_dim, bias=True
         )
+        self.C = nn.Linear(in_features=state_dim, out_features=output_dim, bias=False)
 
     def forward(
         self,
         control: torch.Tensor,
-        state: torch.Tensor,
+        previous_output: torch.Tensor,
+        previous_state: Optional[torch.Tensor] = None,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[
-        torch.Tensor, Tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor
-    ]:
-        """
-        :control: (batch, time, control)
-        :state: (batch, state)
-        :returns: (batch, time, state),
-                hx:=(h,c),
-                A.shape = (batch, time, state, state),
-                B.shape = (batch, time, state, control)
-        """
+    ) -> SwitchingLSTMOutput:
         batch_size = control.shape[0]
         sequence_length = control.shape[1]
 
@@ -176,8 +289,16 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         )
 
         states = torch.zeros(
-            size=(batch_size, sequence_length, self.state_dim), device=state.device
+            size=(batch_size, sequence_length, self.state_dim), device=control.device
         )
+        if previous_state is None:
+            state = torch.zeros(
+                size=(batch_size, self.state_dim), device=control.device
+            )
+            state[:, : self.output_dim] = previous_output
+        else:
+            state = previous_state
+
         for time in range(sequence_length):
             state = A[:, time] @ state.unsqueeze(-1) + B[:, time] @ control[
                 :, time
@@ -185,4 +306,16 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
             state = state.squeeze(-1)
             states[:, time] = state
 
-        return states, (h0, c0), A, B
+        outputs = self.C.forward(states)
+
+        return SwitchingLSTMOutput(
+            outputs=outputs,
+            states=states,
+            hx=(h0, c0),
+            system_matrices=A,
+            control_matrices=B,
+        )
+
+    @property
+    def output_matrix(self) -> torch.Tensor:
+        return self.C.weight

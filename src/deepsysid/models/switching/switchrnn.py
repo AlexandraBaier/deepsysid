@@ -23,10 +23,16 @@ from ..recurrent import LSTMInitModelConfig
 logger = logging.getLogger(__name__)
 
 
-class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
-    CONFIG = LSTMInitModelConfig
+class SwitchingLSTMBaseModelConfig(LSTMInitModelConfig):
+    switched_system_state_dim: Optional[int]
 
-    def __init__(self, config: LSTMInitModelConfig, predictor: SwitchingBaseLSTM):
+
+class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
+    CONFIG = SwitchingLSTMBaseModelConfig
+
+    def __init__(
+        self, config: SwitchingLSTMBaseModelConfig, predictor: SwitchingBaseLSTM
+    ):
         super().__init__(config)
 
         self.device_name = config.device_name
@@ -137,12 +143,14 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
                 # Initialize predictor with state of initializer network
                 _, hx = self.initializer.forward(batch['x0'].float().to(self.device))
                 # Predict and optimize
-                yhat, _, _, _ = self.predictor.forward(
-                    batch['x'].float().to(self.device),
-                    batch['y0'].float().to(self.device),
+                output = self.predictor.forward(
+                    control=batch['x'].float().to(self.device),
+                    previous_output=batch['y0'].float().to(self.device),
                     hx=hx,
                 )
-                batch_loss = self.loss.forward(yhat, batch['y'].float().to(self.device))
+                batch_loss = self.loss.forward(
+                    output.outputs, batch['y'].float().to(self.device)
+                )
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_pred.step()
@@ -173,7 +181,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         if (
             self.state_mean is None
@@ -208,11 +216,15 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
                 torch.from_numpy(initial_state[-1]).unsqueeze(0).float().to(self.device)
             )
             _, hx = self.initializer.forward(init_x)
-            y, _, A, B = self.predictor.forward(pred_x, y0, hx=hx)
-            y_np = y.cpu().detach().squeeze().numpy()
+            output = self.predictor.forward(control=pred_x, previous_output=y0, hx=hx)
+            y_np = output.outputs.cpu().detach().squeeze().numpy()
 
-            system_matrices.append(A.cpu().detach().squeeze().numpy())
-            control_matrices.append(B.cpu().detach().squeeze().numpy())
+            system_matrices.append(
+                output.system_matrices.cpu().detach().squeeze().numpy()
+            )
+            control_matrices.append(
+                output.control_matrices.cpu().detach().squeeze().numpy()
+            )
 
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
 
@@ -271,10 +283,16 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
 
 
 class UnconstrainedSwitchingLSTMModel(SwitchingLSTMBaseModel):
-    def __init__(self, config: LSTMInitModelConfig):
+    def __init__(self, config: SwitchingLSTMBaseModelConfig):
+        if config.switched_system_state_dim is None:
+            state_dim = len(config.state_names)
+        else:
+            state_dim = config.switched_system_state_dim
+
         predictor = UnconstrainedSwitchingLSTM(
             control_dim=len(config.control_names),
-            state_dim=len(config.state_names),
+            state_dim=state_dim,
+            output_dim=len(config.state_names),
             recurrent_dim=config.recurrent_dim,
             num_recurrent_layers=config.num_recurrent_layers,
             dropout=config.dropout,
@@ -283,10 +301,16 @@ class UnconstrainedSwitchingLSTMModel(SwitchingLSTMBaseModel):
 
 
 class StableSwitchingLSTMModel(SwitchingLSTMBaseModel):
-    def __init__(self, config: LSTMInitModelConfig):
+    def __init__(self, config: SwitchingLSTMBaseModelConfig):
+        if config.switched_system_state_dim is None:
+            state_dim = len(config.state_names)
+        else:
+            state_dim = config.switched_system_state_dim
+
         predictor = StableSwitchingLSTM(
             control_dim=len(config.control_names),
-            state_dim=len(config.state_names),
+            state_dim=state_dim,
+            output_dim=len(config.state_names),
             recurrent_dim=config.recurrent_dim,
             num_recurrent_layers=config.num_recurrent_layers,
             dropout=config.dropout,
