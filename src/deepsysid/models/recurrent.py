@@ -1397,6 +1397,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 backtracking_iter: List[int] = list()
                 for batch_idx, batch in enumerate(data_loader):
                     self._predictor.zero_grad()
+                    try:
+                        self._predictor.set_lure_system()
+                    except AssertionError as msg:
+                        logger.warning(msg)
                     if self.extend_state:
                         x0 = torch.concat(
                             [
@@ -1467,10 +1471,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     ]
 
                     self.optimizer_pred.step()
-                    try:
-                        self._predictor.set_lure_system()
-                    except AssertionError as msg:
-                        logger.warning(msg)
 
                     bls_iter = int(0)
                     if self.enforce_constraints_method == 'barrier':
