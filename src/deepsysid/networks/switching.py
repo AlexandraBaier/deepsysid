@@ -122,6 +122,21 @@ class SwitchingBaseLSTM(nn.Module, metaclass=abc.ABCMeta):
         """
         pass
 
+    @property
+    @abc.abstractmethod
+    def control_dimension(self) -> int:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def state_dimension(self) -> int:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def output_dimension(self) -> int:
+        pass
+
 
 class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
     def __init__(
@@ -216,6 +231,18 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
     @property
     def output_matrix(self) -> torch.Tensor:
         return self.C.weight
+
+    @property
+    def control_dimension(self) -> int:
+        return self.control_dim
+
+    @property
+    def state_dimension(self) -> int:
+        return self.state_dim
+
+    @property
+    def output_dimension(self) -> int:
+        return self.output_dim
 
 
 class StableSwitchingLSTM(SwitchingBaseLSTM):
@@ -319,3 +346,15 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
     @property
     def output_matrix(self) -> torch.Tensor:
         return self.C.weight
+
+    @property
+    def control_dimension(self) -> int:
+        return self.control_dim
+
+    @property
+    def state_dimension(self) -> int:
+        return self.state_dim
+
+    @property
+    def output_dimension(self) -> int:
+        return self.output_dim
