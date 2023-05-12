@@ -1134,6 +1134,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_u = initial_control
         initial_y = initial_state
         u = control
+        N, nu = control.shape
 
         initial_u = utils.normalize(initial_u, self._control_mean, self._control_std)
         initial_y = utils.normalize(initial_y, self._state_mean, self._state_std)
@@ -1154,7 +1155,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 y.cpu().detach().squeeze().numpy().astype(np.float64)
             )
 
-        y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
+        y_np = utils.denormalize(y_np, self._state_mean, self._state_std).reshape((N, self.state_dim))
         return y_np
 
     def save(self, file_path: Tuple[str, ...]) -> None:
