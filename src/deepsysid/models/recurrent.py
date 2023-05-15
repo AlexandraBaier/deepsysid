@@ -1366,11 +1366,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         # self._predictor.initialize_lmi()
 
         if self.enforce_constraints_method is not None:
-            d = self._predictor.project_parameters()
-        else:
-            d = self._predictor.project_parameters(write_parameter=False)
-        if self.mlflow is not None:
-            self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
+            self._predictor.project_parameters()
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
