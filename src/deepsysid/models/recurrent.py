@@ -1254,6 +1254,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         if self.mlflow is not None and config.mlflow_tracking_uri is not None:
             self.mlflow.set_tracking_uri(config.mlflow_tracking_uri)
+            self.mlflow.log_params({'gamma':config.gamma, 'enforce_constraints_method': config.enforce_constraints_method, 'nwu': config.nwu, 'extend_state': config.extend_state, 'sequence_length': config.sequence_length, 'model_class': self.__class__.__name__})
 
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
@@ -1506,6 +1507,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 if self.mlflow is not None:
                     self.mlflow.log_metric('Predictor Loss', total_loss, step=step)
                     self.mlflow.log_metric('Barrier', barrier, step=step)
+                    self.mlflow.log_metric('Decay parameter', t, step=step)
                     if (step - 1) % 50 == 0:
                         nx = self._predictor.nx
                         nwp = self._predictor.nwp
