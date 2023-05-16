@@ -12,8 +12,10 @@ from numpy.typing import NDArray
 
 from ...networks import loss, rnn
 from ...networks.switching import (
+    StableIdentityOutputSwitchingLSTM,
     StableSwitchingLSTM,
     SwitchingBaseLSTM,
+    UnconstrainedIdentityOutputSwitchingLSTM,
     UnconstrainedSwitchingLSTM,
 )
 from .. import base, utils
@@ -302,6 +304,18 @@ class UnconstrainedSwitchingLSTMModel(SwitchingLSTMBaseModel):
         super().__init__(config=config, predictor=predictor)
 
 
+class UnconstrainedIdentityOutputSwitchingLSTMModel(SwitchingLSTMBaseModel):
+    def __init__(self, config: SwitchingLSTMBaseModelConfig):
+        predictor = UnconstrainedIdentityOutputSwitchingLSTM(
+            control_dim=len(config.control_names),
+            output_dim=len(config.state_names),
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            dropout=config.dropout,
+        )
+        super().__init__(config=config, predictor=predictor)
+
+
 class StableSwitchingLSTMModel(SwitchingLSTMBaseModel):
     def __init__(self, config: SwitchingLSTMBaseModelConfig):
         if config.switched_system_state_dim is None:
@@ -312,6 +326,18 @@ class StableSwitchingLSTMModel(SwitchingLSTMBaseModel):
         predictor = StableSwitchingLSTM(
             control_dim=len(config.control_names),
             state_dim=state_dim,
+            output_dim=len(config.state_names),
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            dropout=config.dropout,
+        )
+        super().__init__(config=config, predictor=predictor)
+
+
+class StableIdentityOutputSwitchingLSTMModel(SwitchingLSTMBaseModel):
+    def __init__(self, config: SwitchingLSTMBaseModelConfig):
+        predictor = StableIdentityOutputSwitchingLSTM(
+            control_dim=len(config.control_names),
             output_dim=len(config.state_names),
             recurrent_dim=config.recurrent_dim,
             num_recurrent_layers=config.num_recurrent_layers,
