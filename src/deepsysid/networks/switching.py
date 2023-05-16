@@ -245,6 +245,29 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
         return self.output_dim
 
 
+class UnconstrainedIdentityOutputSwitchingLSTM(UnconstrainedSwitchingLSTM):
+    def __init__(
+        self,
+        control_dim: int,
+        output_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        dropout: float,
+    ) -> None:
+        super().__init__(
+            control_dim=control_dim,
+            state_dim=output_dim,
+            output_dim=output_dim,
+            recurrent_dim=recurrent_dim,
+            num_recurrent_layers=num_recurrent_layers,
+            dropout=dropout,
+        )
+
+        self.C.weight = nn.Parameter(
+            torch.eye(output_dim, output_dim), requires_grad=False
+        )
+
+
 class StableSwitchingLSTM(SwitchingBaseLSTM):
     def __init__(
         self,
@@ -358,3 +381,26 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
     @property
     def output_dimension(self) -> int:
         return self.output_dim
+
+
+class StableIdentityOutputSwitchingLSTM(StableSwitchingLSTM):
+    def __init__(
+        self,
+        control_dim: int,
+        output_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        dropout: float,
+    ) -> None:
+        super().__init__(
+            control_dim=control_dim,
+            state_dim=output_dim,
+            output_dim=output_dim,
+            recurrent_dim=recurrent_dim,
+            num_recurrent_layers=num_recurrent_layers,
+            dropout=dropout,
+        )
+
+        self.C.weight = nn.Parameter(
+            torch.eye(output_dim, output_dim), requires_grad=False
+        )

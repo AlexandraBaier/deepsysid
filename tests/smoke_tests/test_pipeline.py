@@ -21,7 +21,12 @@ from deepsysid.models.recurrent import (
     RnnInitFlexibleNonlinearity,
 )
 from deepsysid.models.switching.klinreg import KLinearRegressionARXModel
-from deepsysid.models.switching.switchrnn import StableSwitchingLSTMModel
+from deepsysid.models.switching.switchrnn import (
+    StableIdentityOutputSwitchingLSTMModel,
+    StableSwitchingLSTMModel,
+    UnconstrainedIdentityOutputSwitchingLSTMModel,
+    UnconstrainedSwitchingLSTMModel,
+)
 
 from ..unit_tests import test_networks
 from . import pipeline
@@ -461,12 +466,65 @@ def test_stable_switching_lstm_model(tmp_path: pathlib.Path) -> None:
 def test_unconstrained_switching_lstm_model(tmp_path: pathlib.Path) -> None:
     model_name = 'UnconstrainedSwitchingLSTMModel'
     model_class = 'deepsysid.models.switching.switchrnn.UnconstrainedSwitchingLSTMModel'
-    config = StableSwitchingLSTMModel.CONFIG(
+    config = UnconstrainedSwitchingLSTMModel.CONFIG(
         control_names=pipeline.get_4dof_ship_control_names(),
         state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         switched_system_state_dim=15,
+        recurrent_dim=10,
+        num_recurrent_layers=2,
+        dropout=0.25,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_unconstrained_identity_output_switching_lstm_model(
+    tmp_path: pathlib.Path,
+) -> None:
+    model_name = 'UnconstrainedSwitchingLSTMModel'
+    model_class = (
+        'deepsysid.models.switching.switchrnn.'
+        'UnconstrainedIdentityOutputSwitchingLSTMModel'
+    )
+    config = UnconstrainedIdentityOutputSwitchingLSTMModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=10,
+        num_recurrent_layers=2,
+        dropout=0.25,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_stable_identity_output_switching_lstm_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'UnconstrainedSwitchingLSTMModel'
+    model_class = (
+        'deepsysid.models.switching.switchrnn.StableIdentityOutputSwitchingLSTMModel'
+    )
+    config = StableIdentityOutputSwitchingLSTMModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
         recurrent_dim=10,
         num_recurrent_layers=2,
         dropout=0.25,

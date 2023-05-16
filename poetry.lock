@@ -1,6 +1,6 @@
 [[package]]
 name = "alembic"
-version = "1.10.4"
+version = "1.11.0"
 description = "A database migration tool for SQLAlchemy."
 category = "main"
 optional = true
@@ -582,7 +582,7 @@ python-versions = ">=3.6"
 
 [[package]]
 name = "mlflow"
-version = "2.3.1"
+version = "2.3.2"
 description = "MLflow: A Platform for ML Development and Productionization"
 category = "main"
 optional = true
@@ -1291,8 +1291,8 @@ content-hash = "31512f68f02f0e9a9ee8f8d1d77e903bcfb39def6c2f4f4ad581cfb572320676
 
 [metadata.files]
 alembic = [
-    {file = "alembic-1.10.4-py3-none-any.whl", hash = "sha256:43942c3d4bf2620c466b91c0f4fca136fe51ae972394a0cc8b90810d664e4f5c"},
-    {file = "alembic-1.10.4.tar.gz", hash = "sha256:295b54bbb92c4008ab6a7dcd1e227e668416d6f84b98b3c4446a2bc6214a556b"},
+    {file = "alembic-1.11.0-py3-none-any.whl", hash = "sha256:f0e74af5a6ade86b72770790188aaf64122c9cba64efd1d7ff3323ac3fdb75e0"},
+    {file = "alembic-1.11.0.tar.gz", hash = "sha256:d8bf706124e96e526889ac9c87a0d50debd9ef325ef32ae5391cf0315bdab4e1"},
 ]
 attrs = [
     {file = "attrs-23.1.0-py3-none-any.whl", hash = "sha256:1f28b4522cdc2fb4256ac1a020c78acf9cba2c6b461ccd2c126f3aa8e8335d04"},
@@ -1926,8 +1926,8 @@ mccabe = [
     {file = "mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325"},
 ]
 mlflow = [
-    {file = "mlflow-2.3.1-py3-none-any.whl", hash = "sha256:699c512d659c7463a498e087c5f74d3d139b5708cf6aaaccfa398d7b0c095204"},
-    {file = "mlflow-2.3.1.tar.gz", hash = "sha256:63439397b2718ce5747288ef5475f46b3716b370a517be3e3c67b799a247a186"},
+    {file = "mlflow-2.3.2-py3-none-any.whl", hash = "sha256:4ef85ee2f71243cc5a16b5659cf98239e1bb5e3a4ab7d456153c0ed56f652c97"},
+    {file = "mlflow-2.3.2.tar.gz", hash = "sha256:6d2b0ffc09fe58c9b523d5ea7b1fd4ab64664e2616d2d2040d9e96796df6eb6d"},
 ]
 mypy = [
     {file = "mypy-0.982-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:5085e6f442003fa915aeb0a46d4da58128da69325d8213b4b35cc7054090aed5"},
