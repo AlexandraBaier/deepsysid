@@ -1005,7 +1005,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 total_loss += batch_loss.item()
                 (batch_loss + barrier).backward()
 
-                if self.clip_gradient_norm is not None:
+                if self.clip_gradient_norm:
                     torch.nn.utils.clip_grad_norm_(
                         parameters=self._predictor.parameters(),
                         max_norm=self.clip_gradient_norm,
