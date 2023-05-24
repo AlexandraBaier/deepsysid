@@ -249,6 +249,7 @@ def train(args: argparse.Namespace) -> None:
         models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
     )
 
+
 def test(args: argparse.Namespace) -> None:
     if 'device_idx' in args:
         device_name = build_device_name(args.enable_cuda, args.device_idx)

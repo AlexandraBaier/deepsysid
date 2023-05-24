@@ -12,6 +12,7 @@ import time
 from ..pipeline.configuration import ExperimentConfiguration, initialize_model
 from .data_io import load_simulation_data
 from .model_io import save_model
+from ..tracker.base import retrieve_tracker_class
 
 logger = logging.getLogger(__name__)
 tracking: Optional[ModuleType] = None
@@ -38,23 +39,10 @@ def train_model(
         initial_state_names=configuration.initial_state_names,
     )
     # set tracking
-    if configuration.tracker is not None:
-        global tracking
-        try:
-            tracking = importlib.import_module(configuration.tracker.module_name)
-        except ImportError:
-            tracking = None
-        if configuration.tracker.tracking_uri is not None:
-            tracking.set_tracking_uri(configuration.tracker.tracking_uri)
-        start_run = time.time()
-        tracking.start_run()
-        duration_run = time.time() - start_run
-        logger.info(f'Ml flow initialize session: {time.strftime("%H:%M:%S", time.gmtime(float(duration_run)))}')
-        callback: Callable[[Dict[str, Any]], None] = lambda _:None
-        try:
-            callback = eval(configuration.tracker.callback_name)
-        except SyntaxError:
-            callback = lambda _:None
+    callback = lambda _: None
+    for tracker_config in configuration.tracker.values():
+        tracker_class = retrieve_tracker_class(tracker_config.tracking_class)
+        callback = tracker_class(tracker_config.parameters)
 
     # Initialize model
     model = initialize_model(configuration, model_name, device_name)
@@ -62,7 +50,10 @@ def train_model(
     logger.info(f'Training model {model_name} on {device_name} if implemented.')
     start_training = time.time()
     metadata = model.train(
-        control_seqs=controls, state_seqs=states, initial_seqs=initial_states, callback=callback
+        control_seqs=controls,
+        state_seqs=states,
+        initial_seqs=initial_states,
+        callback=callback,
     )
     # Save model metadata
     if metadata is not None:
@@ -70,7 +61,9 @@ def train_model(
     # Save model
     save_model(model, model_directory, model_name)
     training_duration = time.time() - start_training
-    logger.info(f'training time: {time.strftime("%H:%M:%S", time.gmtime(float(training_duration)))}')
+    logger.info(
+        f'training time: {time.strftime("%H:%M:%S", time.gmtime(float(training_duration)))}'
+    )
     # Save model configuration
     with open(
         os.path.join(model_directory, f'config-{model_name}.json'), mode='w'
@@ -85,7 +78,8 @@ def save_training_metadata(
         for name, data in metadata.items():
             f.create_dataset(name, data=data)
 
-def mlflow_tracking(logs: Dict[str, Any])-> None:
+
+def mlflow_tracking(logs: Dict[str, Any]) -> None:
     if 'metric' in logs:
         for metric_list in logs['metric']:
             tracking.log_metric(metric_list[0], metric_list[1], step=metric_list[2])

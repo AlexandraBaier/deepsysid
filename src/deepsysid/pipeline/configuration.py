@@ -12,11 +12,8 @@ from ..explainability.base import (
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
 from .metrics import BaseMetricConfig, retrieve_metric_class
 from .testing.base import BaseTestConfig, retrieve_test_class
+from ..tracker.base import BaseEventTrackerConfig, retrieve_tracker_class
 
-
-class TrackingConfiguration(BaseModel):
-    tracking_class: str
-    parameters: Dict[str, Any]
 
 class ExperimentModelConfiguration(BaseModel):
     model_class: str
@@ -37,6 +34,16 @@ class ExperimentExplainerConfiguration(BaseModel):
     explainer_class: str
     explained_super_classes: Optional[List[str]]
     parameters: BaseExplainerConfig
+
+
+class ExperimentTrackingConfiguration(BaseModel):
+    tracking_class: str
+    parameters: BaseEventTrackerConfig
+
+
+class GridSearchTrackingConfiguration(BaseModel):
+    tracking_class: str
+    parameters: Dict[str, Any]
 
 
 class ExperimentExplanationMetricConfiguration(BaseModel):
@@ -77,7 +84,7 @@ class ExperimentGridSearchSettings(BaseModel):
     metrics: Dict[str, GridSearchMetricConfiguration]
     explanation_metrics: Optional[Dict[str, GridSearchExplanationMetricConfiguration]]
     session: Optional[SessionConfiguration]
-    tracker: Optional[Dict[str, TrackingConfiguration]]
+    tracker: Optional[Dict[str, GridSearchTrackingConfiguration]]
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -113,7 +120,7 @@ class ExperimentConfiguration(BaseModel):
     models: Dict[str, ExperimentModelConfiguration]
     explainers: Optional[Dict[str, ExperimentExplainerConfiguration]]
     session: Optional[SessionConfiguration]
-    tracker: Optional[Dict[str, TrackingConfiguration]]
+    tracker: Optional[Dict[str, ExperimentTrackingConfiguration]]
 
     @root_validator
     def check_target_metric_in_metrics(cls, values):
@@ -186,6 +193,17 @@ class ExperimentConfiguration(BaseModel):
                 ),
             )
 
+        trackers = dict()
+        if template.settings.tracker is not None:
+            for name, tracker in template.settings.tracker.items():
+                tracker_class = retrieve_tracker_class(tracker.tracking_class)
+                trackers[name] = ExperimentTrackingConfiguration(
+                    tracking_class=tracker.tracking_class,
+                    parameters=tracker_class.CONFIG.parse_obj(
+                        {'tracker_name': name, **tracker.parameters}
+                    ),
+                )
+
         tests = dict()
         base_test_params = dict(
             control_names=template.settings.control_names,
@@ -252,7 +270,7 @@ class ExperimentConfiguration(BaseModel):
             additional_tests=tests,
             explainers=explainers,
             session=template.settings.session,
-            tracker=template.settings.tracker
+            tracker=trackers,
         )
 
 

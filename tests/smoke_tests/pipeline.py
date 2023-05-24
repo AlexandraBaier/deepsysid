@@ -17,6 +17,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentExplanationMetricConfiguration,
     ExperimentMetricConfiguration,
     ExperimentTestConfiguration,
+    ExperimentTrackingConfiguration,
     SessionConfiguration,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
@@ -576,6 +577,12 @@ def run_4dof_ship_pipeline(
                     clip_gradient_norm=100,
                     regularization_scale=0.25,
                 ),
+            ),
+            tracker=dict(
+                mlflow=ExperimentTrackingConfiguration(
+                    tracking_class="deepsysid.tracker.mlflow.MlFlowTracker",
+                    parameters={}
+                )
             ),
             bounded_residual=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing'

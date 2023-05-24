@@ -1,6 +1,17 @@
 import abc
 import logging
-from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, Callable, Any
+from typing import (
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    Callable,
+    Any,
+)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,6 +21,7 @@ from sklearn.metrics import r2_score
 
 from ..networks.rnn import HiddenStateForwardModule
 from . import utils
+from ..tracker.base import EventData
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +46,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        callback: Callable[[Dict[str, Any]], None] = lambda _:None,
+        callback: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         pass

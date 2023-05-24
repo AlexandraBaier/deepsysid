@@ -1,11 +1,19 @@
-from .base import BaseEventTracker, EventData
+from .base import BaseEventTracker, EventData, BaseEventTrackerConfig
 import mlflow
+from typing import Optional
 
-class MlFlowTracker(EventTracker):
-    def __init__(self, tracking_uri: str) -> None:
-        super().__init__()
-        mlflow.set_tracking_uri(tracking_uri)
 
+class MlflowConfig(BaseEventTrackerConfig):
+    tracking_uri: Optional[str]
+
+
+class MlFlowTracker(BaseEventTracker):
+    CONFIG = MlflowConfig
+
+    def __init__(self, config: MlflowConfig) -> None:
+        super().__init__(config)
+        if config.tracking_uri:
+            mlflow.set_tracking_uri(config.tracking_uri)
 
     def __call__(self, event: EventData) -> None:
         if 'metric' in event.data:
@@ -14,4 +22,3 @@ class MlFlowTracker(EventTracker):
         if 'figures' in event.data:
             for figures_list in event.data['figures']:
                 mlflow.log_figure(figure=figures_list[0], artifact_file=figures_list[1])
-
