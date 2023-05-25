@@ -39,10 +39,10 @@ def train_model(
         initial_state_names=configuration.initial_state_names,
     )
     # set tracking
-    callback = lambda _: None
-    for tracker_config in configuration.tracker.values():
-        tracker_class = retrieve_tracker_class(tracker_config.tracking_class)
-        callback = tracker_class(tracker_config.parameters)
+    if configuration.tracker is not None:
+        for tracker_config in configuration.tracker.values():
+            tracker_class = retrieve_tracker_class(tracker_config.tracking_class)
+            callback = tracker_class(tracker_config.parameters)
 
     # Initialize model
     model = initialize_model(configuration, model_name, device_name)
@@ -77,12 +77,3 @@ def save_training_metadata(
     with h5py.File(os.path.join(directory, f'{model_name}-metadata.hdf5'), 'w') as f:
         for name, data in metadata.items():
             f.create_dataset(name, data=data)
-
-
-def mlflow_tracking(logs: Dict[str, Any]) -> None:
-    if 'metric' in logs:
-        for metric_list in logs['metric']:
-            tracking.log_metric(metric_list[0], metric_list[1], step=metric_list[2])
-    if 'figures' in logs:
-        for figures_list in logs['figures']:
-            tracking.log_figure(figure=figures_list[0], artifact_file=figures_list[1])
