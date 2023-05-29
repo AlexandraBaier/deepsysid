@@ -20,12 +20,14 @@ from ...networks.switching import (
 )
 from .. import base, utils
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
-from ..recurrent.separate_initialization import LSTMInitModelConfig
+from ..recurrent.separate_initialization import (
+    SeparateInitializerRecurrentNetworkModelConfig,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class SwitchingLSTMBaseModelConfig(LSTMInitModelConfig):
+class SwitchingLSTMBaseModelConfig(SeparateInitializerRecurrentNetworkModelConfig):
     switched_system_state_dim: Optional[int]
 
 
