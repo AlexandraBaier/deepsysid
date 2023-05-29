@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepsysid"
-version = "0.1.15"
+version = "0.1.16"
 description = "A system identification toolkit for multistep prediction using deep learning and hybrid methods."
 authors = ["Alexandra Baier <alx.baier@gmail.com>", "Daniel Frank <daniel@familiefrank.eu>"]
 readme = "README.md"

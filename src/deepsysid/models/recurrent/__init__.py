@@ -14,6 +14,12 @@ from .separate_initialization import (
     RnnInit,
     SeparateInitializerRecurrentNetworkModelConfig,
 )
+from .washout_initialization import (
+    WashoutInitializerGRUModel,
+    WashoutInitializerLSTMModel,
+    WashoutInitializerRecurrentNetworkModelConfig,
+    WashoutInitializerRNNModel,
+)
 
 __all__ = [
     'RnnInitFlexibleNonlinearityConfig',
@@ -28,4 +34,8 @@ __all__ = [
     'RnnInit',
     'GRUInitModel',
     'LSTMInitModel',
+    'WashoutInitializerRNNModel',
+    'WashoutInitializerGRUModel',
+    'WashoutInitializerLSTMModel',
+    'WashoutInitializerRecurrentNetworkModelConfig',
 ]
