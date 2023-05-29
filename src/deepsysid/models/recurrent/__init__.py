@@ -9,6 +9,7 @@ from .constrained_rnn import (
     RnnInitFlexibleNonlinearityConfig,
 )
 from .separate_initialization import (
+    GRUInitModel,
     LSTMInitModel,
     RnnInit,
     SeparateInitializerRecurrentNetworkModelConfig,
@@ -25,5 +26,6 @@ __all__ = [
     'HybridConstrainedRnn',
     'SeparateInitializerRecurrentNetworkModelConfig',
     'RnnInit',
+    'GRUInitModel',
     'LSTMInitModel',
 ]

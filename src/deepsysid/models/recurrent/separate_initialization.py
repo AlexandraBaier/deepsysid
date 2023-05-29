@@ -284,8 +284,6 @@ class SeparateInitializerRecurrentNetworkModel(
 
 
 class RnnInit(SeparateInitializerRecurrentNetworkModel):
-    CONFIG = SeparateInitializerRecurrentNetworkModelConfig
-
     def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
         input_dim = len(config.control_names)
         output_dim = len(config.state_names)
@@ -311,9 +309,35 @@ class RnnInit(SeparateInitializerRecurrentNetworkModel):
         super().__init__(config, initializer_rnn=initializer, predictor_rnn=predictor)
 
 
-class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
-    CONFIG = SeparateInitializerRecurrentNetworkModelConfig
+class GRUInitModel(SeparateInitializerRecurrentNetworkModel):
+    def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
+        input_dim = len(config.control_names)
+        output_dim = len(config.state_names)
 
+        predictor = rnn.BasicGRU(
+            input_dim=input_dim,
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            output_dim=output_dim,
+            dropout=config.dropout,
+            bias=config.bias,
+        )
+
+        initializer = rnn.BasicGRU(
+            input_dim=input_dim + output_dim,
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            output_dim=output_dim,
+            dropout=config.dropout,
+            bias=config.bias,
+        )
+
+        super().__init__(
+            config=config, initializer_rnn=initializer, predictor_rnn=predictor
+        )
+
+
+class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
     def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
         input_dim = len(config.control_names)
         output_dim = len(config.state_names)

@@ -127,9 +127,6 @@ class BasicRnn(HiddenStateForwardModule):
     ) -> None:
         super().__init__()
 
-        self.num_recurrent_layers = num_recurrent_layers
-        self.recurrent_dim = recurrent_dim
-
         self.predictor_rnn = nn.RNN(
             input_size=input_dim,
             hidden_size=recurrent_dim,
@@ -156,6 +153,46 @@ class BasicRnn(HiddenStateForwardModule):
             h = None
 
         x, h = self.predictor_rnn.forward(x_pred, h)
+        x = self.out.forward(x)
+
+        return x, (h, h)
+
+
+class BasicGRU(HiddenStateForwardModule):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: int,
+        dropout: float,
+        bias: bool,
+    ) -> None:
+        super().__init__()
+
+        self.gru = nn.GRU(
+            input_size=input_dim,
+            hidden_size=recurrent_dim,
+            num_layers=num_recurrent_layers,
+            dropout=dropout,
+            bias=bias,
+        )
+
+        self.out = nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=bias
+        )
+
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        if hx is not None:
+            h = hx[0]
+        else:
+            h = None
+
+        x, h = self.gru.forward(x_pred, h)
         x = self.out.forward(x)
 
         return x, (h, h)

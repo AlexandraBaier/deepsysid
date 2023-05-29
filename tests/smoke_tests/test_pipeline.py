@@ -14,6 +14,7 @@ from deepsysid.models.linear import LinearLag, LinearModel, QuadraticControlLag
 from deepsysid.models.narx import NARXDenseNetwork
 from deepsysid.models.recurrent import (
     ConstrainedRnn,
+    GRUInitModel,
     HybridConstrainedRnn,
     LSTMInitModel,
     LtiRnnInit,
@@ -248,6 +249,31 @@ def test_rnn_init(tmp_path: pathlib.Path) -> None:
     model_name = 'RnnInit'
     model_class = 'deepsysid.models.recurrent.RnnInit'
     config = RnnInit.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=5,
+        num_recurrent_layers=3,
+        dropout=0.25,
+        bias=False,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+        clip_gradient_norm=10,
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_gru_init_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'GruInit'
+    model_class = 'deepsysid.models.recurrent.GRUInitModel'
+    config = GRUInitModel.CONFIG(
         control_names=pipeline.get_4dof_ship_control_names(),
         state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
