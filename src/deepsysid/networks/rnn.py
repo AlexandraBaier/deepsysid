@@ -176,6 +176,7 @@ class BasicGRU(HiddenStateForwardModule):
             num_layers=num_recurrent_layers,
             dropout=dropout,
             bias=bias,
+            batch_first=True,
         )
 
         self.out = nn.Linear(
