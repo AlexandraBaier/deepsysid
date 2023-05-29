@@ -20,7 +20,7 @@ from ...networks.switching import (
 )
 from .. import base, utils
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
-from ..recurrent import LSTMInitModelConfig
+from ..recurrent.separate_initialization import LSTMInitModelConfig
 
 logger = logging.getLogger(__name__)
 
