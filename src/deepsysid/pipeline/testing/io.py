@@ -1,6 +1,6 @@
 import dataclasses
 import os
-from typing import Dict, Iterator, List, Literal
+from typing import Dict, Iterator, List, Literal, Callable
 
 import h5py
 import numpy as np
@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from ..configuration import ExperimentConfiguration
 from ..data_io import build_result_file_name, load_file_names, load_simulation_data
 from .base import TestResult, TestResultMetadata, TestSequenceResult, TestSimulation
+from ...tracker.base import EventData
 
 
 def load_test_simulations(
@@ -49,6 +50,7 @@ def save_model_tests(
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
+    tracker: Callable[[EventData], None] = lambda _: None
 ) -> None:
     # Save true and predicted time series
     result_directory = os.path.join(result_directory, model_name)

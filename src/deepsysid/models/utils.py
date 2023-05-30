@@ -1,10 +1,12 @@
 import dataclasses
 import importlib
 from types import ModuleType
-from typing import Any, List, Optional, Tuple, TypeVar
+from typing import Any, List, Optional, Tuple, TypeVar, Callable
 
 import numpy as np
 import torch
+from . import base
+from ..tracker.base import EventData, EventType
 from numpy.typing import NDArray
 
 matplotlib: Optional[ModuleType] = None

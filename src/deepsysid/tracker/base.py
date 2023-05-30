@@ -1,28 +1,52 @@
 import dataclasses
-from typing import Literal, Dict, Any, Type
+from typing import Literal, Dict, Any, Type, List, Union, Optional
+from enum import Enum
 import abc
 from pydantic import BaseModel
+
+class EventType(Enum):
+    TRACK_PARAMETERS = 1
+    TRACK_METRICS = 2
+    TRACK_FIGURES = 3
+    TRACK_ARTIFACTS = 4
+    LOG_TEXT = 5
+    GET_ID = 6
+    SET_TAG = 7
+    SET_EXPERIMENT_NAME = 8
+
 
 
 @dataclasses.dataclass
 class EventData:
-    event: Literal['logging']
+    event_type: EventType
+    data: Dict[str, Any]
+@dataclasses.dataclass
+class EventReturn:
     data: Dict[str, Any]
 
 
 class BaseEventTrackerConfig(BaseModel):
-    tracker_name: str
+    id: Optional[str]
 
 
 class BaseEventTracker(metaclass=abc.ABCMeta):
     CONFIG = BaseEventTrackerConfig
 
-    def __init__(self, config: BaseEventTrackerConfig):
+    @abc.abstractmethod
+    def __call__(self, Event: EventData) -> Union[EventReturn, List[EventReturn]]:
         pass
 
-    @abc.abstractmethod
-    def __call__(self, Event: EventData) -> None:
-        pass
+class TrackerAggregator(BaseEventTracker):
+    
+    def __init__(self, trackers: List[BaseEventTracker]) -> None:
+        super().__init__()
+        self.trackers = trackers
+    
+    def __call__(self, Event: EventData) -> List[EventReturn]:
+        event_returns: List[EventReturn] = list()
+        for tracker in self.trackers:
+            event_returns.append(tracker(Event))
+        return event_returns
 
 
 def retrieve_tracker_class(

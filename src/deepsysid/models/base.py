@@ -46,7 +46,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        callback: Callable[[EventData], None] = lambda _: None,
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         pass
@@ -57,18 +57,18 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]]
     ) -> Union[
         NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
     ]:
         pass
 
     @abc.abstractmethod
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(self, file_path: Tuple[str, ...], tracker: Callable[[EventData], None] = lambda _: None) -> None:
         pass
 
     @abc.abstractmethod
-    def load(self, file_path: Tuple[str, ...]) -> None:
+    def load(self, file_path: Tuple[str, ...], tracker: Callable[[EventData], None] = lambda _: None) -> None:
         pass
 
     @abc.abstractmethod

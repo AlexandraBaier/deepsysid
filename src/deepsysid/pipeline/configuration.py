@@ -200,7 +200,7 @@ class ExperimentConfiguration(BaseModel):
                 trackers[name] = ExperimentTrackingConfiguration(
                     tracking_class=tracker.tracking_class,
                     parameters=tracker_class.CONFIG.parse_obj(
-                        {'tracker_name': name, **tracker.parameters}
+                        tracker.parameters
                     ),
                 )
 

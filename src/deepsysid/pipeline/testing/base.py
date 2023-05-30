@@ -1,12 +1,13 @@
 import abc
 import dataclasses
-from typing import Dict, List, Type, Union
+from typing import Dict, List, Type, Union, Callable
 
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel
 
 from ...models.base import DynamicIdentificationModel
+from ...tracker.base import EventData
 
 TestResultMetadata = Dict[str, Union[List[str], List[float], List[int]]]
 
@@ -48,7 +49,7 @@ class BaseTest(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def test(
-        self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
+        self, model: DynamicIdentificationModel, simulations: List[TestSimulation], tracker: Callable[[EventData], None] = lambda _: None,
     ) -> TestResult:
         pass
 

@@ -1,9 +1,10 @@
 import logging
-from typing import List
+from typing import List, Callable
 
 import numpy as np
 
 from ...models.base import DynamicIdentificationModel
+from ...tracker.base import EventData
 from .base import (
     BaseTest,
     BaseTestConfig,
@@ -26,7 +27,7 @@ class InferenceTest(BaseTest):
     def test(
         self,
         model: DynamicIdentificationModel,
-        simulations: List[TestSimulation],
+        simulations: List[TestSimulation]
     ) -> TestResult:
         control = []
         pred_states = []
@@ -42,7 +43,7 @@ class InferenceTest(BaseTest):
                 sample.initial_control,
                 sample.initial_state,
                 sample.true_control,
-                sample.x0,
+                sample.x0
             )
             if isinstance(simulation_result, np.ndarray):
                 pred_target = simulation_result
