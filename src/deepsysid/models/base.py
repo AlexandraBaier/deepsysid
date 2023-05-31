@@ -1,16 +1,6 @@
 import abc
 import logging
-from typing import (
-    Dict,
-    Generic,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    Callable,
-)
+from typing import Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -19,8 +9,8 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 
 from ..networks.rnn import HiddenStateForwardModule
-from . import utils
 from ..tracker.base import EventData
+from . import utils
 
 logger = logging.getLogger(__name__)
 

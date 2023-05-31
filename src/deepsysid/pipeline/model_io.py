@@ -1,8 +1,8 @@
 import os
 from typing import Callable
-from ..tracker.base import EventData
 
 from ..models.base import DynamicIdentificationModel
+from ..tracker.base import EventData
 
 
 def load_model(

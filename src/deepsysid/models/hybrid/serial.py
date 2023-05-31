@@ -12,7 +12,7 @@ Input Model -> Physics Model -> Output Model -> + ->
 import abc
 import json
 import logging
-from typing import Dict, List, Optional, Tuple, Union, Callable
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -23,7 +23,6 @@ from torch.nn.functional import mse_loss
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
-from ...tracker.base import EventData
 from deepsysid.models import utils
 from deepsysid.models.base import (
     DynamicIdentificationModel,
@@ -31,6 +30,8 @@ from deepsysid.models.base import (
 )
 from deepsysid.models.datasets import RecurrentInitializerPredictorDataset
 from deepsysid.networks.rnn import InitializerPredictorLSTM
+
+from ...tracker.base import EventData
 
 logger = logging.getLogger(__name__)
 

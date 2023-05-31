@@ -6,7 +6,6 @@ import sys
 import time
 from typing import Optional
 
-
 from ..pipeline.configuration import (
     ExperimentConfiguration,
     ExperimentGridSearchTemplate,

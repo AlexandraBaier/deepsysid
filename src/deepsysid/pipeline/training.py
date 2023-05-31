@@ -1,24 +1,24 @@
 import logging
 import os
-from typing import Dict, Optional, List
+import pathlib
+import time
 from types import ModuleType
+from typing import Dict, List, Optional
 
 import h5py
-import pathlib
 import numpy as np
 from numpy.typing import NDArray
-import time
 
 from ..pipeline.configuration import ExperimentConfiguration, initialize_model
-from .data_io import load_simulation_data, build_tracker_config_file_name
-from .model_io import save_model
 from ..tracker.base import (
-    retrieve_tracker_class,
     BaseEventTracker,
-    TrackerAggregator,
     EventData,
     EventType,
+    TrackerAggregator,
+    retrieve_tracker_class,
 )
+from .data_io import build_tracker_config_file_name, load_simulation_data
+from .model_io import save_model
 
 logger = logging.getLogger(__name__)
 tracking: Optional[ModuleType] = None

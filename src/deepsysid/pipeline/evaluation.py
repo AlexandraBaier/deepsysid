@@ -6,6 +6,13 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel
 
+from ..tracker.base import (
+    BaseEventTracker,
+    EventData,
+    EventType,
+    TrackerAggregator,
+    retrieve_tracker_class,
+)
 from .configuration import ExperimentConfiguration, GridSearchTrackingConfiguration
 from .data_io import (
     build_result_file_name,
@@ -13,13 +20,6 @@ from .data_io import (
     build_tracker_config_file_name,
 )
 from .metrics import retrieve_metric_class
-from ..tracker.base import (
-    BaseEventTracker,
-    retrieve_tracker_class,
-    TrackerAggregator,
-    EventData,
-    EventType,
-)
 
 
 class ReadableEvaluationScores(BaseModel):

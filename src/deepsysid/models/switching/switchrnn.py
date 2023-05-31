@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Dict, List, Optional, Tuple, Callable
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -16,10 +16,10 @@ from ...networks.switching import (
     SwitchingBaseLSTM,
     UnconstrainedSwitchingLSTM,
 )
+from ...tracker.base import EventData
 from .. import base, utils
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 from ..recurrent import LSTMInitModelConfig
-from ...tracker.base import EventData
 
 logger = logging.getLogger(__name__)
 

@@ -10,9 +10,9 @@ from ..explainability.base import (
     retrieve_explanation_metric_class,
 )
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
+from ..tracker.base import BaseEventTrackerConfig, retrieve_tracker_class
 from .metrics import BaseMetricConfig, retrieve_metric_class
 from .testing.base import BaseTestConfig, retrieve_test_class
-from ..tracker.base import BaseEventTrackerConfig, retrieve_tracker_class
 
 
 class ExperimentModelConfiguration(BaseModel):

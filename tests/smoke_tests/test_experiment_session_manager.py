@@ -5,8 +5,8 @@ from deepsysid.pipeline.configuration import (
     ExperimentGridSearchSettings,
     ExperimentGridSearchTemplate,
     GridSearchMetricConfiguration,
-    GridSearchTrackingConfiguration,
     GridSearchTestConfiguration,
+    GridSearchTrackingConfiguration,
     ModelGridSearchTemplate,
 )
 from deepsysid.pipeline.gridsearch import ExperimentSessionManager, SessionAction

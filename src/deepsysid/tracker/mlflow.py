@@ -1,12 +1,14 @@
+from typing import Optional
+
+import mlflow
+
 from .base import (
     BaseEventTracker,
-    EventData,
     BaseEventTrackerConfig,
-    EventType,
+    EventData,
     EventReturn,
+    EventType,
 )
-import mlflow
-from typing import Optional
 
 
 class MlflowConfig(BaseEventTrackerConfig):
@@ -30,28 +32,28 @@ class MlFlowTracker(BaseEventTracker):
         if event.event_type == EventType.TRACK_PARAMETERS:
             if 'parameters' in event.data:
                 for parameter_list in event.data['parameters']:
-                    mlflow.log_param(
+                    mlflow.log_param(  # type: ignore
                         parameter_list[0], parameter_list[1]
-                    )  # type: ignore
+                    )
         elif event.event_type == EventType.TRACK_METRICS:
             if 'metrics' in event.data:
                 for metric_list in event.data['metrics']:
-                    mlflow.log_metric(
+                    mlflow.log_metric(  # type: ignore
                         metric_list[0], metric_list[1], step=metric_list[2]
-                    )  # type: ignore
+                    )
         elif event.event_type == EventType.TRACK_FIGURES:
             if 'figures' in event.data:
                 for figures_list in event.data['figures']:
-                    mlflow.log_figure(
+                    mlflow.log_figure(  # type: ignore
                         figure=figures_list[0],
                         artifact_file=f'figures/{figures_list[1]}',
-                    )  # type: ignore
+                    )
         elif event.event_type == EventType.TRACK_ARTIFACTS:
             if 'artifacts' in event.data:
                 for artifact_list in event.data['artifacts']:
-                    mlflow.log_artifact(
+                    mlflow.log_artifact(  # type: ignore
                         local_path=artifact_list[0], artifact_path=artifact_list[1]
-                    )  # type: ignore
+                    )
         elif event.event_type == EventType.GET_ID:
             run = mlflow.active_run()  # type: ignore
             if run is not None:
@@ -62,9 +64,9 @@ class MlFlowTracker(BaseEventTracker):
                     mlflow.set_tag(tag_list[0], tag_list[1])  # type: ignore
         elif event.event_type == EventType.SET_EXPERIMENT_NAME:
             if 'experiment name' in event.data:
-                mlflow.set_experiment(
+                mlflow.set_experiment(  # type: ignore
                     experiment_name=event.data['experiment name']
-                )  # type: ignore
+                )
         elif event.event_type == EventType.STOP_RUN:
             mlflow.end_run()  # type: ignore
         else:

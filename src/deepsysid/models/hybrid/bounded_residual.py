@@ -1,7 +1,7 @@
 import abc
 import json
 import logging
-from typing import Dict, List, Literal, Optional, Tuple, Callable
+from typing import Callable, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch

@@ -1,12 +1,12 @@
-from typing import List, Optional, Tuple, Callable
+from typing import Callable, List, Optional, Tuple
 
 import h5py
 import numpy as np
 from numpy.typing import NDArray
 from sklearn.linear_model import LinearRegression
 
-from . import utils
 from ..tracker.base import EventData
+from . import utils
 from .base import (
     DynamicIdentificationModel,
     DynamicIdentificationModelConfig,

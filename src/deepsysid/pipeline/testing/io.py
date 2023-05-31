@@ -1,15 +1,15 @@
 import dataclasses
 import os
-from typing import Dict, Iterator, List, Literal, Callable
+from typing import Callable, Dict, Iterator, List, Literal
 
 import h5py
 import numpy as np
 from numpy.typing import NDArray
 
+from ...tracker.base import EventData
 from ..configuration import ExperimentConfiguration
 from ..data_io import build_result_file_name, load_file_names, load_simulation_data
 from .base import TestResult, TestResultMetadata, TestSequenceResult, TestSimulation
-from ...tracker.base import EventData
 
 
 def load_test_simulations(

@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, List, Optional, Tuple, Callable
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -9,8 +9,8 @@ from torch import optim
 from torch.nn import functional
 from torch.utils import data
 
-from ..tracker.base import EventData
 from ..networks.fnn import DenseReLUNetwork
+from ..tracker.base import EventData
 from . import base, utils
 from .base import DynamicIdentificationModelConfig
 from .datasets import FixedWindowDataset

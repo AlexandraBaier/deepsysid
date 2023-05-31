@@ -8,7 +8,7 @@ KLinearRegressionARXModel is implemented based on
 import dataclasses
 import logging
 import pickle
-from typing import Optional, Tuple, Callable
+from typing import Callable, Optional, Tuple
 
 import h5py
 import numpy as np
@@ -18,8 +18,9 @@ from sklearn.metrics import euclidean_distances
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.utils.validation import check_array, check_X_y
 
-from ...tracker.base import EventData
 from deepsysid.models.base import DynamicIdentificationModelConfig, FixedWindowModel
+
+from ...tracker.base import EventData
 
 logger = logging.getLogger(__name__)
 

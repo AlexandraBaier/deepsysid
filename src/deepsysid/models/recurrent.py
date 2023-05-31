@@ -2,7 +2,7 @@ import copy
 import json
 import logging
 import time
-from typing import Dict, List, Literal, Optional, Tuple, Callable
+from typing import Callable, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 
 from ..networks import loss, rnn
 from ..networks.rnn import HiddenStateForwardModule
+from ..tracker.base import EventData, EventType
 from . import base, utils
 from .base import DynamicIdentificationModelConfig
 from .datasets import (
@@ -20,8 +21,6 @@ from .datasets import (
     RecurrentPredictorDataset,
     RecurrentPredictorInitialDataset,
 )
-
-from ..tracker.base import EventData, EventType
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
