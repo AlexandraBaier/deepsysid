@@ -84,7 +84,7 @@ class ExperimentGridSearchSettings(BaseModel):
     horizon_size: int
     control_names: List[str]
     state_names: List[str]
-    initial_state_names: List[str]
+    initial_state_names: Optional[List[str]] = None
     additional_tests: Dict[str, GridSearchTestConfiguration]
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
@@ -140,15 +140,21 @@ class ExperimentConfiguration(BaseModel):
     def from_grid_search_template(
         cls, template: ExperimentGridSearchTemplate, device_name: str = 'cpu'
     ) -> 'ExperimentConfiguration':
+        if template.settings.initial_state_names is None:
+            initial_state_names = template.settings.state_names
+        else:
+            initial_state_names = template.settings.initial_state_names
+
         models: Dict[str, ExperimentModelConfiguration] = dict()
         for model_template in template.models:
             model_class_str = model_template.model_class
             model_class = retrieve_model_class(model_class_str)
+
             base_model_params = dict(
                 device_name=device_name,
                 control_names=template.settings.control_names,
                 state_names=template.settings.state_names,
-                initial_state_names=template.settings.initial_state_names,
+                initial_state_names=initial_state_names,
                 time_delta=template.settings.time_delta,
                 window_size=template.settings.window_size,
                 horizon_size=template.settings.horizon_size,
@@ -266,7 +272,7 @@ class ExperimentConfiguration(BaseModel):
             horizon_size=template.settings.horizon_size,
             control_names=template.settings.control_names,
             state_names=template.settings.state_names,
-            initial_state_names=template.settings.initial_state_names,
+            initial_state_names=initial_state_names,
             models=models,
             target_metric=template.settings.target_metric,
             metrics=metrics,
