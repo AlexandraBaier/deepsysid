@@ -5,6 +5,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentGridSearchSettings,
     ExperimentGridSearchTemplate,
     GridSearchMetricConfiguration,
+    GridSearchTrackingConfiguration,
     GridSearchTestConfiguration,
     ModelGridSearchTemplate,
 )
@@ -47,6 +48,12 @@ def test_experiment_session_manager_new_and_test_best_successful(
                 d1=GridSearchMetricConfiguration(
                     metric_class='deepsysid.pipeline.metrics.IndexOfAgreementMetric',
                     parameters=dict(j=1),
+                )
+            ),
+            tracker=dict(
+                mlflow=GridSearchTrackingConfiguration(
+                    tracking_class='deepsysid.tracker.mlflow.MlFlowTracker',
+                    parameters=dict(),
                 )
             ),
             additional_tests=dict(

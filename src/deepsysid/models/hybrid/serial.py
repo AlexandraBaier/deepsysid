@@ -12,7 +12,7 @@ Input Model -> Physics Model -> Output Model -> + ->
 import abc
 import json
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Callable
 
 import numpy as np
 import torch
@@ -23,6 +23,7 @@ from torch.nn.functional import mse_loss
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
+from ...tracker.base import EventData
 from deepsysid.models import utils
 from deepsysid.models.base import (
     DynamicIdentificationModel,
@@ -469,6 +470,7 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         epoch_losses = []
@@ -583,7 +585,11 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
 
         return pred_states
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.network is None
             or self.normalization_gains is None

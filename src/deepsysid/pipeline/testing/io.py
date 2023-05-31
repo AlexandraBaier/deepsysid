@@ -50,7 +50,7 @@ def save_model_tests(
     result_directory: str,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
-    tracker: Callable[[EventData], None] = lambda _: None
+    tracker: Callable[[EventData], None] = lambda _: None,
 ) -> None:
     # Save true and predicted time series
     result_directory = os.path.join(result_directory, model_name)

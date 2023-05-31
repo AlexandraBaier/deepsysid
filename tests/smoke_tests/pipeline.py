@@ -386,6 +386,7 @@ def run_generic_pipeline(
         model_name=model_name,
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
+        models_directory=str(paths['models']),
     )
 
 
@@ -543,6 +544,11 @@ def run_4dof_ship_pipeline(
         state_names=state_names,
         initial_state_names=state_names,
         session=SessionConfiguration(total_runs_for_best_models=3),
+        tracker=dict(
+            mlflow=ExperimentTrackingConfiguration(
+                tracking_class="deepsysid.tracker.mlflow.MlFlowTracker", parameters={}
+            )
+        ),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing.stability.'
@@ -577,12 +583,6 @@ def run_4dof_ship_pipeline(
                     clip_gradient_norm=100,
                     regularization_scale=0.25,
                 ),
-            ),
-            tracker=dict(
-                mlflow=ExperimentTrackingConfiguration(
-                    tracking_class="deepsysid.tracker.mlflow.MlFlowTracker",
-                    parameters={}
-                )
             ),
             bounded_residual=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing'

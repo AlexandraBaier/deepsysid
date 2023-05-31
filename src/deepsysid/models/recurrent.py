@@ -1,17 +1,14 @@
 import copy
-import importlib
 import json
 import logging
 import time
-from types import ModuleType
-from typing import Dict, List, Literal, Optional, Tuple, Callable, Any, Union
+from typing import Dict, List, Literal, Optional, Tuple, Callable
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
-import os
 from numpy.typing import NDArray
 
 from ..networks import loss, rnn
@@ -24,7 +21,6 @@ from .datasets import (
     RecurrentPredictorInitialDataset,
 )
 
-from ..cli.interface import DATASET_DIR_ENV_VAR
 from ..tracker.base import EventData, EventType
 
 logger = logging.getLogger('deepsysid.pipeline.training')
@@ -103,6 +99,7 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
@@ -238,7 +235,11 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -369,6 +370,7 @@ class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
@@ -509,7 +511,11 @@ class RnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -642,6 +648,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
@@ -789,7 +796,11 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -947,7 +958,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
         self._control_mean, self._control_std = utils.mean_stddev(us)
         self._state_mean, self._state_std = utils.mean_stddev(ys)
-        
+
         track_model_parameters(self, tracker)
 
         us = [
@@ -1145,6 +1156,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_y = initial_state
         u = control
 
+        N, nu = control.shape
+
         initial_u = utils.normalize(initial_u, self._control_mean, self._control_std)
         initial_y = utils.normalize(initial_y, self._state_mean, self._state_std)
         u = utils.normalize(u, self._control_mean, self._control_std)
@@ -1164,10 +1177,16 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 y.cpu().detach().squeeze().numpy().astype(np.float64)
             )
 
-        y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
+        y_np = utils.denormalize(y_np, self._state_mean, self._state_std).reshape(
+            (N, self.state_dim)
+        )
         return y_np
 
-    def save(self, file_path: Tuple[str, ...], tracker: Callable[[EventData], None] = lambda _: None) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self._state_mean is None
             or self._state_std is None
@@ -1363,7 +1382,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             x0s: List[NDArray[np.float64]] = initial_seqs
 
         track_model_parameters(self, tracker)
-        
+
         self._predictor.project_parameters()
 
         time_start_pred = time.time()
@@ -1613,7 +1632,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]]
+        x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         if (
             self._control_mean is None
@@ -1651,7 +1670,11 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         return y_np
 
-    def save(self, file_path: Tuple[str, ...], tracker: Callable[[EventData], None] = lambda _: None) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self._state_mean is None
             or self._state_std is None
@@ -1664,13 +1687,12 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         omega, sys_block_matrix = self._predictor.set_lure_system()
         np.savetxt(file_path[3], omega, delimiter=',', fmt='%.4f')
         np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.4f')
-        tracker(EventData(
-            EventType.TRACK_ARTIFACTS,
-            {'artifacts': [
-                (file_path[3], 'omega'),
-                (file_path[4], 'blk_matrix')
-            ]}
-        ))
+        tracker(
+            EventData(
+                EventType.TRACK_ARTIFACTS,
+                {'artifacts': [(file_path[3], 'omega'), (file_path[4], 'blk_matrix')]},
+            )
+        )
 
         with open(file_path[2], mode='w') as f:
             json.dump(
@@ -1862,7 +1884,12 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
                 batch_loss.backward()
                 self.optimizer_pred.step()
 
-            tracker(EventData(EventType.TRACK_METRICS, {'metrics':[('Predictor loss', total_loss, i)]}))
+            tracker(
+                EventData(
+                    EventType.TRACK_METRICS,
+                    {'metrics': [('Predictor loss', total_loss, i)]},
+                )
+            )
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor} '
@@ -1935,7 +1962,11 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
         y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...], tracker: Callable[[EventData], None] = lambda _: None) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self._state_mean is None
             or self._state_std is None
@@ -1993,9 +2024,26 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
         return copy.deepcopy(self._predictor)
 
 
-def track_model_parameters(model:base.DynamicIdentificationModel, tracker: Callable[[EventData], None] = lambda _: None) -> None:
-    model_parameters = [(name, getattr(model, name)) for name in filter(lambda attr: (isinstance(getattr(model, attr), (float, str, int))) and attr is not None, dir(model))]
-    tracker(EventData(
-        EventType.TRACK_PARAMETERS,
-        {'parameters': [*model_parameters, ('model name', model.__class__.__name__)]})
+def track_model_parameters(
+    model: base.DynamicIdentificationModel,
+    tracker: Callable[[EventData], None] = lambda _: None,
+) -> None:
+    model_parameters = [
+        (name, getattr(model, name))
+        for name in filter(
+            lambda attr: (isinstance(getattr(model, attr), (float, str, int)))
+            and attr is not None,
+            dir(model),
+        )
+    ]
+    tracker(
+        EventData(
+            EventType.TRACK_PARAMETERS,
+            {
+                'parameters': [
+                    *model_parameters,
+                    ('model name', model.__class__.__name__),
+                ]
+            },
+        )
     )

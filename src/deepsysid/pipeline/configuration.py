@@ -199,9 +199,7 @@ class ExperimentConfiguration(BaseModel):
                 tracker_class = retrieve_tracker_class(tracker.tracking_class)
                 trackers[name] = ExperimentTrackingConfiguration(
                     tracking_class=tracker.tracking_class,
-                    parameters=tracker_class.CONFIG.parse_obj(
-                        tracker.parameters
-                    ),
+                    parameters=tracker_class.CONFIG.parse_obj(tracker.parameters),
                 )
 
         tests = dict()
@@ -287,6 +285,15 @@ def initialize_model(
     model = model_class(config=parameters)
 
     return model
+
+
+# def initialize_tracker(
+#     experiment_config: ExperimentConfiguration) -> List[BaseEventTracker]:
+#     trackers: List[BaseEventTracker] = list()
+#     for tracker_config in experiment_config.tracker.values():
+#         tracker_class = retrieve_tracker_class(tracker_config.tracking_class)
+#         trackers.append(tracker_class(tracker_config.parameters))
+#     return trackers
 
 
 def retrieve_model_class(model_class_string: str) -> Type[DynamicIdentificationModel]:

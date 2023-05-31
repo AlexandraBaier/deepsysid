@@ -85,8 +85,5 @@ def build_explanation_result_file_name(
     return f'{mode}-explanation-w_{window_size}-h_{horizon_size}.{extension}'
 
 
-def build_tracker_config_file_name(
-    tracker_name: str,
-    model_name: str
-) -> str:
+def build_tracker_config_file_name(tracker_name: str, model_name: str) -> str:
     return f'tracker-{tracker_name}-{model_name}.json'

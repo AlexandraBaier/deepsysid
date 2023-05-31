@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Callable
 
 import h5py
 import numpy as np
@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 from sklearn.linear_model import LinearRegression
 
 from . import utils
+from ..tracker.base import EventData
 from .base import (
     DynamicIdentificationModel,
     DynamicIdentificationModelConfig,
@@ -31,6 +32,7 @@ class LinearModel(DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> None:
         assert len(control_seqs) == len(state_seqs)
@@ -101,7 +103,11 @@ class LinearModel(DynamicIdentificationModel):
 
         return pred_states
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         with h5py.File(file_path[0], 'w') as f:
             f.create_dataset('coef_', data=self.regressor.coef_)
             f.create_dataset('intercept_', data=self.regressor.intercept_)
@@ -168,7 +174,11 @@ class LinearLag(FixedWindowModel[LinearRegression]):
         self.control_dim = len(config.control_names)
         self.state_dim = len(config.state_names)
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         with h5py.File(file_path[0], 'w') as f:
             f.attrs['window_size'] = self.window_size
             f.create_dataset('coef_', data=self.regressor.coef_)

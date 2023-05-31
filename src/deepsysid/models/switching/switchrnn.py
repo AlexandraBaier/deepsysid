@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 
 import numpy as np
 import torch
@@ -19,6 +19,7 @@ from ...networks.switching import (
 from .. import base, utils
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 from ..recurrent import LSTMInitModelConfig
+from ...tracker.base import EventData
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
@@ -221,7 +223,11 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
             control_matrices=np.array(control_matrices, dtype=np.float64),
         )
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None

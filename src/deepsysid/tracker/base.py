@@ -1,8 +1,9 @@
 import dataclasses
-from typing import Literal, Dict, Any, Type, List, Union, Optional
+from typing import Dict, Any, Type, List, Union, Optional
 from enum import Enum
 import abc
 from pydantic import BaseModel
+
 
 class EventType(Enum):
     TRACK_PARAMETERS = 1
@@ -13,13 +14,15 @@ class EventType(Enum):
     GET_ID = 6
     SET_TAG = 7
     SET_EXPERIMENT_NAME = 8
-
+    STOP_RUN = 9
 
 
 @dataclasses.dataclass
 class EventData:
     event_type: EventType
     data: Dict[str, Any]
+
+
 @dataclasses.dataclass
 class EventReturn:
     data: Dict[str, Any]
@@ -36,16 +39,18 @@ class BaseEventTracker(metaclass=abc.ABCMeta):
     def __call__(self, Event: EventData) -> Union[EventReturn, List[EventReturn]]:
         pass
 
+
 class TrackerAggregator(BaseEventTracker):
-    
     def __init__(self, trackers: List[BaseEventTracker]) -> None:
         super().__init__()
         self.trackers = trackers
-    
+
     def __call__(self, Event: EventData) -> List[EventReturn]:
         event_returns: List[EventReturn] = list()
         for tracker in self.trackers:
-            event_returns.append(tracker(Event))
+            return_event = tracker(Event)
+            if not isinstance(return_event, List):
+                event_returns.append(return_event)
         return event_returns
 
 
