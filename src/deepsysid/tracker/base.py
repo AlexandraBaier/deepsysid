@@ -92,7 +92,7 @@ class TrackerAggregator(BaseEventTracker):
 
     def __call__(self, event: EventData) -> None:
         for tracker in self.trackers:
-            print(f'[TRACKER:] \t {event.msg}')
+            # print(f'[TRACKER] \t {event.msg}')
             tracker(event)
 
 

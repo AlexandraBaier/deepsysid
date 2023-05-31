@@ -9,7 +9,7 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 
 from ..networks.rnn import HiddenStateForwardModule
-from ..tracker.base import EventData
+from ..tracker.base import EventData, TrackParameters
 from . import utils
 
 logger = logging.getLogger(__name__)
@@ -260,3 +260,23 @@ class NormalizedHiddenStateInitializerPredictorModel(
     @abc.abstractmethod
     def predictor(self) -> HiddenStateForwardModule:
         pass
+
+
+def track_model_parameters(
+    model: DynamicIdentificationModel,
+    tracker: Callable[[EventData], None] = lambda _: None,
+) -> None:
+    model_parameters = {
+        name: getattr(model, name)
+        for name in filter(
+            lambda attr: (isinstance(getattr(model, attr), (float, str, int)))
+            and attr is not None,
+            dir(model),
+        )
+    }
+    tracker(
+        TrackParameters(
+            'track model parameters',
+            {**model_parameters, 'model name': model.__class__.__name__},
+        )
+    )

@@ -3,7 +3,7 @@ import copy
 import json
 import logging
 import time
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Callable, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -14,8 +14,9 @@ from torch.utils import data as data
 
 from ...networks import loss, rnn
 from ...networks.rnn import HiddenStateForwardModule
+from ...tracker.base import EventData, TrackMetrics
 from .. import base, utils
-from ..base import DynamicIdentificationModelConfig
+from ..base import DynamicIdentificationModelConfig, track_model_parameters
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ class SeparateInitializerRecurrentNetworkModel(
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
@@ -103,6 +105,8 @@ class SeparateInitializerRecurrentNetworkModel(
 
         self._control_mean, self._control_std = utils.mean_stddev(control_seqs)
         self._state_mean, self._state_std = utils.mean_stddev(state_seqs)
+
+        track_model_parameters(self, tracker)
 
         control_seqs = [
             utils.normalize(control, self.control_mean, self.control_std)
@@ -163,7 +167,7 @@ class SeparateInitializerRecurrentNetworkModel(
                     self._predictor.parameters(), self.clip_gradient_norm
                 )
                 self.optimizer_pred.step()
-
+            tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)}))
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor} '
                 f'- Epoch Loss (Predictor): {total_loss}'
@@ -233,7 +237,11 @@ class SeparateInitializerRecurrentNetworkModel(
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None

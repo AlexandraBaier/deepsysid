@@ -2,7 +2,7 @@ import copy
 import json
 import logging
 import time
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Callable, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -12,7 +12,10 @@ from torch import optim as optim
 from torch.utils import data as data
 
 from deepsysid.models import base, utils
-from deepsysid.models.base import DynamicIdentificationModelConfig
+from deepsysid.models.base import (
+    DynamicIdentificationModelConfig,
+    track_model_parameters,
+)
 from deepsysid.models.datasets import (
     RecurrentInitializerDataset,
     RecurrentPredictorDataset,
@@ -20,8 +23,7 @@ from deepsysid.models.datasets import (
 )
 from deepsysid.networks import loss, rnn
 from deepsysid.networks.rnn import HiddenStateForwardModule
-
-from deepsysid.tracker.base import EventData, TrackArtifacts, TrackFigures, TrackMetrics, TrackParameters
+from deepsysid.tracker.base import EventData, TrackArtifacts, TrackFigures, TrackMetrics
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
@@ -99,6 +101,7 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
@@ -234,7 +237,11 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -367,6 +374,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
@@ -514,7 +522,11 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -660,6 +672,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
@@ -671,6 +684,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
         self._control_mean, self._control_std = utils.mean_stddev(us)
         self._state_mean, self._state_std = utils.mean_stddev(ys)
+
+        track_model_parameters(self, tracker)
 
         us = [
             utils.normalize(control, self._control_mean, self._control_std)
@@ -806,6 +821,13 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 f'Backtracking Line Search iteration: {bls_iter}\t'
                 f'Max accumulated gradient norm: {max_grad:1f}'
             )
+            tracker(
+                TrackMetrics(
+                    f'Track loss step {i}',
+                    {'loss': float(total_loss), 'barrier': float(barrier)},
+                )
+            )
+
             predictor_loss.append(np.float64(total_loss))
             barrier_value.append(barrier.cpu().detach().numpy())
             backtracking_iter.append(np.float64(bls_iter))
@@ -856,6 +878,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_y = initial_state
         u = control
 
+        N, nu = control.shape
+
         initial_u = utils.normalize(initial_u, self._control_mean, self._control_std)
         initial_y = utils.normalize(initial_y, self._state_mean, self._state_std)
         u = utils.normalize(u, self._control_mean, self._control_std)
@@ -875,10 +899,16 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 y.cpu().detach().squeeze().numpy().astype(np.float64)
             )
 
-        y_np = utils.denormalize(y_np, self._state_mean, self._state_std)
+        y_np = utils.denormalize(y_np, self._state_mean, self._state_std).reshape(
+            (N, self.state_dim)
+        )
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self._state_mean is None
             or self._state_std is None
@@ -956,7 +986,6 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_without_projection: int
     initial_decay_parameter: float
     epochs_with_const_decay: Optional[int]
-    mlflow_tracking_uri: Optional[str]
 
 
 class HybridConstrainedRnn(base.NormalizedControlStateModel):
@@ -964,6 +993,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
     def __init__(self, config: HybridConstrainedRnnConfig):
         super().__init__(config)
+
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
 
@@ -1058,6 +1088,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
+        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
@@ -1072,11 +1103,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
 
-        # self._predictor.initialize_lmi()
+        track_model_parameters(self, tracker)
 
-        d = self._predictor.project_parameters()
-        if self.mlflow is not None and self.mlflow.active_run():
-            self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
+        self._predictor.project_parameters()
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1211,42 +1240,46 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
 
-                if self.mlflow is not None and self.mlflow.active_run():
-                    self.mlflow.log_metric('Predictor Loss', total_loss, step=step)
-                    self.mlflow.log_metric('Barrier', barrier, step=step)
-                    if (step - 1) % 5 == 0:
-                        nx = self._predictor.nx
-                        nwp = self._predictor.nwp
-                        lin = rnn.Linear(
-                            A=self._predictor.A_lin,
-                            B=self._predictor.B_lin,
-                            C=self._predictor.C_lin,
-                            D=torch.tensor([[0.0]]),
-                        ).to(self.device)
-                        y_lin = (
-                            lin.forward(
-                                x0[0, :].reshape(1, nx, 1),
-                                batch['wp'][0, :, :]
-                                .reshape(1, seq_len, nwp, 1)
-                                .float()
-                                .to(self.device),
-                            )[0]
-                            .cpu()
-                            .detach()
-                            .numpy()
+                tracker(
+                    TrackMetrics(
+                        f'Track loss step {step}',
+                        {'loss': float(total_loss), 'barrier': float(barrier)},
+                    )
+                )
+                if (step - 1) % 20 == 0:
+                    nx = self._predictor.nx
+                    nwp = self._predictor.nwp
+                    lin = rnn.Linear(
+                        A=self._predictor.A_lin,
+                        B=self._predictor.B_lin,
+                        C=self._predictor.C_lin,
+                        D=torch.tensor([[0.0]]),
+                    ).to(self.device)
+                    y_lin = (
+                        lin.forward(
+                            x0[0, :].reshape(1, nx, 1),
+                            batch['wp'][0, :, :]
+                            .reshape(1, seq_len, nwp, 1)
+                            .float()
+                            .to(self.device),
+                        )[0]
+                        .cpu()
+                        .detach()
+                        .numpy()
+                    )
+                    result = utils.TrainingPrediction(
+                        u=batch['wp'][0, :, :],
+                        zp=batch['zp'][0, :, :],
+                        zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                        y_lin=y_lin[:, :, 0],
+                    )
+                    tracker(
+                        TrackFigures(
+                            f'Save output plot at step: {step}',
+                            result,
+                            f'output_{step-1}.png',
                         )
-                        result = utils.TrainingPrediction(
-                            u=batch['wp'][0, :, :],
-                            zp=batch['zp'][0, :, :],
-                            zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
-                            y_lin=y_lin[:, :, 0],
-                        )
-                        self.mlflow.log_figure(
-                            figure=utils.plot_outputs(result=result),
-                            artifact_file=f'output_{step-1}.png',
-                        )
-                        d = self._predictor.project_parameters(write_parameter=False)
-                        self.mlflow.log_metric('d_to_feasible_pars', d, step=step)
+                    )
 
                 logger.info(
                     f'Epoch {i + 1}/{self.epochs_predictor}\t'
@@ -1348,7 +1381,11 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: Callable[[EventData], None] = lambda _: None,
+    ) -> None:
         if (
             self._state_mean is None
             or self._state_std is None
@@ -1361,6 +1398,12 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         omega, sys_block_matrix = self._predictor.set_lure_system()
         np.savetxt(file_path[3], omega, delimiter=',', fmt='%.4f')
         np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.4f')
+        tracker(
+            TrackArtifacts(
+                'Save omega and system matrices',
+                {'omega': file_path[3], 'system matrices': file_path[4]},
+            )
+        )
 
         with open(file_path[2], mode='w') as f:
             json.dump(
@@ -1408,6 +1451,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
     # def initializer(self) -> HiddenStateForwardModule:
     #     return copy.deepcopy(self._initializer)
 
-    @property
-    def predictor(self) -> HiddenStateForwardModule:
-        return copy.deepcopy(self._predictor)
+    # @property
+    # def predictor(self) -> HiddenStateForwardModule:
+    #     return copy.deepcopy(self._predictor)
