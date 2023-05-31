@@ -1,23 +1,20 @@
 import logging
 import os
-import pathlib
 import time
 from types import ModuleType
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import h5py
 import numpy as np
 from numpy.typing import NDArray
 
-from ..pipeline.configuration import ExperimentConfiguration, initialize_model
-from ..tracker.base import (
-    BaseEventTracker,
-    EventData,
-    EventType,
-    TrackerAggregator,
-    retrieve_tracker_class,
+from ..pipeline.configuration import (
+    ExperimentConfiguration,
+    initialize_model,
+    initialize_tracker,
 )
-from .data_io import build_tracker_config_file_name, load_simulation_data
+from ..tracker.base import SaveTrackingConfiguration, SetExperiment, SetTags, StopRun
+from .data_io import load_simulation_data
 from .model_io import save_model
 
 logger = logging.getLogger(__name__)
@@ -38,26 +35,8 @@ def train_model(
     os.makedirs(model_directory, exist_ok=True)
 
     # set tracking
-    def tracker_fcn(_):
-        return None
-
-    tracker = tracker_fcn
-    if configuration.tracker is not None:
-        trackers: List[BaseEventTracker] = list()
-        for tracker_config in configuration.tracker.values():
-            tracker_class = retrieve_tracker_class(tracker_config.tracking_class)
-            trackers.append(tracker_class(tracker_config.parameters))
-        tracker = TrackerAggregator(trackers)
-        tracker(
-            EventData(
-                EventType.SET_EXPERIMENT_NAME,
-                {
-                    'experiment name': os.path.split(
-                        pathlib.Path(dataset_directory).parent.parent.parent
-                    )[1]
-                },
-            )
-        )
+    tracker = initialize_tracker(experiment_config=configuration)
+    tracker(SetExperiment('Start new experiment', dataset_directory))
 
     # Load dataset
     controls, states, initial_states = load_simulation_data(
@@ -88,25 +67,18 @@ def train_model(
         f'training time: '
         f'{time.strftime("%H:%M:%S", time.gmtime(float(training_duration)))}'
     )
-    # Save model configuration
-    tracker(EventData(EventType.SET_TAG, {'tags': [('trained', 1), ('validated', 0)]}))
+    tracker(SetTags('Trained, not validated', {'trained': True, 'validated': False}))
     if configuration.tracker is not None:
-        for (tracker_name, tracker_config), tracker in zip(
-            configuration.tracker.items(), trackers
-        ):
-            event_return = tracker(EventData(EventType.GET_ID, {}))
-            if hasattr(event_return, 'data'):
-                tracker_config.parameters.id = event_return.data['id']
-        with open(
-            os.path.join(
+        tracker(
+            SaveTrackingConfiguration(
+                'Write tracking config to json file',
+                configuration.tracker,
+                model_name,
                 model_directory,
-                build_tracker_config_file_name(tracker_name, model_name),
-            ),
-            mode='w',
-        ) as f:
-            f.write(tracker_config.json())
-    tracker(EventData(EventType.STOP_RUN, {}))
-
+            )
+        )
+    tracker(StopRun('stop current run', None))
+    # Save model configuration
     with open(
         os.path.join(model_directory, f'config-{model_name}.json'), mode='w'
     ) as f:

@@ -13,7 +13,13 @@ from numpy.typing import NDArray
 
 from ..networks import loss, rnn
 from ..networks.rnn import HiddenStateForwardModule
-from ..tracker.base import EventData, EventType
+from ..tracker.base import (
+    EventData,
+    TrackArtifacts,
+    TrackFigures,
+    TrackMetrics,
+    TrackParameters,
+)
 from . import base, utils
 from .base import DynamicIdentificationModelConfig
 from .datasets import (
@@ -1095,16 +1101,12 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 f'Max accumulated gradient norm: {max_grad:1f}'
             )
             tracker(
-                EventData(
-                    event_type=EventType.TRACK_METRICS,
-                    data={
-                        'metrics': [
-                            ['Predictor loss', total_loss, i],
-                            ['Barrier', barrier, i],
-                        ]
-                    },
+                TrackMetrics(
+                    f'Track loss step {i}',
+                    {'loss': float(total_loss), 'barrier': float(barrier)},
                 )
             )
+
             predictor_loss.append(np.float64(total_loss))
             barrier_value.append(barrier.cpu().detach().numpy())
             backtracking_iter.append(np.float64(bls_iter))
@@ -1518,14 +1520,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     backtracking_iter.append(bls_iter)
 
                 tracker(
-                    EventData(
-                        event_type=EventType.TRACK_METRICS,
-                        data={
-                            'metrics': [
-                                ['Predictor loss', total_loss, step],
-                                ['Barrier', barrier, step],
-                            ]
-                        },
+                    TrackMetrics(
+                        f'Track loss step {step}',
+                        {'loss': float(total_loss), 'barrier': float(barrier)},
                     )
                 )
                 if (step - 1) % 20 == 0:
@@ -1556,16 +1553,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                         y_lin=y_lin[:, :, 0],
                     )
                     tracker(
-                        EventData(
-                            event_type=EventType.TRACK_FIGURES,
-                            data={
-                                'figures': [
-                                    [
-                                        utils.plot_outputs(result=result),
-                                        f'output_{step-1}.png',
-                                    ]
-                                ]
-                            },
+                        TrackFigures(
+                            f'Save output plot at step: {step}',
+                            result,
+                            f'output_{step-1}.png',
                         )
                     )
 
@@ -1687,9 +1678,9 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         np.savetxt(file_path[3], omega, delimiter=',', fmt='%.4f')
         np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.4f')
         tracker(
-            EventData(
-                EventType.TRACK_ARTIFACTS,
-                {'artifacts': [(file_path[3], 'omega'), (file_path[4], 'blk_matrix')]},
+            TrackArtifacts(
+                'Save omega and system matrices',
+                {'omega': file_path[3], 'system matrices': file_path[4]},
             )
         )
 
@@ -1883,12 +1874,7 @@ class LSTMInitModel(base.NormalizedHiddenStateInitializerPredictorModel):
                 batch_loss.backward()
                 self.optimizer_pred.step()
 
-            tracker(
-                EventData(
-                    EventType.TRACK_METRICS,
-                    {'metrics': [('Predictor loss', total_loss, i)]},
-                )
-            )
+            tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)}))
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor} '
@@ -2027,22 +2013,17 @@ def track_model_parameters(
     model: base.DynamicIdentificationModel,
     tracker: Callable[[EventData], None] = lambda _: None,
 ) -> None:
-    model_parameters = [
-        (name, getattr(model, name))
+    model_parameters = {
+        name: getattr(model, name)
         for name in filter(
             lambda attr: (isinstance(getattr(model, attr), (float, str, int)))
             and attr is not None,
             dir(model),
         )
-    ]
+    }
     tracker(
-        EventData(
-            EventType.TRACK_PARAMETERS,
-            {
-                'parameters': [
-                    *model_parameters,
-                    ('model name', model.__class__.__name__),
-                ]
-            },
+        TrackParameters(
+            'track model parameters',
+            {**model_parameters, 'model name': model.__class__.__name__},
         )
     )

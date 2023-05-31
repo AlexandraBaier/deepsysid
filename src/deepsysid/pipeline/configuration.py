@@ -1,5 +1,5 @@
 import itertools
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from pydantic import BaseModel, root_validator
 
@@ -10,7 +10,13 @@ from ..explainability.base import (
     retrieve_explanation_metric_class,
 )
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
-from ..tracker.base import BaseEventTrackerConfig, retrieve_tracker_class
+from ..tracker.base import (
+    BaseEventTracker,
+    BaseEventTrackerConfig,
+    EventData,
+    TrackerAggregator,
+    retrieve_tracker_class,
+)
 from .metrics import BaseMetricConfig, retrieve_metric_class
 from .testing.base import BaseTestConfig, retrieve_test_class
 
@@ -287,13 +293,20 @@ def initialize_model(
     return model
 
 
-# def initialize_tracker(
-#     experiment_config: ExperimentConfiguration) -> List[BaseEventTracker]:
-#     trackers: List[BaseEventTracker] = list()
-#     for tracker_config in experiment_config.tracker.values():
-#         tracker_class = retrieve_tracker_class(tracker_config.tracking_class)
-#         trackers.append(tracker_class(tracker_config.parameters))
-#     return trackers
+def initialize_tracker(
+    experiment_config: ExperimentConfiguration,
+) -> Callable[[EventData], None]:
+    def tracker_fcn(_):
+        return None
+
+    tracker = tracker_fcn
+    if experiment_config.tracker is not None:
+        trackers: List[BaseEventTracker] = list()
+        for tracker_config in experiment_config.tracker.values():
+            tracker_class = retrieve_tracker_class(tracker_config.tracking_class)
+            trackers.append(tracker_class(tracker_config.parameters))  # type: ignore
+        tracker = TrackerAggregator(trackers)
+    return tracker
 
 
 def retrieve_model_class(model_class_string: str) -> Type[DynamicIdentificationModel]:

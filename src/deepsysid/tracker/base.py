@@ -1,32 +1,76 @@
+from __future__ import annotations
+
+# https://peps.python.org/pep-0563/#abstract
 import abc
 import dataclasses
-from enum import Enum
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
+
+# to avoid circular imports, only required for type checking
+if TYPE_CHECKING:
+    from ..pipeline.configuration import ExperimentTrackingConfiguration
 
 from pydantic import BaseModel
 
-
-class EventType(Enum):
-    TRACK_PARAMETERS = 1
-    TRACK_METRICS = 2
-    TRACK_FIGURES = 3
-    TRACK_ARTIFACTS = 4
-    LOG_TEXT = 5
-    GET_ID = 6
-    SET_TAG = 7
-    SET_EXPERIMENT_NAME = 8
-    STOP_RUN = 9
+from ..models.utils import TrainingPrediction
 
 
 @dataclasses.dataclass
 class EventData:
-    event_type: EventType
-    data: Dict[str, Any]
+    msg: str
+
+
+@dataclasses.dataclass
+class StopRun(EventData):
+    run_status: Optional[str]
 
 
 @dataclasses.dataclass
 class EventReturn:
     data: Dict[str, Any]
+
+
+@dataclasses.dataclass
+class TrackParameters(EventData):
+    parameters: Dict[str, Union[str, float, int]]
+
+
+@dataclasses.dataclass
+class TrackFigures(EventData):
+    results: TrainingPrediction
+    name: str
+
+
+@dataclasses.dataclass
+class TrackArtifacts(EventData):
+    artifacts: Dict[str, str]
+
+
+@dataclasses.dataclass
+class SetExperiment(EventData):
+    dataset_directory: str
+
+
+@dataclasses.dataclass
+class SaveTrackingConfiguration(EventData):
+    config: Dict[str, ExperimentTrackingConfiguration]
+    model_name: str
+    model_directory: str
+
+
+@dataclasses.dataclass
+class LoadTrackingConfiguration(EventData):
+    model_directory: str
+    model_name: str
+
+
+@dataclasses.dataclass
+class SetTags(EventData):
+    tags: Dict[str, Union[str, bool]]
+
+
+@dataclasses.dataclass
+class TrackMetrics(EventData):
+    metrics: Dict[str, float]
 
 
 class BaseEventTrackerConfig(BaseModel):
@@ -37,7 +81,7 @@ class BaseEventTracker(metaclass=abc.ABCMeta):
     CONFIG = BaseEventTrackerConfig
 
     @abc.abstractmethod
-    def __call__(self, Event: EventData) -> Union[EventReturn, List[EventReturn]]:
+    def __call__(self, Event: EventData) -> None:
         pass
 
 
@@ -46,13 +90,10 @@ class TrackerAggregator(BaseEventTracker):
         super().__init__()
         self.trackers = trackers
 
-    def __call__(self, Event: EventData) -> List[EventReturn]:
-        event_returns: List[EventReturn] = list()
+    def __call__(self, event: EventData) -> None:
         for tracker in self.trackers:
-            return_event = tracker(Event)
-            if not isinstance(return_event, List):
-                event_returns.append(return_event)
-        return event_returns
+            print(f'[TRACKER:] \t {event.msg}')
+            tracker(event)
 
 
 def retrieve_tracker_class(

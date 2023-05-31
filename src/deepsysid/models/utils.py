@@ -1,22 +1,9 @@
 import dataclasses
-import importlib
-from types import ModuleType
-from typing import Any, List, Optional, Tuple, TypeVar
+from typing import List, Optional, Tuple, TypeVar
 
 import numpy as np
 import torch
 from numpy.typing import NDArray
-
-matplotlib: Optional[ModuleType] = None
-plt: Optional[ModuleType] = None
-MATPLOTLIB_EXISTS = False
-try:
-    matplotlib = importlib.import_module('matplotlib')
-    plt = importlib.import_module('matplotlib.pyplot')
-    MATPLOTLIB_EXISTS = True
-except ImportError:
-    pass
-
 
 TensorType = TypeVar('TensorType', torch.Tensor, NDArray[np.float64])
 
@@ -53,30 +40,3 @@ def sequence_norm(x: torch.Tensor) -> torch.Tensor:
         x_k = x_k.unsqueeze(0)
         norm += (x_k @ x_k.T).squeeze()
     return norm
-
-
-if MATPLOTLIB_EXISTS:
-    # I do not know how to type hint this correctly in
-    # case that matplotlib is not installed.
-    # The actual return type is matplotlib.figure.Figure.
-    def plot_outputs(result: TrainingPrediction) -> Any:
-        if matplotlib is None or plt is None:
-            raise ImportError(
-                'Package matplotlib is required to run this function '
-                'and has not been installed.'
-            )
-
-        seq_len, ny = result.zp.shape
-        fig, axs = plt.subplots(nrows=ny, ncols=1, tight_layout=True, squeeze=False)
-        if result.y_lin is None:
-            result.y_lin = np.zeros(shape=(seq_len, ny))
-        fig.suptitle('Output plots')
-        t = np.linspace(0, seq_len - 1, seq_len)
-        for element, ax in zip(range(ny), axs[:, 0]):
-            ax.plot(t, result.zp[:, element], '--', label=r'$z_p$')
-            ax.plot(t, result.zp_hat[:, element], label=r'$\hat{z}_p$')
-            ax.plot(t, result.y_lin[:, element], '--', label=r'$y_{lin}$')
-            ax.set_title(f'$z_{element+1}$')
-            ax.grid()
-            ax.legend()
-        return fig
