@@ -1,3 +1,8 @@
+import copy
+import json
+import logging
+import time
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -15,6 +20,8 @@ from deepsysid.models.datasets import (
 )
 from deepsysid.networks import loss, rnn
 from deepsysid.networks.rnn import HiddenStateForwardModule
+
+from deepsysid.tracker.base import EventData, TrackArtifacts, TrackFigures, TrackMetrics, TrackParameters
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
@@ -957,16 +964,6 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
     def __init__(self, config: HybridConstrainedRnnConfig):
         super().__init__(config)
-
-        self.mlflow: Optional[ModuleType] = None
-        try:
-            self.mlflow = importlib.import_module('mlflow')
-        except ImportError:
-            self.mlflow = None
-
-        if self.mlflow is not None and config.mlflow_tracking_uri is not None:
-            self.mlflow.set_tracking_uri(config.mlflow_tracking_uri)
-
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
 
