@@ -80,20 +80,25 @@ class BaseEventTrackerConfig(BaseModel):
 class BaseEventTracker(metaclass=abc.ABCMeta):
     CONFIG = BaseEventTrackerConfig
 
+    def __init__(self, config: BaseEventTrackerConfig) -> None:
+        pass
+
     @abc.abstractmethod
-    def __call__(self, Event: EventData) -> None:
+    def __call__(self, event: EventData) -> None:
         pass
 
 
 class TrackerAggregator(BaseEventTracker):
-    def __init__(self, trackers: List[BaseEventTracker]) -> None:
-        super().__init__()
-        self.trackers = trackers
+    def __init__(self, config: BaseEventTrackerConfig) -> None:
+        super().__init__(config)
+        self.trackers: List[BaseEventTracker] = []
 
     def __call__(self, event: EventData) -> None:
         for tracker in self.trackers:
-            # print(f'[TRACKER] \t {event.msg}')
             tracker(event)
+
+    def register_tracker(self, tracker: BaseEventTracker) -> None:
+        self.trackers.append(tracker)
 
 
 def retrieve_tracker_class(

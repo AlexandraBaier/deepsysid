@@ -22,7 +22,7 @@ class MlFlowTracker(base.BaseEventTracker):
     CONFIG = MlflowConfig
 
     def __init__(self, config: MlflowConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         if hasattr(config, 'tracking_uri'):
             mlflow.set_tracking_uri(config.tracking_uri)
 
