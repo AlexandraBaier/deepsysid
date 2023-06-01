@@ -577,34 +577,6 @@
       }
     },
     {
-      "model_base_name": "LSTM+CombinedInit",
-      "model_class": "deepsysid.models.recurrent.LSTMCombinedInitModel",
-      "static_parameters": {
-        "dropout": 0.25,
-        "sequence_length": 50,
-        "batch_size": 256,
-        "learning_rate": 0.0025,
-        "epochs": 5
-      },
-      "flexible_parameters": {
-        "recurrent_dim": [
-          64,
-          128,
-          192,
-          256
-        ],
-        "num_recurrent_layers": [
-          2,
-          3,
-          4
-        ],
-        "loss": [
-          "mse",
-          "msge"
-        ]
-      }
-    },
-    {
       "model_base_name": "LSTM+StableSwitch",
       "model_class": "deepsysid.models.switching.switchrnn.StableSwitchingLSTMModel",
       "static_parameters": {

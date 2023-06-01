@@ -55,8 +55,9 @@ class BasicLSTM(HiddenStateForwardModule):
         input_dim: int,
         recurrent_dim: int,
         num_recurrent_layers: int,
-        output_dim: List[int],
+        output_dim: Union[List[int], int],
         dropout: float,
+        bias: bool = True,
     ):
         super().__init__()
 
@@ -70,15 +71,29 @@ class BasicLSTM(HiddenStateForwardModule):
                 num_layers=num_recurrent_layers,
                 dropout=dropout,
                 batch_first=True,
+                bias=bias,
             )
 
-        layer_dim = [recurrent_dim] + output_dim
-        self.out = nn.ModuleList(
-            [
-                nn.Linear(in_features=layer_dim[i - 1], out_features=layer_dim[i])
-                for i in range(1, len(layer_dim))
-            ]
-        )
+        if isinstance(output_dim, int):
+            self.out = nn.ModuleList(
+                [
+                    nn.Linear(
+                        in_features=recurrent_dim, out_features=output_dim, bias=bias
+                    )
+                ]
+            )
+        else:
+            layer_dim = [recurrent_dim] + output_dim
+            self.out = nn.ModuleList(
+                [
+                    nn.Linear(
+                        in_features=layer_dim[i - 1],
+                        out_features=layer_dim[i],
+                        bias=bias,
+                    )
+                    for i in range(1, len(layer_dim))
+                ]
+            )
 
         for name, param in self.predictor_lstm.named_parameters():
             if 'weight' in name:
@@ -112,9 +127,6 @@ class BasicRnn(HiddenStateForwardModule):
     ) -> None:
         super().__init__()
 
-        self.num_recurrent_layers = num_recurrent_layers
-        self.recurrent_dim = recurrent_dim
-
         self.predictor_rnn = nn.RNN(
             input_size=input_dim,
             hidden_size=recurrent_dim,
@@ -136,12 +148,55 @@ class BasicRnn(HiddenStateForwardModule):
         n_batch, _, _ = x_pred.shape
 
         if hx is not None:
-            x = hx[0]
+            h = hx[0]
         else:
-            x = torch.zeros((n_batch, self.recurrent_dim))
+            h = None
 
-        h, _ = self.predictor_rnn(x_pred, x)
-        return self.out(h), h
+        x, h = self.predictor_rnn.forward(x_pred, h)
+        x = self.out.forward(x)
+
+        return x, (h, h)
+
+
+class BasicGRU(HiddenStateForwardModule):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: int,
+        dropout: float,
+        bias: bool,
+    ) -> None:
+        super().__init__()
+
+        self.gru = nn.GRU(
+            input_size=input_dim,
+            hidden_size=recurrent_dim,
+            num_layers=num_recurrent_layers,
+            dropout=dropout,
+            bias=bias,
+            batch_first=True,
+        )
+
+        self.out = nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=bias
+        )
+
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        if hx is not None:
+            h = hx[0]
+        else:
+            h = None
+
+        x, h = self.gru.forward(x_pred, h)
+        x = self.out.forward(x)
+
+        return x, (h, h)
 
 
 class FixedDepthRnnFlexibleNonlinearity(HiddenStateForwardModule):
