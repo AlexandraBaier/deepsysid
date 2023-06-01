@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
+import os
 from numpy.typing import NDArray
 from torch import nn as nn
 from torch import optim as optim
@@ -22,6 +23,10 @@ from deepsysid.models.datasets import (
 )
 from deepsysid.networks import loss, rnn
 from deepsysid.networks.rnn import HiddenStateForwardModule
+# from deepsysid.pipeline.testing.io import split_simulations
+# from deepsysid.pipeline.data_io import load_simulation_data
+# from deepsysid.cli.interface import DATASET_DIR_ENV_VAR
+# from deepsysid.pipeline.testing.base import TestSimulation
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
@@ -806,7 +811,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 t = t * 1 / self.decay_rate
                 logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
 
-            validation_loss = utils.validate(self, self.loss, self.state_names, self.control_names, self.initial_state_names, self.sequence_length, self.device)
+            validation_loss = validate(self, self.loss, self.state_names, self.control_names, self.initial_state_names, self.sequence_length, self.device)
 
             min_ev = np.float64('inf')
             max_ev = np.float64('inf')
@@ -1440,3 +1445,55 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
     @property
     def predictor(self) -> HiddenStateForwardModule:
         return copy.deepcopy(self._predictor)
+
+
+def validate(model:base.NormalizedHiddenStateInitializerPredictorModel, loss: torch.nn.Module, state_names: List[str], control_names: List[str], initial_state_names: List[str], sequence_length: int, device: torch.device, horizon_size: Optional[int] = None) -> np.float64:
+    # load validation data
+    if horizon_size is None:
+        horizon_size = sequence_length * 5
+    # create dataset directory
+    dataset_directory = os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR])
+    us, ys, x0s = load_simulation_data(
+        directory=dataset_directory,
+        control_names=control_names,
+        state_names=state_names,
+        initial_state_names=initial_state_names
+    )
+    simulations = [
+        TestSimulation(u, y, x0, '-')
+        for u, y, x0 in zip(us, ys, x0s)
+    ]
+
+    u_list: List[NDArray[np.float64]] = list()
+    y_list: List[NDArray[np.float64]] = list()
+    x0_list: List[NDArray[np.float64]] = list()
+    u_init_list: List[NDArray[np.float64]] = list()
+    y_init_list: List[NDArray[np.float64]] = list()
+    for sample in split_simulations(sequence_length, horizon_size, simulations):
+        u_init_list.append(sample.initial_control)
+        y_init_list.append(sample.initial_state)
+
+        u_list.append(sample.true_control)
+        y_list.append(sample.true_state)
+        x0_list.append(sample.x0)
+    
+    
+    if model.state_mean and model.state_std and model.control_mean and model.control_std:
+        us = utils.normalize(np.vstack(u_list), model.control_mean, model.control_std)
+        ys = utils.normalize(np.vstack(y_list), model.state_mean, model.state_std)
+
+        us_init = utils.normalize(np.vstack(u_init_list), model.control_mean, model.control_std)
+        ys_init = utils.normalize(np.vstack(u_init_list), model.state_mean, model.state_std)
+
+    uy_init = np.hstack((us_init[:,1:], ys_init[:,:-1]))
+
+    us_torch = torch.from_numpy(us).to(device)
+    ys_torch = torch.from_numpy(ys).to(device)
+    uy_init_torch = torch.from_numpy(uy_init).to(device)
+    x0 = torch.from_numpy(np.vstack(x0_list))
+
+    # evaluate model on data use sequence length x 5 as prediction horizon    
+    _, hx = model.initializer.forward(uy_init_torch)
+    ys_hat_torch, _ = model.predictor.forward(us_torch, hx=hx)
+    # return validation error normalized over all states
+    return np.float64(loss.forward(ys_torch, ys_hat_torch).detach().numpy())
