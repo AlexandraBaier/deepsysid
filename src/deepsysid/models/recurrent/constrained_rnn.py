@@ -622,6 +622,10 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self.epochs_initializer = config.epochs_initializer
         self.epochs_predictor = config.epochs_predictor
 
+        self.state_names = config.state_names
+        self.control_names = config.control_names
+        self.initial_state_names = config.initial_state_names
+
         self.log_min_max_real_eigenvalues = config.log_min_max_real_eigenvalues
         self.clip_gradient_norm = config.clip_gradient_norm
 
@@ -801,6 +805,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             if i % self.epochs_with_const_decay == 0 and i != 0:
                 t = t * 1 / self.decay_rate
                 logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+
+            validation_loss = utils.validate(self, self.loss, self.state_names, self.control_names, self.initial_state_names, self.sequence_length, self.device)
 
             min_ev = np.float64('inf')
             max_ev = np.float64('inf')
@@ -990,6 +996,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         self.control_dim = len(config.control_names)  # external input
         self.state_dim = len(config.state_names)  # output
+
+        self.control_names = config.control_names
+        self.state_names = config.state_names
+        self.initial_state_names = config.initial_state_names
 
         self.nwu = config.nwu
         self.nzu = self.nwu
