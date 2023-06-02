@@ -2,7 +2,7 @@ import copy
 import json
 import logging
 import time
-from typing import Callable, Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -21,9 +21,11 @@ from deepsysid.models.datasets import (
     RecurrentPredictorDataset,
     RecurrentPredictorInitialDataset,
 )
-from deepsysid.networks import loss, rnn
-from deepsysid.networks.rnn import HiddenStateForwardModule
-from deepsysid.tracker.base import EventData, TrackArtifacts, TrackFigures, TrackMetrics
+
+from ...networks import loss, rnn
+from ...networks.rnn import HiddenStateForwardModule
+from ...tracker.base import BaseEventTracker
+from ...tracker.event_data import TrackArtifacts, TrackFigures, TrackMetrics
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
@@ -101,8 +103,8 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -240,7 +242,7 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         if (
             self.state_mean is None
@@ -374,8 +376,8 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -525,7 +527,7 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         if (
             self.state_mean is None
@@ -672,8 +674,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -907,7 +909,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         if (
             self._state_mean is None
@@ -1088,8 +1090,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
@@ -1384,7 +1386,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         if (
             self._state_mean is None
@@ -1446,11 +1448,3 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         )
         # return init_count + predictor_count
         return predictor_count
-
-    # @property
-    # def initializer(self) -> HiddenStateForwardModule:
-    #     return copy.deepcopy(self._initializer)
-
-    # @property
-    # def predictor(self) -> HiddenStateForwardModule:
-    #     return copy.deepcopy(self._predictor)

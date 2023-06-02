@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -11,7 +11,7 @@ from torch.utils import data
 
 from ...networks import loss, rnn
 from ...networks.rnn import HiddenStateForwardModule
-from ...tracker.base import EventData
+from ...tracker.base import BaseEventTracker
 from .. import base, utils
 from ..base import DynamicIdentificationModelConfig
 from ..datasets import RecurrentInitializerPredictorDataset
@@ -72,8 +72,8 @@ class WashoutInitializerRecurrentNetworkModel(base.NormalizedControlStateModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         epoch_losses = []
 
@@ -184,7 +184,7 @@ class WashoutInitializerRecurrentNetworkModel(base.NormalizedControlStateModel):
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         if (
             self.state_mean is None

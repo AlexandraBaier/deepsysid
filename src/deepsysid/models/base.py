@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -9,7 +9,8 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 
 from ..networks.rnn import HiddenStateForwardModule
-from ..tracker.base import EventData, TrackParameters
+from ..tracker.base import BaseEventTracker
+from ..tracker.event_data import TrackParameters
 from . import utils
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,8 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         pass
 
@@ -56,7 +57,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         pass
 
@@ -95,8 +96,8 @@ class FixedWindowModel(
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]
@@ -264,7 +265,7 @@ class NormalizedHiddenStateInitializerPredictorModel(
 
 def track_model_parameters(
     model: DynamicIdentificationModel,
-    tracker: Callable[[EventData], None] = lambda _: None,
+    tracker: BaseEventTracker = BaseEventTracker(),
 ) -> None:
     model_parameters = {
         name: getattr(model, name)

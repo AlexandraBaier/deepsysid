@@ -8,7 +8,7 @@ KLinearRegressionARXModel is implemented based on
 import dataclasses
 import logging
 import pickle
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import h5py
 import numpy as np
@@ -19,8 +19,7 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.utils.validation import check_array, check_X_y
 
 from deepsysid.models.base import DynamicIdentificationModelConfig, FixedWindowModel
-
-from ...tracker.base import EventData
+from deepsysid.tracker.base import BaseEventTracker
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,7 @@ class KLinearRegressionARXModel(FixedWindowModel[MultiOutputRegressor]):
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         if (
             self.state_mean is None

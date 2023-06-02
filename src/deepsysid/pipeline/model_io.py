@@ -1,8 +1,7 @@
 import os
-from typing import Callable
 
 from ..models.base import DynamicIdentificationModel
-from ..tracker.base import EventData
+from ..tracker.base import BaseEventTracker
 
 
 def load_model(
@@ -18,7 +17,7 @@ def save_model(
     model: DynamicIdentificationModel,
     directory: str,
     model_name: str,
-    tracker: Callable[[EventData], None] = lambda _: None,
+    tracker: BaseEventTracker = BaseEventTracker(),
 ) -> None:
     extension = model.get_file_extension()
     model.save(

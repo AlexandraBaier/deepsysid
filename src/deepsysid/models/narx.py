@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -10,7 +10,7 @@ from torch.nn import functional
 from torch.utils import data
 
 from ..networks.fnn import DenseReLUNetwork
-from ..tracker.base import EventData
+from ..tracker.base import BaseEventTracker
 from . import base, utils
 from .base import DynamicIdentificationModelConfig
 from .datasets import FixedWindowDataset
@@ -68,8 +68,8 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses = []
 
@@ -169,9 +169,7 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         return utils.denormalize(np.vstack(states), self.state_mean, self.state_std)
 
     def save(
-        self,
-        file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        self, file_path: Tuple[str, ...], tracker: BaseEventTracker = BaseEventTracker()
     ) -> None:
         if (
             self.state_mean is None

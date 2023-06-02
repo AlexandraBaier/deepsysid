@@ -546,7 +546,8 @@ def run_4dof_ship_pipeline(
         session=SessionConfiguration(total_runs_for_best_models=3),
         tracker=dict(
             mlflow=ExperimentTrackingConfiguration(
-                tracking_class="deepsysid.tracker.mlflow.MlFlowTracker", parameters={}
+                tracking_class="deepsysid.tracker.mlflow_integration.MlFlowTracker",
+                parameters={},
             )
         ),
         additional_tests=dict(

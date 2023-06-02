@@ -6,7 +6,12 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel
 
-from ..tracker.base import LoadTrackingConfiguration, SetTags, StopRun, TrackMetrics
+from ..tracker.event_data import (
+    LoadTrackingConfiguration,
+    SetTags,
+    StopRun,
+    TrackMetrics,
+)
 from .configuration import ExperimentConfiguration, initialize_tracker
 from .data_io import build_result_file_name, build_score_file_name
 from .metrics import retrieve_metric_class

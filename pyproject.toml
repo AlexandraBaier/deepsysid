@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/AlexandraBaier/deepsysid"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 numpy = "1.23.5"
 pydantic = "^1.9.1"
 scikit-learn = "^1.1.1"

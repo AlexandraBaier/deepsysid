@@ -1,89 +1,15 @@
-from __future__ import annotations
+from typing import List, Optional, Type
 
-# https://peps.python.org/pep-0563/#abstract
-import abc
-import dataclasses
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
-
-# to avoid circular imports, only required for type checking
-if TYPE_CHECKING:
-    from ..pipeline.configuration import ExperimentTrackingConfiguration
-
-from pydantic import BaseModel
-
-from ..models.utils import TrainingPrediction
+from .configuration import BaseEventTrackerConfig
+from .event_data import EventData
 
 
-@dataclasses.dataclass
-class EventData:
-    msg: str
-
-
-@dataclasses.dataclass
-class StopRun(EventData):
-    run_status: Optional[str]
-
-
-@dataclasses.dataclass
-class EventReturn:
-    data: Dict[str, Any]
-
-
-@dataclasses.dataclass
-class TrackParameters(EventData):
-    parameters: Dict[str, Union[str, float, int]]
-
-
-@dataclasses.dataclass
-class TrackFigures(EventData):
-    results: TrainingPrediction
-    name: str
-
-
-@dataclasses.dataclass
-class TrackArtifacts(EventData):
-    artifacts: Dict[str, str]
-
-
-@dataclasses.dataclass
-class SetExperiment(EventData):
-    dataset_directory: str
-
-
-@dataclasses.dataclass
-class SaveTrackingConfiguration(EventData):
-    config: Dict[str, ExperimentTrackingConfiguration]
-    model_name: str
-    model_directory: str
-
-
-@dataclasses.dataclass
-class LoadTrackingConfiguration(EventData):
-    model_directory: str
-    model_name: str
-
-
-@dataclasses.dataclass
-class SetTags(EventData):
-    tags: Dict[str, Union[str, bool]]
-
-
-@dataclasses.dataclass
-class TrackMetrics(EventData):
-    metrics: Dict[str, float]
-
-
-class BaseEventTrackerConfig(BaseModel):
-    id: Optional[str]
-
-
-class BaseEventTracker(metaclass=abc.ABCMeta):
+class BaseEventTracker:
     CONFIG = BaseEventTrackerConfig
 
-    def __init__(self, config: BaseEventTrackerConfig) -> None:
+    def __init__(self, config: Optional[BaseEventTrackerConfig] = None) -> None:
         pass
 
-    @abc.abstractmethod
     def __call__(self, event: EventData) -> None:
         pass
 

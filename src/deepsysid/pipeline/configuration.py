@@ -1,5 +1,5 @@
 import itertools
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 from pydantic import BaseModel, root_validator
 
@@ -11,11 +11,12 @@ from ..explainability.base import (
 )
 from ..models.base import DynamicIdentificationModel, DynamicIdentificationModelConfig
 from ..tracker.base import (
+    BaseEventTracker,
     BaseEventTrackerConfig,
-    EventData,
     TrackerAggregator,
     retrieve_tracker_class,
 )
+from ..tracker.configuration import ExperimentTrackingConfiguration
 from .metrics import BaseMetricConfig, retrieve_metric_class
 from .testing.base import BaseTestConfig, retrieve_test_class
 
@@ -39,11 +40,6 @@ class ExperimentExplainerConfiguration(BaseModel):
     explainer_class: str
     explained_super_classes: Optional[List[str]]
     parameters: BaseExplainerConfig
-
-
-class ExperimentTrackingConfiguration(BaseModel):
-    tracking_class: str
-    parameters: BaseEventTrackerConfig
 
 
 class GridSearchTrackingConfiguration(BaseModel):
@@ -300,7 +296,7 @@ def initialize_model(
 
 def initialize_tracker(
     experiment_config: ExperimentConfiguration,
-) -> Callable[[EventData], None]:
+) -> BaseEventTracker:
     agg_tracker = TrackerAggregator(BaseEventTrackerConfig())
     if experiment_config.tracker is not None:
         for tracker_config in experiment_config.tracker.values():

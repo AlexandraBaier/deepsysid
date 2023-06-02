@@ -12,7 +12,7 @@ Input Model -> Physics Model -> Output Model -> + ->
 import abc
 import json
 import logging
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -30,8 +30,7 @@ from deepsysid.models.base import (
 )
 from deepsysid.models.datasets import RecurrentInitializerPredictorDataset
 from deepsysid.networks.rnn import InitializerPredictorLSTM
-
-from ...tracker.base import EventData
+from deepsysid.tracker.base import BaseEventTracker
 
 logger = logging.getLogger(__name__)
 
@@ -471,8 +470,8 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
         self,
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
-        tracker: Callable[[EventData], None] = lambda _: None,
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         epoch_losses = []
 
@@ -589,7 +588,7 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
     def save(
         self,
         file_path: Tuple[str, ...],
-        tracker: Callable[[EventData], None] = lambda _: None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         if (
             self.network is None

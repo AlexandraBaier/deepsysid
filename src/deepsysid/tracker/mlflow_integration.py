@@ -9,16 +9,28 @@ import numpy as np
 from ..models.utils import TrainingPrediction
 from ..pipeline.configuration import GridSearchTrackingConfiguration
 from ..pipeline.data_io import build_tracker_config_file_name
-from . import base
+from .base import BaseEventTracker, BaseEventTrackerConfig
+from .event_data import (
+    EventData,
+    LoadTrackingConfiguration,
+    SaveTrackingConfiguration,
+    SetExperiment,
+    SetTags,
+    StopRun,
+    TrackArtifacts,
+    TrackFigures,
+    TrackMetrics,
+    TrackParameters,
+)
 
 FIGURE_DIRECTORY_NAME = 'figures'
 
 
-class MlflowConfig(base.BaseEventTrackerConfig):
+class MlflowConfig(BaseEventTrackerConfig):
     tracking_uri: Optional[str]
 
 
-class MlFlowTracker(base.BaseEventTracker):
+class MlFlowTracker(BaseEventTracker):
     CONFIG = MlflowConfig
 
     def __init__(self, config: MlflowConfig) -> None:
@@ -26,41 +38,39 @@ class MlFlowTracker(base.BaseEventTracker):
         if hasattr(config, 'tracking_uri'):
             mlflow.set_tracking_uri(config.tracking_uri)
 
-    def __call__(self, event: base.EventData) -> None:
-        if isinstance(event, base.TrackParameters):
+    def __call__(self, event: EventData) -> None:
+        if isinstance(event, TrackParameters):
             for key, value in event.parameters.items():
                 mlflow.log_param(key, value)
-        elif isinstance(event, base.SetExperiment):
+        elif isinstance(event, SetExperiment):
             experiment_name = os.path.split(
                 pathlib.Path(event.dataset_directory).parent.parent
             )[1]
             mlflow.set_experiment(experiment_name)
-        elif isinstance(event, base.SaveTrackingConfiguration):
+        elif isinstance(event, SaveTrackingConfiguration):
             self.save_tracking_configuration(event)
-        elif isinstance(event, base.StopRun):
+        elif isinstance(event, StopRun):
             mlflow.end_run()
-        elif isinstance(event, base.SetTags):
+        elif isinstance(event, SetTags):
             for key, value in event.tags.items():
                 mlflow.set_tag(key, value)
-        elif isinstance(event, base.LoadTrackingConfiguration):
+        elif isinstance(event, LoadTrackingConfiguration):
             self.load_tracking_configuration(event)
-        elif isinstance(event, base.TrackMetrics):
+        elif isinstance(event, TrackMetrics):
             for key, value in event.metrics.items():
                 mlflow.log_metric(key, value)
-        elif isinstance(event, base.TrackFigures):
+        elif isinstance(event, TrackFigures):
             mlflow.log_figure(
                 plot_outputs(event.results), f'{FIGURE_DIRECTORY_NAME}/{event.name}'
             )
-        elif isinstance(event, base.TrackArtifacts):
+        elif isinstance(event, TrackArtifacts):
             for artifact_path, local_path in event.artifacts.items():
                 mlflow.log_artifact(local_path, artifact_path)
 
         else:
             raise NotImplementedError(f'{type(event)} is not implemented.')
 
-    def save_tracking_configuration(
-        self, event: base.SaveTrackingConfiguration
-    ) -> None:
+    def save_tracking_configuration(self, event: SaveTrackingConfiguration) -> None:
         run = mlflow.active_run()
         if run is not None:
             for tracker_config in event.config.values():
@@ -78,9 +88,7 @@ class MlFlowTracker(base.BaseEventTracker):
                     ) as f:
                         f.write(tracker_config.json())
 
-    def load_tracking_configuration(
-        self, event: base.LoadTrackingConfiguration
-    ) -> None:
+    def load_tracking_configuration(self, event: LoadTrackingConfiguration) -> None:
         config_file = os.path.join(
             event.model_directory, build_tracker_config_file_name(event.model_name)
         )
