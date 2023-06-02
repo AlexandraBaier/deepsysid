@@ -455,11 +455,11 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         # any feasible solution works as initialization for the parameters
         nM = M.shape[0]
         tol = 1e-4
-        # rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
-        # objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
+        rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
+        objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
         # nu = cp.Variable((1, nM))
         # objective = cp.Minimize(nu @ np.ones((nM, 1)))
-        objective = cp.Minimize(None)
+        # objective = cp.Minimize(None)
         problem = cp.Problem(objective, [M << -tol * np.eye(nM)])
 
         logger.info(
@@ -688,8 +688,7 @@ class Linear(nn.Module):
         self, x0: torch.Tensor, us: torch.Tensor, return_state: bool = False
     ) -> Union[
         torch.Tensor,
-        Tuple[torch.Tensor, torch.Tensor],
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+        Tuple[torch.Tensor, torch.Tensor]
     ]:
         device = self.A.device
         n_batch, N, _, _ = us.shape

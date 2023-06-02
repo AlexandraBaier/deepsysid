@@ -5,9 +5,6 @@ import dataclasses
 import importlib
 from types import ModuleType
 
-from ..pipeline.testing import base
-
-
 import numpy as np
 import torch
 from numpy.typing import NDArray
