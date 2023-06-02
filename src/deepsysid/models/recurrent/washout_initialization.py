@@ -11,6 +11,7 @@ from torch.utils import data
 
 from ...networks import loss, rnn
 from ...networks.rnn import HiddenStateForwardModule
+from ...tracker.base import BaseEventTracker
 from .. import base, utils
 from ..base import DynamicIdentificationModelConfig
 from ..datasets import RecurrentInitializerPredictorDataset
@@ -72,6 +73,7 @@ class WashoutInitializerRecurrentNetworkModel(base.NormalizedControlStateModel):
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         epoch_losses = []
 
@@ -179,7 +181,11 @@ class WashoutInitializerRecurrentNetworkModel(base.NormalizedControlStateModel):
         y_np = utils.denormalize(y_np, self.state_mean, self.state_std)
         return y_np
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None

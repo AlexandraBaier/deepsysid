@@ -6,7 +6,13 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel
 
-from .configuration import ExperimentConfiguration
+from ..tracker.event_data import (
+    LoadTrackingConfiguration,
+    SetTags,
+    StopRun,
+    TrackMetrics,
+)
+from .configuration import ExperimentConfiguration, initialize_tracker
 from .data_io import build_result_file_name, build_score_file_name
 from .metrics import retrieve_metric_class
 
@@ -21,6 +27,7 @@ def evaluate_model(
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
     result_directory: str,
+    models_directory: str,
 ) -> None:
     # Load from the maximum horizon file.
     test_file_path = os.path.join(
@@ -33,6 +40,18 @@ def evaluate_model(
             extension='hdf5',
         ),
     )
+    model_directory = os.path.expanduser(
+        os.path.normpath(os.path.join(models_directory, model_name))
+    )
+
+    # set tracking
+    tracker = initialize_tracker(experiment_config=config)
+    tracker(
+        LoadTrackingConfiguration(
+            f'Load configuration from {model_directory}', model_directory, model_name
+        )
+    )
+    tracker(SetTags(f'Evaluation mode {mode}', {'mode': mode}))
 
     # Load predicted and true states for each multi-step sequence.
     pred = []
@@ -67,6 +86,15 @@ def evaluate_model(
                 y_pred=[p[:horizon_size] for p in pred],
             )
             results[horizon_size][name] = (score, meta)
+    tracker(
+        TrackMetrics(
+            f'Metrics for horizon size {horizon_size}',
+            {
+                key: float(np.mean(value[0]))
+                for key, value in results[horizon_size].items()
+            },
+        )
+    )
 
     scores_file_path = os.path.join(
         result_directory,
@@ -116,3 +144,5 @@ def evaluate_model(
 
     with open(readable_scores_file_path, mode='w') as f:
         f.write(readable_evaluation_result.json())
+    tracker(SetTags('Validated', {'validated': True}))
+    tracker(StopRun('Stop validation run', None))

@@ -1,16 +1,29 @@
 import logging
 import os
-from typing import Dict
+import time
+from types import ModuleType
+from typing import Dict, Optional
 
 import h5py
 import numpy as np
 from numpy.typing import NDArray
 
-from ..pipeline.configuration import ExperimentConfiguration, initialize_model
+from ..pipeline.configuration import (
+    ExperimentConfiguration,
+    initialize_model,
+    initialize_tracker,
+)
+from ..tracker.event_data import (
+    SaveTrackingConfiguration,
+    SetExperiment,
+    SetTags,
+    StopRun,
+)
 from .data_io import load_simulation_data
 from .model_io import save_model
 
 logger = logging.getLogger(__name__)
+tracking: Optional[ModuleType] = None
 
 
 def train_model(
@@ -26,6 +39,10 @@ def train_model(
     )
     os.makedirs(model_directory, exist_ok=True)
 
+    # set tracking
+    tracker = initialize_tracker(experiment_config=configuration)
+    tracker(SetExperiment('Start new experiment', dataset_directory))
+
     # Load dataset
     controls, states, initial_states = load_simulation_data(
         directory=dataset_directory,
@@ -38,15 +55,34 @@ def train_model(
     model = initialize_model(configuration, model_name, device_name)
     # Train model
     logger.info(f'Training model {model_name} on {device_name} if implemented.')
+    start_training = time.time()
     metadata = model.train(
-        control_seqs=controls, state_seqs=states, initial_seqs=initial_states
+        control_seqs=controls,
+        state_seqs=states,
+        initial_seqs=initial_states,
+        tracker=tracker,
     )
-
     # Save model metadata
     if metadata is not None:
         save_training_metadata(metadata, model_directory, model_name)
     # Save model
-    save_model(model, model_directory, model_name)
+    save_model(model, model_directory, model_name, tracker)
+    training_duration = time.time() - start_training
+    logger.info(
+        f'training time: '
+        f'{time.strftime("%H:%M:%S", time.gmtime(float(training_duration)))}'
+    )
+    tracker(SetTags('Trained, not validated', {'trained': True, 'validated': False}))
+    if configuration.tracker is not None:
+        tracker(
+            SaveTrackingConfiguration(
+                'Write tracking config to json file',
+                configuration.tracker,
+                model_name,
+                model_directory,
+            )
+        )
+    tracker(StopRun('stop current run', None))
     # Save model configuration
     with open(
         os.path.join(model_directory, f'config-{model_name}.json'), mode='w'

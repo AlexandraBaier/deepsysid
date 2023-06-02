@@ -13,7 +13,7 @@ repos:
         pass_filenames: false
       - id: poetry-install
         name: poetry-install
-        entry: poetry install -E torch-cpu
+        entry: poetry install -E torch-cpu -E mlflow-logging
         language: system
         pass_filenames: false
       - id: mypy

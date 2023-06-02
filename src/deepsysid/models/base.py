@@ -9,6 +9,8 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
 
 from ..networks.rnn import HiddenStateForwardModule
+from ..tracker.base import BaseEventTracker
+from ..tracker.event_data import TrackParameters
 from . import utils
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         pass
 
@@ -51,7 +54,11 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> None:
         pass
 
     @abc.abstractmethod
@@ -90,6 +97,7 @@ class FixedWindowModel(
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> None:
         assert len(control_seqs) == len(state_seqs)
         assert control_seqs[0].shape[0] == state_seqs[0].shape[0]
@@ -253,3 +261,23 @@ class NormalizedHiddenStateInitializerPredictorModel(
     @abc.abstractmethod
     def predictor(self) -> HiddenStateForwardModule:
         pass
+
+
+def track_model_parameters(
+    model: DynamicIdentificationModel,
+    tracker: BaseEventTracker = BaseEventTracker(),
+) -> None:
+    model_parameters = {
+        name: getattr(model, name)
+        for name in filter(
+            lambda attr: (isinstance(getattr(model, attr), (float, str, int)))
+            and attr is not None,
+            dir(model),
+        )
+    }
+    tracker(
+        TrackParameters(
+            'track model parameters',
+            {**model_parameters, 'model name': model.__class__.__name__},
+        )
+    )

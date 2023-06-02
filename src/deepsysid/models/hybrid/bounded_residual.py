@@ -11,6 +11,7 @@ from torch.nn.functional import mse_loss
 from torch.utils import data
 
 from ...networks import loss, rnn
+from ...tracker.base import BaseEventTracker
 from .. import base, utils
 from ..base import DynamicIdentificationModelConfig
 from ..datasets import RecurrentHybridPredictorDataset, RecurrentInitializerDataset
@@ -202,6 +203,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_teacher = []
@@ -611,7 +613,11 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         return y, whitebox, blackbox
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_std is None
