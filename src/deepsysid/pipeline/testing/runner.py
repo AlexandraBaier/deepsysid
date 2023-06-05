@@ -2,8 +2,8 @@ import logging
 import os
 from typing import Literal
 
+from ...pipeline.model_io import load_model
 from ..configuration import ExperimentConfiguration, initialize_model
-from ..model_io import load_model
 from .base import BaseTestConfig, retrieve_test_class
 from .inference import InferenceTest
 from .io import load_test_simulations, save_model_tests

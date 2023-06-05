@@ -299,6 +299,7 @@ class ExperimentSessionManager(object):
                 model_name=model_name,
                 mode=mode,
                 result_directory=self.results_directory,
+                models_directory=self.models_directory,
             )
         else:
             test_model(
@@ -320,6 +321,9 @@ class ExperimentSessionManager(object):
                 mode=mode,
                 result_directory=os.path.join(
                     self.results_directory, f'repeat-{repeat_number}'
+                ),
+                models_directory=os.path.join(
+                    self.models_directory, f'repeat-{repeat_number}'
                 ),
             )
 

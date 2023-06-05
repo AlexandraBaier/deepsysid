@@ -18,6 +18,7 @@ from ...networks.switching import (
     UnconstrainedIdentityOutputSwitchingLSTM,
     UnconstrainedSwitchingLSTM,
 )
+from ...tracker.base import BaseEventTracker
 from .. import base, utils
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 from ..recurrent.separate_initialization import (
@@ -89,6 +90,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
@@ -239,7 +241,11 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
             control_matrices=np.array(control_matrices, dtype=np.float64),
         )
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> None:
         if (
             self.output_mean is None
             or self.output_std is None

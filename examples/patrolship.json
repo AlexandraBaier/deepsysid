@@ -30,6 +30,12 @@
       "alpha_x",
       "alpha_y"
     ],
+    "tracker": {
+      "mlflow":{
+        "tracking_class": "deepsysid.tracker.mlflow.MlFlowTracker",
+        "parameters": {}
+      }
+    },
     "additional_tests": {
       "bibo_stability": {
         "test_class": "deepsysid.pipeline.testing.stability.bibo.BiboStabilityTest",

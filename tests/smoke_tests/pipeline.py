@@ -17,6 +17,7 @@ from deepsysid.pipeline.configuration import (
     ExperimentExplanationMetricConfiguration,
     ExperimentMetricConfiguration,
     ExperimentTestConfiguration,
+    ExperimentTrackingConfiguration,
     SessionConfiguration,
 )
 from deepsysid.pipeline.evaluation import evaluate_model
@@ -385,6 +386,7 @@ def run_generic_pipeline(
         model_name=model_name,
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
+        models_directory=str(paths['models']),
     )
 
 
@@ -542,6 +544,12 @@ def run_4dof_ship_pipeline(
         state_names=state_names,
         initial_state_names=state_names,
         session=SessionConfiguration(total_runs_for_best_models=3),
+        tracker=dict(
+            mlflow=ExperimentTrackingConfiguration(
+                tracking_class="deepsysid.tracker.mlflow_integration.MlFlowTracker",
+                parameters={},
+            )
+        ),
         additional_tests=dict(
             bibo_stability=ExperimentTestConfiguration(
                 test_class='deepsysid.pipeline.testing.stability.'

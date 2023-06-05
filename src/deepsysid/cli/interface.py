@@ -321,6 +321,7 @@ def evaluate(args: argparse.Namespace) -> None:
         model_name=args.model,
         mode=args.mode,
         result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
+        models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
     )
 
 

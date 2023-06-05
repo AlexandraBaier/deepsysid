@@ -19,6 +19,7 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.utils.validation import check_array, check_X_y
 
 from deepsysid.models.base import DynamicIdentificationModelConfig, FixedWindowModel
+from deepsysid.tracker.base import BaseEventTracker
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,11 @@ class KLinearRegressionARXModel(FixedWindowModel[MultiOutputRegressor]):
         self.state_dim = len(config.state_names)
         self.lag = config.lag
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> None:
         if (
             self.state_mean is None
             or self.state_stddev is None

@@ -30,6 +30,7 @@ from deepsysid.models.base import (
 )
 from deepsysid.models.datasets import RecurrentInitializerPredictorDataset
 from deepsysid.networks.rnn import InitializerPredictorLSTM
+from deepsysid.tracker.base import BaseEventTracker
 
 logger = logging.getLogger(__name__)
 
@@ -470,6 +471,7 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Optional[Dict[str, NDArray[np.float64]]]:
         epoch_losses = []
 
@@ -583,7 +585,11 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
 
         return pred_states
 
-    def save(self, file_path: Tuple[str, ...]) -> None:
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> None:
         if (
             self.network is None
             or self.normalization_gains is None

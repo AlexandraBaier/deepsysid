@@ -83,3 +83,7 @@ def build_explanation_result_file_name(
     extension: str,
 ) -> str:
     return f'{mode}-explanation-w_{window_size}-h_{horizon_size}.{extension}'
+
+
+def build_tracker_config_file_name(model_name: str) -> str:
+    return f'tracker-{model_name}.json'

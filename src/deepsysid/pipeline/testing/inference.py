@@ -24,9 +24,7 @@ class InferenceTest(BaseTest):
         self.horizon_size = config.horizon_size
 
     def test(
-        self,
-        model: DynamicIdentificationModel,
-        simulations: List[TestSimulation],
+        self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
     ) -> TestResult:
         control = []
         pred_states = []
