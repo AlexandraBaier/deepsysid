@@ -218,7 +218,16 @@ class SeparateInitializerRecurrentNetworkModel(
 
         with torch.no_grad():
             init_x = (
-                torch.from_numpy(np.hstack((initial_control[1:], initial_state[:-1])))
+                torch.from_numpy(
+                    np.hstack(
+                        (
+                            np.vstack(
+                                (initial_control[1:, :], control[0][np.newaxis, :])
+                            ),
+                            initial_state,
+                        )
+                    )
+                )
                 .unsqueeze(0)
                 .float()
                 .to(self.device)
