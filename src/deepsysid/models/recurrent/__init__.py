@@ -8,6 +8,12 @@ from .constrained_rnn import (
     RnnInitFlexibleNonlinearity,
     RnnInitFlexibleNonlinearityConfig,
 )
+from .joint_initialization import (
+    JointInitializerGRUModel,
+    JointInitializerLSTMModel,
+    JointInitializerRecurrentNetworkModelConfig,
+    JointInitializerRNNModel,
+)
 from .separate_initialization import (
     GRUInitModel,
     LSTMInitModel,
@@ -38,4 +44,8 @@ __all__ = [
     'WashoutInitializerGRUModel',
     'WashoutInitializerLSTMModel',
     'WashoutInitializerRecurrentNetworkModelConfig',
+    'JointInitializerGRUModel',
+    'JointInitializerLSTMModel',
+    'JointInitializerRecurrentNetworkModelConfig',
+    'JointInitializerRNNModel',
 ]

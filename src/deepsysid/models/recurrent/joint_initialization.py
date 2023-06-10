@@ -1,29 +1,27 @@
 import abc
-import copy
 import json
 import logging
 import time
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from torch import nn as nn
-from torch import optim as optim
-from torch.utils import data as data
+from torch import nn, optim
+from torch.utils import data
 
 from ...networks import loss, rnn
 from ...networks.rnn import HiddenStateForwardModule
 from ...tracker.base import BaseEventTracker
 from ...tracker.event_data import TrackMetrics
 from .. import base, utils
-from ..base import DynamicIdentificationModelConfig, track_model_parameters
-from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
+from ..base import DynamicIdentificationModelConfig
+from ..datasets import RecurrentPredictorDataset
 
 logger = logging.getLogger(__name__)
 
 
-class SeparateInitializerRecurrentNetworkModelConfig(DynamicIdentificationModelConfig):
+class JointInitializerRecurrentNetworkModelConfig(DynamicIdentificationModelConfig):
     recurrent_dim: int
     num_recurrent_layers: int
     bias: bool = True
@@ -31,20 +29,19 @@ class SeparateInitializerRecurrentNetworkModelConfig(DynamicIdentificationModelC
     sequence_length: int
     learning_rate: float
     batch_size: int
-    epochs_initializer: int
-    epochs_predictor: int
+    epochs: int
     clip_gradient_norm: Optional[float] = None
     loss: Literal['mse', 'msge']
 
 
-class SeparateInitializerRecurrentNetworkModel(
+class JointInitializerRecurrentNetworkModel(
     base.NormalizedHiddenStateInitializerPredictorModel, metaclass=abc.ABCMeta
 ):
-    CONFIG = SeparateInitializerRecurrentNetworkModelConfig
+    CONFIG = JointInitializerRecurrentNetworkModelConfig
 
     def __init__(
         self,
-        config: SeparateInitializerRecurrentNetworkModelConfig,
+        config: JointInitializerRecurrentNetworkModelConfig,
         initializer_rnn: HiddenStateForwardModule,
         predictor_rnn: HiddenStateForwardModule,
     ) -> None:
@@ -58,8 +55,7 @@ class SeparateInitializerRecurrentNetworkModel(
         self.sequence_length = config.sequence_length
         self.learning_rate = config.learning_rate
         self.batch_size = config.batch_size
-        self.epochs_initializer = config.epochs_initializer
-        self.epochs_predictor = config.epochs_predictor
+        self.epochs = config.epochs
 
         if config.clip_gradient_norm is not None:
             self.clip_gradient_norm = config.clip_gradient_norm
@@ -85,11 +81,11 @@ class SeparateInitializerRecurrentNetworkModel(
 
     @property
     def initializer(self) -> HiddenStateForwardModule:
-        return copy.deepcopy(self._initializer)
+        return self._initializer
 
     @property
     def predictor(self) -> HiddenStateForwardModule:
-        return copy.deepcopy(self._predictor)
+        return self._predictor
 
     def train(
         self,
@@ -97,7 +93,7 @@ class SeparateInitializerRecurrentNetworkModel(
         state_seqs: List[NDArray[np.float64]],
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
         tracker: BaseEventTracker = BaseEventTracker(),
-    ) -> Dict[str, NDArray[np.float64]]:
+    ) -> Optional[Dict[str, NDArray[np.float64]]]:
         epoch_losses_initializer = []
         epoch_losses_predictor = []
 
@@ -106,8 +102,6 @@ class SeparateInitializerRecurrentNetworkModel(
 
         self._control_mean, self._control_std = utils.mean_stddev(control_seqs)
         self._state_mean, self._state_std = utils.mean_stddev(state_seqs)
-
-        track_model_parameters(self, tracker)
 
         control_seqs = [
             utils.normalize(control, self.control_mean, self.control_std)
@@ -118,76 +112,63 @@ class SeparateInitializerRecurrentNetworkModel(
             for state in state_seqs
         ]
 
-        initializer_dataset = RecurrentInitializerDataset(
-            control_seqs, state_seqs, self.sequence_length
-        )
-
-        time_start_init = time.time()
-        for i in range(self.epochs_initializer):
-            data_loader = data.DataLoader(
-                initializer_dataset, self.batch_size, shuffle=True, drop_last=True
-            )
-            total_loss = 0.0
-            for batch_idx, batch in enumerate(data_loader):
-                self._initializer.zero_grad()
-                y, _ = self._initializer.forward(batch['x'].float().to(self.device))
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
-                total_loss += batch_loss.item()
-                batch_loss.backward()
-                self.optimizer_init.step()
-
-            logger.info(
-                f'Epoch {i + 1}/{self.epochs_initializer} '
-                f'- Epoch Loss (Initializer): {total_loss}'
-            )
-            epoch_losses_initializer.append([i, total_loss])
-
-        time_end_init = time.time()
         predictor_dataset = RecurrentPredictorDataset(
             control_seqs, state_seqs, self.sequence_length
         )
-
-        time_start_pred = time.time()
-        for i in range(self.epochs_predictor):
+        time_start = time.time()
+        for i in range(self.epochs):
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
             )
-            total_loss = 0
+            total_predictor_loss = 0.0
+            total_initializer_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self._predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
+                y_init, hx = self._initializer.forward(
+                    batch['x0'].float().to(self.device)
+                )
                 # Predict and optimize
-                y, _ = self._predictor.forward(
+                y_pred, _ = self._predictor.forward(
                     batch['x'].float().to(self.device), hx=hx
                 )
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
-                total_loss += batch_loss.item()
+                y_true = batch['y'].float().to(self.device)
+                batch_loss_predictor = self.loss.forward(y_pred, y_true)
+                batch_loss_initializer = self.loss.forward(
+                    y_init[:, -1, :], y_true[:, -1, :]
+                )
+                batch_loss = batch_loss_predictor + batch_loss_initializer
+                total_predictor_loss += batch_loss_predictor.item()
+                total_initializer_loss += batch_loss_initializer.item()
                 batch_loss.backward()
                 torch.nn.utils.clip_grad_norm_(
                     self._predictor.parameters(), self.clip_gradient_norm
                 )
                 self.optimizer_pred.step()
-            tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)}))
-            logger.info(
-                f'Epoch {i + 1}/{self.epochs_predictor} '
-                f'- Epoch Loss (Predictor): {total_loss}'
+            tracker(
+                TrackMetrics(
+                    f'Track loss step {i}', {'loss': float(total_predictor_loss)}
+                )
             )
-            epoch_losses_predictor.append([i, total_loss])
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs} '
+                f'- Epoch Loss (Initializer): {total_initializer_loss}'
+            )
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs} '
+                f'- Epoch Loss (Predictor): {total_predictor_loss}'
+            )
+            epoch_losses_initializer.append([i, total_initializer_loss])
+            epoch_losses_predictor.append([i, total_predictor_loss])
 
-        time_end_pred = time.time()
-        time_total_init = time_end_init - time_start_init
-        time_total_pred = time_end_pred - time_start_pred
-        logger.info(
-            f'Training time for initializer {time_total_init}s '
-            f'and for predictor {time_total_pred}s'
-        )
+        time_end = time.time()
+        time_total = time_end - time_start
+        logger.info(f'Training time {time_total}s.')
 
         return dict(
             epoch_loss_initializer=np.array(epoch_losses_initializer, dtype=np.float64),
             epoch_loss_predictor=np.array(epoch_losses_predictor, dtype=np.float64),
-            training_time_initializer=np.array([time_total_init], dtype=np.float64),
-            training_time_predictor=np.array([time_total_pred], dtype=np.float64),
+            training_time=np.array([time_total], dtype=np.float64),
         )
 
     def simulate(
@@ -196,7 +177,9 @@ class SeparateInitializerRecurrentNetworkModel(
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
         x0: Optional[NDArray[np.float64]],
-    ) -> NDArray[np.float64]:
+    ) -> Union[
+        NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
+    ]:
         if (
             self.state_mean is None
             or self.state_std is None
@@ -221,9 +204,7 @@ class SeparateInitializerRecurrentNetworkModel(
                 torch.from_numpy(
                     np.hstack(
                         (
-                            np.vstack(
-                                (initial_control[1:, :], control[0][np.newaxis, :])
-                            ),
+                            np.vstack((initial_control[1:], control[0][np.newaxis, :])),
                             initial_state,
                         )
                     )
@@ -248,9 +229,7 @@ class SeparateInitializerRecurrentNetworkModel(
         return y_np
 
     def save(
-        self,
-        file_path: Tuple[str, ...],
-        tracker: BaseEventTracker = BaseEventTracker(),
+        self, file_path: Tuple[str, ...], tracker: BaseEventTracker = BaseEventTracker()
     ) -> None:
         if (
             self.state_mean is None
@@ -291,7 +270,6 @@ class SeparateInitializerRecurrentNetworkModel(
         return 'initializer.pth', 'predictor.pth', 'json'
 
     def get_parameter_count(self) -> int:
-        # technically parameter counts of both networks are equal
         init_count = sum(
             p.numel() for p in self._initializer.parameters() if p.requires_grad
         )
@@ -301,8 +279,8 @@ class SeparateInitializerRecurrentNetworkModel(
         return init_count + predictor_count
 
 
-class RnnInit(SeparateInitializerRecurrentNetworkModel):
-    def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
+class JointInitializerRNNModel(JointInitializerRecurrentNetworkModel):
+    def __init__(self, config: JointInitializerRecurrentNetworkModelConfig) -> None:
         input_dim = len(config.control_names)
         output_dim = len(config.state_names)
 
@@ -327,8 +305,8 @@ class RnnInit(SeparateInitializerRecurrentNetworkModel):
         super().__init__(config, initializer_rnn=initializer, predictor_rnn=predictor)
 
 
-class GRUInitModel(SeparateInitializerRecurrentNetworkModel):
-    def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
+class JointInitializerGRUModel(JointInitializerRecurrentNetworkModel):
+    def __init__(self, config: JointInitializerRecurrentNetworkModelConfig) -> None:
         input_dim = len(config.control_names)
         output_dim = len(config.state_names)
 
@@ -350,13 +328,11 @@ class GRUInitModel(SeparateInitializerRecurrentNetworkModel):
             bias=config.bias,
         )
 
-        super().__init__(
-            config=config, initializer_rnn=initializer, predictor_rnn=predictor
-        )
+        super().__init__(config, initializer_rnn=initializer, predictor_rnn=predictor)
 
 
-class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
-    def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
+class JointInitializerLSTMModel(JointInitializerRecurrentNetworkModel):
+    def __init__(self, config: JointInitializerRecurrentNetworkModelConfig) -> None:
         input_dim = len(config.control_names)
         output_dim = len(config.state_names)
 
@@ -364,7 +340,7 @@ class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
             input_dim=input_dim,
             recurrent_dim=config.recurrent_dim,
             num_recurrent_layers=config.num_recurrent_layers,
-            output_dim=[output_dim],
+            output_dim=output_dim,
             dropout=config.dropout,
             bias=config.bias,
         )
@@ -373,7 +349,7 @@ class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
             input_dim=input_dim + output_dim,
             recurrent_dim=config.recurrent_dim,
             num_recurrent_layers=config.num_recurrent_layers,
-            output_dim=[output_dim],
+            output_dim=output_dim,
             dropout=config.dropout,
             bias=config.bias,
         )
