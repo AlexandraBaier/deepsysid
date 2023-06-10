@@ -16,6 +16,9 @@ from deepsysid.models.recurrent import (
     ConstrainedRnn,
     GRUInitModel,
     HybridConstrainedRnn,
+    JointInitializerGRUModel,
+    JointInitializerLSTMModel,
+    JointInitializerRNNModel,
     LSTMInitModel,
     LtiRnnInit,
     RnnInit,
@@ -350,6 +353,78 @@ def test_washout_initializer_lstm_model(tmp_path: pathlib.Path) -> None:
     model_name = 'WashoutLSTM'
     model_class = 'deepsysid.models.recurrent.WashoutInitializerLSTMModel'
     config = WashoutInitializerLSTMModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=5,
+        num_recurrent_layers=3,
+        dropout=0.25,
+        bias=False,
+        sequence_length=2,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs=4,
+        loss='mse',
+        clip_gradient_norm=10,
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_joint_initializer_rnn_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'JointRNN'
+    model_class = 'deepsysid.models.recurrent.JointInitializerRNNModel'
+    config = JointInitializerRNNModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=5,
+        num_recurrent_layers=3,
+        dropout=0.25,
+        bias=False,
+        sequence_length=2,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs=4,
+        loss='mse',
+        clip_gradient_norm=10,
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_joint_initializer_gru_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'JointGRU'
+    model_class = 'deepsysid.models.recurrent.JointInitializerGRUModel'
+    config = JointInitializerGRUModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        recurrent_dim=5,
+        num_recurrent_layers=3,
+        dropout=0.25,
+        bias=False,
+        sequence_length=2,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs=4,
+        loss='mse',
+        clip_gradient_norm=10,
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_joint_initializer_lstm_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'JointLSTM'
+    model_class = 'deepsysid.models.recurrent.JointInitializerLSTMModel'
+    config = JointInitializerLSTMModel.CONFIG(
         control_names=pipeline.get_4dof_ship_control_names(),
         state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
