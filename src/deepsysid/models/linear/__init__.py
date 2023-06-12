@@ -5,9 +5,9 @@ import numpy as np
 from numpy.typing import NDArray
 from sklearn.linear_model import LinearRegression
 
-from ..tracker.base import BaseEventTracker
-from . import utils
-from .base import (
+from ...tracker.base import BaseEventTracker
+from .. import utils
+from ..base import (
     DynamicIdentificationModel,
     DynamicIdentificationModelConfig,
     FixedWindowModel,
@@ -58,7 +58,6 @@ class LinearModel(DynamicIdentificationModel):
             train_y_list.append(y)
 
         train_x = np.vstack(train_x_list)
-        train_x = self._map_input(train_x)
         train_y = np.vstack(train_y_list)
 
         self.regressor.fit(train_x, train_y)
@@ -89,9 +88,7 @@ class LinearModel(DynamicIdentificationModel):
             [
                 np.squeeze(
                     self.regressor.predict(
-                        self._map_input(
-                            np.concatenate((control[i], state)).reshape(1, -1)
-                        )
+                        np.concatenate((control[i], state)).reshape(1, -1)
                     )
                 )
                 for i in range(control.shape[0])
@@ -146,9 +143,6 @@ class LinearModel(DynamicIdentificationModel):
             count += self.regressor.coef_.shape[0]
         count += self.regressor.intercept_.shape[0]
         return count
-
-    def _map_input(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        return x
 
 
 class LinearLagConfig(DynamicIdentificationModelConfig):
