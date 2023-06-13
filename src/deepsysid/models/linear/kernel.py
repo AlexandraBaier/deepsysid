@@ -20,6 +20,18 @@ class Kernel(metaclass=abc.ABCMeta):
         pass
 
 
+class ZeroKernel(Kernel):
+    """
+    WARNING: Only use ZeroKernel as a placeholder
+        if you intend to set ignore_kernel=True in KernelRegression.
+    ZeroKernel is a singular matrix, so solving the least-squares
+        problem will fail, since the inverse of the kernel has to be computed.
+    """
+
+    def construct(self, dimension: int) -> NDArray[np.float64]:
+        return np.zeros((dimension, dimension), dtype=np.float64)
+
+
 class RidgeHyperparameter(KernelHyperparameter):
     c: float
 
