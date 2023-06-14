@@ -1,4 +1,10 @@
-from .regularized import RidgeRegressionCVModel, SingleKernelRegressionCVModelConfig
+from .regularized import (
+    DiagonalCorrelatedKernelRegressionCVModel,
+    RidgeKernelRegressionCVModel,
+    SingleKernelRegressionCVModelConfig,
+    StableSplineKernelRegressionCVModel,
+    TunedCorrelationKernelRegressionCVModel,
+)
 from .unregularized import LinearLag, LinearLagConfig, LinearModel, QuadraticControlLag
 
 __all__ = [
@@ -7,5 +13,8 @@ __all__ = [
     'LinearLag',
     'QuadraticControlLag',
     'SingleKernelRegressionCVModelConfig',
-    'RidgeRegressionCVModel',
+    'RidgeKernelRegressionCVModel',
+    'DiagonalCorrelatedKernelRegressionCVModel',
+    'TunedCorrelationKernelRegressionCVModel',
+    'StableSplineKernelRegressionCVModel',
 ]

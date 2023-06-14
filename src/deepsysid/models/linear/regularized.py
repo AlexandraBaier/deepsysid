@@ -9,7 +9,13 @@ from sklearn.model_selection import cross_val_score
 
 from ...tracker.base import BaseEventTracker
 from ..base import DynamicIdentificationModelConfig
-from .kernel import Kernel, RidgeKernel
+from .kernel import (
+    DiagonalCorrelatedKernel,
+    Kernel,
+    RidgeKernel,
+    StableSplineKernel,
+    TunedCorrelationKernel,
+)
 from .regression import (
     BaseKernelRegressionModel,
     KernelRegression,
@@ -162,6 +168,21 @@ class SingleKernelRegressionCVModel(BaseKernelRegressionModel):
         return [value for _, value in sorted(param_tuple, key=lambda t: t[0])]
 
 
-class RidgeRegressionCVModel(SingleKernelRegressionCVModel):
+class RidgeKernelRegressionCVModel(SingleKernelRegressionCVModel):
     def __init__(self, config: SingleKernelRegressionCVModelConfig) -> None:
         super().__init__(config, kernel_class=RidgeKernel)
+
+
+class DiagonalCorrelatedKernelRegressionCVModel(SingleKernelRegressionCVModel):
+    def __init__(self, config: SingleKernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=DiagonalCorrelatedKernel)
+
+
+class TunedCorrelationKernelRegressionCVModel(SingleKernelRegressionCVModel):
+    def __init__(self, config: SingleKernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=TunedCorrelationKernel)
+
+
+class StableSplineKernelRegressionCVModel(SingleKernelRegressionCVModel):
+    def __init__(self, config: SingleKernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=StableSplineKernel)

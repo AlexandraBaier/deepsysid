@@ -115,23 +115,3 @@ class StableSplineKernel(Kernel):
             - 1.0 / 3.0 * self.lamb ** (3 * np.maximum(row_idx, col_idx))
         )
         return kernel.astype(np.float64)
-
-
-class FirstOrderStableSplineKernelHyperparameter(KernelHyperparameter):
-    c: float
-    lamb: float
-
-
-class FirstOrderStableSplineKernel(Kernel):
-    HYPERPARAMETER = FirstOrderStableSplineKernelHyperparameter
-
-    def __init__(self, eta: FirstOrderStableSplineKernelHyperparameter) -> None:
-        super().__init__(eta)
-        self.c = eta.c
-        self.lamb = eta.c
-
-    def construct(self, dimension: int) -> NDArray[np.float64]:
-        col_idx = np.repeat([np.arange(dimension)], dimension, axis=0)
-        row_idx = col_idx.T
-        kernel = self.c * self.lamb ** (np.maximum(row_idx, col_idx))
-        return kernel.astype(np.float64)
