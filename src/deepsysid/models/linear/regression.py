@@ -1,13 +1,19 @@
-from typing import List, Optional, Tuple
+import abc
+from typing import Dict, List, Optional, Tuple, Union
 
+import h5py
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 from numpy.typing import NDArray
+from sklearn.base import BaseEstimator
 
+from ...tracker.base import BaseEventTracker
+from ..base import DynamicIdentificationModel
 from .kernel import Kernel
+from .normalization import StandardNormalizer
 
 
-class KernelRegression:
+class KernelRegression(BaseEstimator):
     def __init__(
         self,
         input_dimension: int,
@@ -16,7 +22,6 @@ class KernelRegression:
         output_window_size: int,
         input_kernels: List[Kernel],
         output_kernels: List[Kernel],
-        bias: bool = False,
         ignore_kernel: bool = False,
     ) -> None:
         if len(input_kernels) != input_dimension:
@@ -38,10 +43,9 @@ class KernelRegression:
         self.output_window_size = output_window_size
         self.input_kernels = input_kernels
         self.output_kernels = output_kernels
-        self.bias = bias
         self.ignore_kernel = ignore_kernel
 
-        self.kernel_matrix_ = self._construct_kernel_matrix()
+        self.kernel_matrix = self._construct_kernel_matrix()
         self.weights_: Optional[NDArray[np.float64]] = None
 
     def fit(self, x: NDArray[np.float64], y: NDArray[np.float64]) -> 'KernelRegression':
@@ -86,10 +90,6 @@ class KernelRegression:
         """
         self._check_fit_arguments(x, y)
 
-        # Extend input with bias term.
-        if self.bias:
-            x = np.hstack((x, np.ones((x.shape[0], 1))))
-
         # For each output compute the parameter vector using least-squares optimization.
         self.weights_ = np.zeros(
             (self.output_dimension, self._count_parameter_per_output_channel()),
@@ -111,9 +111,10 @@ class KernelRegression:
             if self.ignore_kernel:
                 a = x.T @ x
             else:
-                a = x.T @ x + np.linalg.inv(self.kernel_matrix_)
+                a = x.T @ x + np.linalg.inv(self.kernel_matrix)
+
             b = x.T @ y[:, j]
-            weight, _, _, _ = np.linalg.lstsq(a, b)
+            weight, _, _, _ = np.linalg.lstsq(a, b, rcond=None)
             self.weights_[j, :] = weight
 
         return self
@@ -128,9 +129,6 @@ class KernelRegression:
             )
 
         self._check_x(x)
-
-        if self.bias:
-            x = np.hstack((x, np.ones((x.shape[0], 1))))
 
         y = np.zeros((x.shape[0], self.output_dimension), dtype=np.float64)
         for j in range(self.output_dimension):
@@ -174,9 +172,6 @@ class KernelRegression:
             self.input_dimension * self.input_window_size
             + self.output_dimension * self.output_window_size
         )
-        if self.bias:
-            n_parameters_per_output += 1
-
         return n_parameters_per_output
 
     def _check_fit_arguments(
@@ -211,8 +206,6 @@ class KernelRegression:
             )
 
         expected_size = self._count_parameter_per_output_channel()
-        if self.bias:
-            expected_size -= 1
         if x.shape[1] != expected_size:
             raise ValueError(
                 f'Second dimension of x has expected size {expected_size}, '
@@ -318,3 +311,112 @@ def construct_predict_input_arguments_for_single_sample(
 
     x = np.hstack((inputs, outputs))
     return x
+
+
+class BaseKernelRegressionModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
+    def __init__(self) -> None:
+        self.normalizer: Optional[StandardNormalizer] = None
+
+    @property
+    @abc.abstractmethod
+    def regressor(self) -> KernelRegression:
+        pass
+
+    @abc.abstractmethod
+    def map_input(self, control: NDArray[np.float64]) -> NDArray[np.float64]:
+        pass
+
+    @abc.abstractmethod
+    def train_kernel_regressor(
+        self,
+        normalized_control_seqs: List[NDArray[np.float64]],
+        normalized_state_seqs: List[NDArray[np.float64]],
+    ) -> Dict[str, NDArray[np.float64]]:
+        pass
+
+    def train(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> Optional[Dict[str, NDArray[np.float64]]]:
+        self.normalizer = StandardNormalizer.from_training_data(
+            control_seqs=control_seqs, state_seqs=state_seqs
+        )
+        control_seqs = [
+            self.normalizer.normalize_control(control) for control in control_seqs
+        ]
+        state_seqs = [self.normalizer.normalize_state(state) for state in state_seqs]
+
+        metadata = self.train_kernel_regressor(
+            normalized_control_seqs=control_seqs, normalized_state_seqs=state_seqs
+        )
+        metadata['kernel_matrix_'] = self.regressor.kernel_matrix
+        return metadata
+
+    def simulate(
+        self,
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]],
+    ) -> Union[
+        NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
+    ]:
+        normalizer = self.normalizer
+        if normalizer is None:
+            raise ValueError('Model needs to be trained with .train before simulating.')
+
+        initial_control = normalizer.normalize_control(initial_control)
+        initial_state = normalizer.normalize_state(initial_state)
+        control = normalizer.normalize_control(control)
+
+        state_window = initial_state
+        for time, _ in enumerate(control):
+            control_window = self.map_input(
+                np.vstack((initial_control[1:, :], control[: time + 1, :]))
+            )
+            x = construct_predict_input_arguments_for_single_sample(
+                control_window,
+                state_window,
+                input_window_size=self.regressor.input_window_size,
+                output_window_size=self.regressor.output_window_size,
+            )
+            yhat = self.regressor.predict(x)
+            state_window = np.vstack((state_window, yhat))
+
+        predicted_states = state_window[initial_state.shape[0] :, :]
+        predicted_states = normalizer.denormalize_state(predicted_states)
+        return predicted_states
+
+    def save(
+        self, file_path: Tuple[str, ...], tracker: BaseEventTracker = BaseEventTracker()
+    ) -> None:
+        if self.normalizer is None:
+            raise ValueError(
+                'Model needs to be trained with .train before calling save.'
+            )
+
+        with h5py.File(file_path[0], mode='w') as f:
+            f.create_dataset('weights_', data=self.regressor.weights_)
+            f.create_dataset('control_mean', data=self.normalizer.control_mean)
+            f.create_dataset('control_std', data=self.normalizer.control_std)
+            f.create_dataset('state_mean', data=self.normalizer.state_mean)
+            f.create_dataset('state_std', data=self.normalizer.state_std)
+
+    def load(self, file_path: Tuple[str, ...]) -> None:
+        with h5py.File(file_path[0], mode='r') as f:
+            self.regressor.weights_ = f['weights_'][:]
+            self.normalizer = StandardNormalizer(
+                control_mean=f['control_mean'][:],
+                control_std=f['control_std'][:],
+                state_mean=f['state_mean'][:],
+                state_std=f['state_std'][:],
+            )
+
+    def get_file_extension(self) -> Tuple[str, ...]:
+        return ('hdf5',)
+
+    def get_parameter_count(self) -> int:
+        return self.regressor.kernel_matrix.shape[0] * self.regressor.output_dimension

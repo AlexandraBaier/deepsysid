@@ -10,7 +10,12 @@ from deepsysid.models.hybrid.serial import (
     SerialParallel4DOFShipModel,
     SerialParallelQuadcopterModel,
 )
-from deepsysid.models.linear import LinearLag, LinearModel, QuadraticControlLag
+from deepsysid.models.linear import (
+    LinearLag,
+    LinearModel,
+    QuadraticControlLag,
+    RidgeRegressionCVModel,
+)
 from deepsysid.models.narx import NARXDenseNetwork
 from deepsysid.models.recurrent import (
     ConstrainedRnn,
@@ -77,6 +82,24 @@ def test_quadratic_control_lag(tmp_path: pathlib.Path) -> None:
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
         lag=pipeline.get_window_size(),
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_ridge_regression_cv_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'RidgeCV'
+    model_class = 'deepsysid.models.linear.RidgeRegressionCVModel'
+    config = RidgeRegressionCVModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        window_size=pipeline.get_window_size(),
+        folds=3,
+        repeats=2,
+        c_grid=[0.1, 1.0],
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
