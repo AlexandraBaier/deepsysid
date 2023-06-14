@@ -1,4 +1,5 @@
 import abc
+from typing import Type
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,7 +11,7 @@ class KernelHyperparameter(BaseModel):
 
 
 class Kernel(metaclass=abc.ABCMeta):
-    HYPERPARAMETER = KernelHyperparameter
+    HYPERPARAMETER: Type[KernelHyperparameter] = KernelHyperparameter
 
     def __init__(self, eta: KernelHyperparameter) -> None:
         pass

@@ -1,14 +1,15 @@
+import itertools
 import json
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Type
 
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 from sklearn.model_selection import cross_val_score
 
 from ...tracker.base import BaseEventTracker
 from ..base import DynamicIdentificationModelConfig
-from .kernel import RidgeHyperparameter, RidgeKernel
+from .kernel import Kernel, RidgeKernel
 from .regression import (
     BaseKernelRegressionModel,
     KernelRegression,
@@ -16,17 +17,19 @@ from .regression import (
 )
 
 
-class RidgeRegressionCVModelConfig(DynamicIdentificationModelConfig):
+class SingleKernelRegressionCVModelConfig(DynamicIdentificationModelConfig):
     window_size: int
     folds: int
     repeats: int
-    c_grid: List[float]
+    hyperparameter_grid: Dict[str, List[float]]
 
 
-class RidgeRegressionCVModel(BaseKernelRegressionModel):
-    CONFIG = RidgeRegressionCVModelConfig
+class SingleKernelRegressionCVModel(BaseKernelRegressionModel):
+    CONFIG = SingleKernelRegressionCVModelConfig
 
-    def __init__(self, config: RidgeRegressionCVModelConfig):
+    def __init__(
+        self, config: SingleKernelRegressionCVModelConfig, kernel_class: Type[Kernel]
+    ):
         super().__init__()
 
         self.input_size = len(config.control_names)
@@ -34,9 +37,11 @@ class RidgeRegressionCVModel(BaseKernelRegressionModel):
         self.window_size = config.window_size
         self.folds = config.folds
         self.repeats = config.repeats
-        self.c_grid = config.c_grid
+        self.hyperparameter_grid = config.hyperparameter_grid
+        self.kernel_class = kernel_class
+
         self._regressor: Optional[KernelRegression] = None
-        self._best_parameter: Optional[float] = None
+        self._best_hyperparameters: Optional[Dict[str, float]] = None
 
     @property
     def regressor(self) -> KernelRegression:
@@ -61,31 +66,47 @@ class RidgeRegressionCVModel(BaseKernelRegressionModel):
             output_window_size=self.window_size,
         )
 
-        parameter_score = dict()
-        parameter_scores: Dict[float, List[float]] = defaultdict(list)
-        for c in self.c_grid:
+        parameter_score: Dict[Tuple[Tuple[str, float], ...], float] = dict()
+        parameter_scores: Dict[
+            Tuple[Tuple[str, float], ...], List[float]
+        ] = defaultdict(list)
+        for hyperparameter_tuple in itertools.product(
+            *[
+                [(name, param) for param in params]
+                for name, params in self.hyperparameter_grid.items()
+            ]
+        ):
+            hyperparameter_dict = dict(hyperparameter_tuple)
             score = 0.0
             for repeat in range(self.repeats):
-                regressor = self._construct_regressor(c)
+                regressor = self._construct_regressor(hyperparameter_dict)
                 # Higher score is better, as it is the negative MSE.
                 cv_scores = cross_val_score(
                     regressor, X=x, y=y, scoring='neg_mean_squared_error', cv=self.folds
                 )
                 cv_score = sum(cv_scores) / self.folds
                 score += np.mean(cv_score)
-                parameter_scores[c].append(cv_score)
+                parameter_scores[hyperparameter_tuple].append(cv_score)
 
-            parameter_score[c] = score / self.repeats
+            parameter_score[hyperparameter_tuple] = score / self.repeats
 
-        best_parameter, best_score = max(parameter_score.items(), key=lambda t: t[1])
-        self._best_parameter = best_parameter
-        self._regressor = self._construct_regressor(best_parameter)
+        best_hyperparameter, best_score = max(
+            parameter_score.items(), key=lambda t: t[1]
+        )
+        self._best_hyperparameters = dict(best_hyperparameter)
+        self._regressor = self._construct_regressor(self._best_hyperparameters)
         self._regressor.fit(x, y)
 
         return dict(
-            best_hyperparameter=np.array([best_parameter], dtype=np.float64),
+            best_hyperparameter=np.array(
+                [self._extract_sorted_hyperparameters(best_hyperparameter)],
+                dtype=np.float64,
+            ),
             scores=np.array(
-                [[param] + scores for param, scores in parameter_scores.items()]
+                [
+                    self._extract_sorted_hyperparameters(param) + scores
+                    for param, scores in parameter_scores.items()
+                ]
             ),
         )
 
@@ -95,34 +116,52 @@ class RidgeRegressionCVModel(BaseKernelRegressionModel):
         offset = len(super().get_file_extension())
         super().save(file_path[:offset])
 
+        if self._best_hyperparameters is None:
+            raise ValueError('Model is not trained yet, call .train first.')
+
         with open(file_path[offset:][0], mode='w') as f:
-            json.dump(dict(c=self._best_parameter), f)
+            json.dump(self._best_hyperparameters, f)
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         offset = len(super().get_file_extension())
         with open(file_path[offset:][0], mode='r') as f:
             json_dict = json.load(f)
-        self._best_parameter = json_dict['c']
-        self._regressor = self._construct_regressor(json_dict['c'])
+        self._best_hyperparameters = json_dict
+        self._regressor = self._construct_regressor(json_dict)
 
         super().load(file_path[:offset])
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return super().get_file_extension() + ('json',)
 
-    def _construct_regressor(self, c: float) -> KernelRegression:
+    def hyperparameter_names(self) -> List[str]:
+        return sorted(self.hyperparameter_grid.keys())
+
+    def _construct_regressor(
+        self, hyperparameters: Dict[str, float]
+    ) -> KernelRegression:
+        kernel_hyperparams = self.kernel_class.HYPERPARAMETER(**hyperparameters)
         return KernelRegression(
             input_dimension=self.input_size,
             output_dimension=self.output_size,
             input_window_size=self.window_size,
             output_window_size=self.window_size,
             input_kernels=[
-                RidgeKernel(eta=RidgeHyperparameter(c=c))
-                for _ in range(self.input_size)
+                self.kernel_class(kernel_hyperparams) for _ in range(self.input_size)
             ],
             output_kernels=[
-                RidgeKernel(eta=RidgeHyperparameter(c=c))
-                for _ in range(self.output_size)
+                self.kernel_class(kernel_hyperparams) for _ in range(self.output_size)
             ],
             ignore_kernel=False,
         )
+
+    @staticmethod
+    def _extract_sorted_hyperparameters(
+        param_tuple: Tuple[Tuple[str, float], ...]
+    ) -> List[float]:
+        return [value for _, value in sorted(param_tuple, key=lambda t: t[0])]
+
+
+class RidgeRegressionCVModel(SingleKernelRegressionCVModel):
+    def __init__(self, config: SingleKernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=RidgeKernel)

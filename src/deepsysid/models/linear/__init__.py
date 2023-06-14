@@ -1,4 +1,4 @@
-from .regularized import RidgeRegressionCVModel, RidgeRegressionCVModelConfig
+from .regularized import RidgeRegressionCVModel, SingleKernelRegressionCVModelConfig
 from .unregularized import LinearLag, LinearLagConfig, LinearModel, QuadraticControlLag
 
 __all__ = [
@@ -6,6 +6,6 @@ __all__ = [
     'LinearLagConfig',
     'LinearLag',
     'QuadraticControlLag',
-    'RidgeRegressionCVModelConfig',
+    'SingleKernelRegressionCVModelConfig',
     'RidgeRegressionCVModel',
 ]

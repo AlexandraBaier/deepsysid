@@ -99,7 +99,7 @@ def test_ridge_regression_cv_model(tmp_path: pathlib.Path) -> None:
         window_size=pipeline.get_window_size(),
         folds=3,
         repeats=2,
-        c_grid=[0.1, 1.0],
+        hyperparameter_grid=dict(c=[0.1, 1.0]),
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
