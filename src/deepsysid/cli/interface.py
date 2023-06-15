@@ -152,9 +152,9 @@ class DeepSysIdCommandLineInterface:
         self.download_toy_dataset_parser = self.download_subparsers.add_parser(
             'toy_dataset',
             help=(
-                'Downloads Coupled MSD, Pole on a Cart, ',
-                'Single pendulum with torque input, ',
-                'see https://github.com/Dany-L/statesim for details.',
+                'Downloads Coupled MSD, Pole on a Cart, '
+                'Single pendulum with torque input, '
+                'see https://github.com/Dany-L/statesim for details.'
             ),
         )
         self.download_toy_dataset_parser.add_argument(
