@@ -302,10 +302,20 @@ def construct_predict_input_arguments_for_single_sample(
     input_size = control.shape[1]
     output_size = state.shape[1]
 
-    inputs = control[::-1, :][:input_window_size, :].reshape(
+    # Example result of the following transformation with window = 3:
+    # [['u_0(9)', 'u_1(9)'],
+    #  ['u_0(8)', 'u_1(8)'],
+    #  ['u_0(7)', 'u_1(7)'],
+    #  ['u_0(6)', 'u_1(6)']]
+    # -> [['u_0(9)', 'u_0(8)', 'u_0(7)', 'u_1(9)', 'u_1(8)', 'u_1(7)']]
+    # transpose is required to get the above result,
+    # omitting the transpose will give the following result
+    # - >[['u_0(9)', 'u_1(9)', 'u_0(8)', 'u_1(8)', 'u_0(7)', 'u_1(7)']]
+    # fit/predict expect the former variant achieved via transpose.
+    inputs = control[::-1, :][:input_window_size, :].T.reshape(
         1, input_window_size * input_size
     )
-    outputs = state[::-1, :][:output_window_size, :].reshape(
+    outputs = state[::-1, :][:output_window_size, :].T.reshape(
         1, output_window_size * output_size
     )
 
