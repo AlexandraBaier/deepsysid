@@ -26,7 +26,7 @@ def test_split_simulation(tmp_path: pathlib.Path) -> None:
     horizon_isze = 8
 
     controls, states, initial_states = load_simulation_data(
-        directory=paths['test'],
+        directory=str(paths['test']),
         control_names=pipeline.get_cartpole_control_names(),
         state_names=pipeline.get_cartpole_state_names(),
         initial_state_names=pipeline.get_cartpole_initial_state_names(),
