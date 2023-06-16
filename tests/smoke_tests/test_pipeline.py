@@ -14,6 +14,10 @@ from deepsysid.models.linear import (
     DiagonalCorrelatedKernelRegressionCVModel,
     LinearLag,
     LinearModel,
+    MultiDiagonalCorrelatedKernelRegressionCVModel,
+    MultiRidgeKernelRegressionCVModel,
+    MultiStableSplineKernelRegressionCVModel,
+    MultiTunedCorrelationKernelRegressionCVModel,
     QuadraticControlLag,
     RidgeKernelRegressionCVModel,
     StableSplineKernelRegressionCVModel,
@@ -157,6 +161,84 @@ def test_stable_spline_kernel_regression_cv_model(tmp_path: pathlib.Path) -> Non
         folds=3,
         repeats=2,
         hyperparameter_grid=dict(c=[0.1, 1.0], lamb=[0.8, 0.9, 0.99]),
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_multi_ridge_regression_cv_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'RidgeCV'
+    model_class = 'deepsysid.models.linear.MultiRidgeKernelRegressionCVModel'
+    config = MultiRidgeKernelRegressionCVModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        window_size=pipeline.get_window_size(),
+        folds=2,
+        repeats=1,
+        hyperparameter_grid=dict(c=[0.1, 1.0]),
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_multi_diagonal_correlated_kernel_regression_cv_model(
+    tmp_path: pathlib.Path,
+) -> None:
+    model_name = 'DCCV'
+    model_class = (
+        'deepsysid.models.linear.MultiDiagonalCorrelatedKernelRegressionCVModel'
+    )
+    config = MultiDiagonalCorrelatedKernelRegressionCVModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        window_size=pipeline.get_window_size(),
+        folds=2,
+        repeats=1,
+        hyperparameter_grid=dict(c=[0.1], lamb=[0.8], rho=[0.95, 0.99]),
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_multi_tuned_correlation_kernel_regression_cv_model(
+    tmp_path: pathlib.Path,
+) -> None:
+    model_name = 'TCCV'
+    model_class = 'deepsysid.models.linear.MultiTunedCorrelationKernelRegressionCVModel'
+    config = MultiTunedCorrelationKernelRegressionCVModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        window_size=pipeline.get_window_size(),
+        folds=2,
+        repeats=1,
+        hyperparameter_grid=dict(c=[0.1], lamb=[0.8]),
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_multi_stable_spline_kernel_regression_cv_model(tmp_path: pathlib.Path) -> None:
+    model_name = 'SSCV'
+    model_class = 'deepsysid.models.linear.MultiStableSplineKernelRegressionCVModel'
+    config = MultiStableSplineKernelRegressionCVModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        window_size=pipeline.get_window_size(),
+        folds=2,
+        repeats=1,
+        hyperparameter_grid=dict(c=[0.1, 1.0], lamb=[0.8]),
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
