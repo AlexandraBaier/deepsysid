@@ -1,10 +1,7 @@
 import numpy as np
 import pytest
 
-from deepsysid.pipeline.metrics import (
-    IndexOfAgreementMetric,
-    IndexOfAgreementMetricConfig,
-)
+from deepsysid.metrics import IndexOfAgreementMetric, IndexOfAgreementMetricConfig
 
 
 def test_index_of_agreement_empty_arrays():

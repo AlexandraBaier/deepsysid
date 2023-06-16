@@ -10,6 +10,14 @@ from deepsysid.explainability.metrics import (
     LipschitzEstimateMetric,
     NMSEInfidelityMetric,
 )
+from deepsysid.metrics import (
+    MeanAbsoluteErrorMetric,
+    MeanSquaredErrorMetric,
+    NormalizedRootMeanSquaredErrorMetric,
+    RootMeanSquaredErrorMetric,
+    Trajectory4DOFRootMeanSquaredErrorMetric,
+    TrajectoryNED6DOFRootMeanSquaredErrorMetric,
+)
 from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
@@ -22,14 +30,6 @@ from deepsysid.pipeline.configuration import (
 )
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.explaining import explain_model
-from deepsysid.pipeline.metrics import (
-    MeanAbsoluteErrorMetric,
-    MeanSquaredErrorMetric,
-    NormalizedRootMeanSquaredErrorMetric,
-    RootMeanSquaredErrorMetric,
-    Trajectory4DOFRootMeanSquaredErrorMetric,
-    TrajectoryNED6DOFRootMeanSquaredErrorMetric,
-)
 from deepsysid.pipeline.testing.bounded_residual import (
     BoundedResidualInferenceTestConfig,
 )
