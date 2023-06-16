@@ -462,25 +462,25 @@ def run_cartpole_pipeline(
         },
         metrics=dict(
             rmse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric',
+                metric_class='deepsysid.metrics.RootMeanSquaredErrorMetric',
                 parameters=RootMeanSquaredErrorMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),
             mse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.MeanSquaredErrorMetric',
+                metric_class='deepsysid.metrics.MeanSquaredErrorMetric',
                 parameters=MeanSquaredErrorMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),
             mae=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric',
+                metric_class='deepsysid.metrics.MeanAbsoluteErrorMetric',
                 parameters=MeanAbsoluteErrorMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),
             nrmse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.'
+                metric_class='deepsysid.metrics.'
                 'NormalizedRootMeanSquaredErrorMetric',
                 parameters=NormalizedRootMeanSquaredErrorMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
