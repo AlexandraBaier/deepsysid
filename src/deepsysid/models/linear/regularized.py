@@ -247,7 +247,61 @@ class StableSplineKernelRegressionCVModel(SingleKernelRegressionCVModel):
         super().__init__(config, kernel_class=StableSplineKernel)
 
 
+class InputOutputKernelRegressionCVModel(KernelRegressionCVModel):
+    def _generate_hyperparameter_grid(self) -> Iterator[KernelHyperparameterContainer]:
+        grid_line = [
+            [(name, param) for param in params]
+            for name, params in self.hyperparameter_grid.items()
+        ]
+        for input_hyperparameter_tuple in itertools.product(*grid_line):
+            input_parameters = [
+                dict(input_hyperparameter_tuple) for _ in range(self.input_size)
+            ]
+            for output_hyperparameter_tuple in itertools.product(*grid_line):
+                output_parameters = [
+                    dict(output_hyperparameter_tuple) for _ in range(self.output_size)
+                ]
+                yield KernelHyperparameterContainer(
+                    input_hyperparameters=input_parameters,
+                    output_hyperparameters=output_parameters,
+                )
+
+
+class InputOutputRidgeKernelRegressionCVModel(InputOutputKernelRegressionCVModel):
+    def __init__(self, config: KernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=RidgeKernel)
+
+
+class InputOutputDiagonalCorrelatedKernelRegressionCVModel(
+    InputOutputKernelRegressionCVModel
+):
+    def __init__(self, config: KernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=DiagonalCorrelatedKernel)
+
+
+class InputOutputTunedCorrelationKernelRegressionCVModel(
+    InputOutputKernelRegressionCVModel
+):
+    def __init__(self, config: KernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=TunedCorrelationKernel)
+
+
+class InputOutputStableSplineKernelRegressionCVModel(
+    InputOutputKernelRegressionCVModel
+):
+    def __init__(self, config: KernelRegressionCVModelConfig) -> None:
+        super().__init__(config, kernel_class=StableSplineKernel)
+
+
 class MultiKernelRegressionCVModel(KernelRegressionCVModel):
+    """
+    WARNING
+    This model searches for individual kernel hyperparameters for
+    each input and output variable. Accordingly, the hyperparameter search space
+    using grid search explodes. Unless you have very few input and output
+    variables (less than 5 in total), this will not be worth your time.
+    """
+
     def _generate_hyperparameter_grid(self) -> Iterator[KernelHyperparameterContainer]:
         # A grid line is for example [(c, 0.1), (c, 0.2)],
         # which was constructed from the dictionary entry
@@ -271,22 +325,22 @@ class MultiKernelRegressionCVModel(KernelRegressionCVModel):
             for grid_line in parameter_grid_lines
         ]
 
+        # All input/output parameters are stored in a single list
+        # of length #hyperparameters * input_size or
+        # #hyperparameters * output_size. The parameters are ordered
+        # per variable, so the first #hyperparameters values are the
+        # parameters for the first variable's kernel.
         n_hyperparameters = len(self.hyperparameter_grid)
         for input_kernel_parameters in itertools.product(
             *parameter_grid_lines_per_input
         ):
+            input_parameters = [
+                dict(input_kernel_parameters[idx : idx + n_hyperparameters])
+                for idx in range(0, len(input_kernel_parameters), n_hyperparameters)
+            ]
             for output_kernel_parameters in itertools.product(
                 *parameter_grid_lines_per_output
             ):
-                # All input/output parameters are stored in a single list
-                # of length #hyperparameters * input_size or
-                # #hyperparameters * output_size. The parameters are ordered
-                # per variable, so the first #hyperparameters values are the
-                # parameters for the first variable's kernel.
-                input_parameters = [
-                    dict(input_kernel_parameters[idx : idx + n_hyperparameters])
-                    for idx in range(0, len(input_kernel_parameters), n_hyperparameters)
-                ]
                 output_parameters = [
                     dict(output_kernel_parameters[idx : idx + n_hyperparameters])
                     for idx in range(
