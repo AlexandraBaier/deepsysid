@@ -11,9 +11,14 @@ from deepsysid.explainability.metrics import (
     NMSEInfidelityMetric,
 )
 from deepsysid.metrics import (
+    EfficiencyMetric,
+    FitRatioMetric,
     MeanAbsoluteErrorMetric,
     MeanSquaredErrorMetric,
     NormalizedRootMeanSquaredErrorMetric,
+    PearsonProductMomentCorrelationCoefficientMetric,
+    RefinedEfficiencyMetric,
+    RefinedIndexOfAgreementMetric,
     RootMeanSquaredErrorMetric,
     Trajectory4DOFRootMeanSquaredErrorMetric,
     TrajectoryNED6DOFRootMeanSquaredErrorMetric,
@@ -483,6 +488,37 @@ def run_cartpole_pipeline(
                 metric_class='deepsysid.metrics.'
                 'NormalizedRootMeanSquaredErrorMetric',
                 parameters=NormalizedRootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            dr=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.RefinedIndexOfAgreementMetric',
+                parameters=RefinedIndexOfAgreementMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            fit=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.FitRatioMetric',
+                parameters=FitRatioMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            e=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.EfficiencyMetric',
+                parameters=EfficiencyMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            e1=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.RefinedEfficiencyMetric',
+                parameters=RefinedEfficiencyMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            r=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.'
+                'PearsonProductMomentCorrelationCoefficientMetric',
+                parameters=PearsonProductMomentCorrelationCoefficientMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),

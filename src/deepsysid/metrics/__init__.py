@@ -6,7 +6,15 @@ from .error import (
     NormalizedRootMeanSquaredErrorMetric,
     RootMeanSquaredErrorMetric,
 )
-from .score import IndexOfAgreementMetric, IndexOfAgreementMetricConfig
+from .score import (
+    EfficiencyMetric,
+    FitRatioMetric,
+    IndexOfAgreementMetric,
+    IndexOfAgreementMetricConfig,
+    PearsonProductMomentCorrelationCoefficientMetric,
+    RefinedEfficiencyMetric,
+    RefinedIndexOfAgreementMetric,
+)
 from .trajectory import (
     Trajectory4DOFRootMeanSquaredErrorMetric,
     TrajectoryNED6DOFRootMeanSquaredErrorMetric,
@@ -30,4 +38,9 @@ __all__ = [
     'NormalizedRootMeanSquaredErrorMetric',
     'IndexOfAgreementMetricConfig',
     'IndexOfAgreementMetric',
+    'RefinedIndexOfAgreementMetric',
+    'FitRatioMetric',
+    'EfficiencyMetric',
+    'RefinedEfficiencyMetric',
+    'PearsonProductMomentCorrelationCoefficientMetric',
 ]
