@@ -1,13 +1,13 @@
 from warnings import warn
 
-from ...metrics.error import (
+from ..metrics.error import (
     MeanAbsoluteErrorMetric,
     MeanSquaredErrorMetric,
     NormalizedRootMeanSquaredErrorMetric,
     RootMeanSquaredErrorMetric,
 )
-from ...metrics.score import IndexOfAgreementMetric, IndexOfAgreementMetricConfig
-from ...metrics.trajectory import (
+from ..metrics.score import IndexOfAgreementMetric, IndexOfAgreementMetricConfig
+from ..metrics.trajectory import (
     Trajectory4DOFRootMeanSquaredErrorMetric,
     TrajectoryNED6DOFRootMeanSquaredErrorMetric,
 )
