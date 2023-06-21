@@ -1,5 +1,3 @@
-from warnings import warn
-
 from .error import (
     MeanAbsoluteErrorMetric,
     MeanSquaredErrorMetric,
@@ -18,15 +16,6 @@ from .score import (
 from .trajectory import (
     Trajectory4DOFRootMeanSquaredErrorMetric,
     TrajectoryNED6DOFRootMeanSquaredErrorMetric,
-)
-
-warn(
-    message=(
-        'deepsysid.pipeline.metrics is deprecated. '
-        'Import metrics from deepsysid.metrics instead. '
-        'deepsysid.pipeline.metrics will be removed in a future release.'
-    ),
-    category=DeprecationWarning,
 )
 
 __all__ = [
