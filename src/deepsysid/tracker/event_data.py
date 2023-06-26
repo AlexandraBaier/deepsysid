@@ -1,7 +1,7 @@
 import dataclasses
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, Tuple, List
 
-from ..models.utils import TrainingPrediction
+from ..models.utils import TrainingPrediction, XYdata
 from .configuration import ExperimentTrackingConfiguration
 
 
@@ -27,8 +27,13 @@ class TrackParameters(EventData):
 
 @dataclasses.dataclass
 class TrackFigures(EventData):
-    results: TrainingPrediction
+    results: Union[TrainingPrediction, XYdata]
     name: str
+
+@dataclasses.dataclass
+class TrackSequencesAsMatFile(EventData):
+    sequences: Tuple[List, List]
+    file_name: str
 
 
 @dataclasses.dataclass
@@ -62,3 +67,4 @@ class SetTags(EventData):
 @dataclasses.dataclass
 class TrackMetrics(EventData):
     metrics: Dict[str, float]
+    step: Optional[int] = None

@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -57,10 +57,12 @@ class RecurrentInitializerDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         sequence_length: int,
+        window_size: int = 50
     ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
+        self.window_size = window_size
         self.x, self.y = self.__load_data(control_seqs, state_seqs)
 
     def __load_data(
@@ -72,27 +74,27 @@ class RecurrentInitializerDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
         y_seq = list()
         for control, state in zip(control_seqs, state_seqs):
             n_samples = int(
-                (control.shape[0] - self.sequence_length - 1) / self.sequence_length
+                (control.shape[0] - self.window_size) / self.window_size
             )
 
             x = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim),
+                (n_samples, self.window_size, self.control_dim + self.state_dim),
                 dtype=np.float64,
             )
             y = np.zeros(
-                (n_samples, self.sequence_length, self.state_dim), dtype=np.float64
+                (n_samples, self.window_size, self.state_dim), dtype=np.float64
             )
 
             for idx in range(n_samples):
-                time = idx * self.sequence_length
+                time = idx * self.window_size
 
                 x[idx, :, :] = np.hstack(
                     (
-                        control[time + 1 : time + 1 + self.sequence_length, :],
-                        state[time : time + self.sequence_length, :],
+                        control[time + 1 : time + 1 + self.window_size, :],
+                        state[time : time + self.window_size, :],
                     )
                 )
-                y[idx, :, :] = state[time + 1 : time + 1 + self.sequence_length, :]
+                y[idx, :, :] = state[time + 1 : time + 1 + self.window_size, :]
 
             x_seq.append(x)
             y_seq.append(y)
@@ -112,10 +114,12 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
         control_seqs: List[NDArray[np.float64]],
         state_seqs: List[NDArray[np.float64]],
         sequence_length: int,
+        window_size: int = 50
     ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         self.state_dim = state_seqs[0].shape[1]
+        self.window_size = window_size
         self.x0, self.y0, self.x, self.y = self.__load_data(control_seqs, state_seqs)
 
     def __load_data(
@@ -135,11 +139,11 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
 
         for control, state in zip(control_seqs, state_seqs):
             n_samples = int(
-                (control.shape[0] - 2 * self.sequence_length) / self.sequence_length
+                (control.shape[0] - (self.window_size + self.sequence_length + 1)) / self.sequence_length
             )
 
             x0 = np.zeros(
-                (n_samples, self.sequence_length, self.control_dim + self.state_dim),
+                (n_samples, self.window_size, self.control_dim + self.state_dim),
                 dtype=np.float64,
             )
             y0 = np.zeros((n_samples, self.state_dim), dtype=np.float64)
@@ -155,16 +159,16 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
 
                 x0[idx, :, :] = np.hstack(
                     (
-                        control[time : time + self.sequence_length],
-                        state[time : time + self.sequence_length, :],
+                        control[time + 1 : time + self.window_size + 1],
+                        state[time : time + self.window_size, :]
                     )
                 )
-                y0[idx, :] = state[time + self.sequence_length - 1, :]
+                y0[idx, :] = state[time + self.window_size + 1, :]
                 x[idx, :, :] = control[
-                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                    time + self.window_size + 1 : time + self.sequence_length + self.window_size + 1, :
                 ]
                 y[idx, :, :] = state[
-                    time + self.sequence_length : time + 2 * self.sequence_length, :
+                    time + self.window_size + 1: time + self.sequence_length + self.window_size + 1, :
                 ]
 
             x0_seq.append(x0)
@@ -183,6 +187,7 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
             'y0': self.y0[idx],
             'x': self.x[idx],
             'y': self.y[idx],
+            'idx': np.array(idx)
         }
 
 

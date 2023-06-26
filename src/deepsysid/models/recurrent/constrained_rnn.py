@@ -606,10 +606,9 @@ class ConstrainedRnnConfig(DynamicIdentificationModelConfig):
     batch_size: int
     epochs_initializer: int
     epochs_predictor: int
-    loss: Literal['mse', 'msge']
+    loss: Literal['mse']
     bias: bool
     nonlinearity: str
-    log_min_max_real_eigenvalues: Optional[bool] = False
     clip_gradient_norm: Optional[float] = False
 
 
@@ -645,15 +644,17 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self.control_names = config.control_names
         self.initial_state_names = config.initial_state_names
 
-        self.log_min_max_real_eigenvalues = config.log_min_max_real_eigenvalues
         self.clip_gradient_norm = config.clip_gradient_norm
+        self.gamma = config.gamma
+
+        self.nl = retrieve_nonlinearity_class(config.nonlinearity)
+
+        
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
-        elif config.loss == 'msge':
-            self.loss = loss.MSGELoss().to(self.device)
         else:
-            raise ValueError('loss can only be "mse" or "msge"')
+            raise ValueError('loss can only be "mse"')
 
         self._predictor = rnn.LtiRnnConvConstr(
             nx=self.nx,
@@ -663,7 +664,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             gamma=config.gamma,
             beta=config.beta,
             bias=config.bias,
-            nonlinearity=config.nonlinearity,
+            nonlinearity=self.nl,
         ).to(self.device)
 
         self._initializer = rnn.BasicLSTM(
@@ -677,7 +678,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
         )
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer_pred, factor=0.25, patience=self.epochs_with_const_decay, verbose=True)
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer_pred, factor=0.25, patience=self.epochs_with_const_decay, verbose=True, threshold=1e-5)
         self.optimizer_init = optim.Adam(
             self._initializer.parameters(), lr=self.learning_rate
         )
@@ -696,6 +697,9 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self._predictor.to(self.device)
         self._predictor.train()
         self._initializer.train()
+
+        if isinstance(self.initial_state_names, List):
+            initial_state_names = self.initial_state_names
 
         self._control_mean, self._control_std = utils.mean_stddev(us)
         self._state_mean, self._state_std = utils.mean_stddev(ys)
@@ -729,6 +733,10 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 f'Epoch {i + 1}/{self.epochs_initializer}\t'
                 f'Epoch Loss (Initializer): {total_loss}'
             )
+            tracker(TrackMetrics(
+                'track initializer loss',
+                {'epoch loss initializer': float(total_loss)},i)
+            )
             initializer_loss.append(total_loss)
         time_end_init = time.time()
         predictor_dataset = RecurrentPredictorDataset(us, ys, self.sequence_length)
@@ -736,13 +744,10 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         time_start_pred = time.time()
         t = self.initial_decay_parameter
         predictor_loss: List[np.float64] = []
-        min_eigenvalue: List[np.float64] = []
-        max_eigenvalue: List[np.float64] = []
         barrier_value: List[np.float64] = []
         gradient_norm: List[np.float64] = []
         backtracking_iter: List[np.float64] = []
-        validation_loss: np.float64 = 100.0
-        steps_without_validation_improvement = 1
+        validation_loss: np.float64 = np.float64(100.0)
 
         for i in range(self.epochs_predictor):
             data_loader = data.DataLoader(
@@ -754,12 +759,12 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 self._predictor.zero_grad()
                 # Initialize predictor with state of initializer network
                 _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
-                # Predict and optimize
                 y, _ = self._predictor.forward(
                     batch['x'].float().to(self.device), hx=hx
                 )
                 y = y.to(self.device)
-                barrier = self._predictor.get_barrier(t).to(self.device)
+                barrier = self._predictor.get_barriers(t).to(self.device)
+
                 batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
                 total_loss += batch_loss.item()
                 (batch_loss + barrier).backward()
@@ -786,21 +791,29 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
                 self.optimizer_pred.step()
 
+                new_pars = [
+                    par.clone().detach() for par in self._predictor.parameters()
+                ]
+                new_pars_plot = [
+                    par.clone().detach() for par in self._predictor.parameters()
+                ]
+
                 # perform backtracking line search if constraints are not satisfied
                 max_iter = 100
                 alpha = 0.5
                 bls_iter = 0
                 while not self._predictor.check_constr():
-                    for old_par, new_par in zip(old_pars, self._predictor.parameters()):
-                        new_par.data = (
-                            alpha * old_par.clone() + (1 - alpha) * new_par.data
-                        )
+                    new_pars = [alpha * old_par.clone() + (1- alpha)*new_par for old_par, new_par in zip(old_pars, new_pars)]
+                    barriers, alphas = self._predictor.get_linear_combination(old_pars, new_pars_plot)
+                    tracker(TrackFigures(
+                        'track linear combination',
+                        utils.XYdata(
+                            np.array(alphas), np.array(barriers), 'Linear combination -log det (constr)'
+                        ), 'linear_combination.png'
+                    ))
+                    self._predictor.write_parameters(new_pars)
 
                     if bls_iter > max_iter - 1:
-                        for old_par, new_par in zip(
-                            old_pars, self._predictor.parameters()
-                        ):
-                            new_par.data = old_par.clone()
                         M = self._predictor.get_constraints()
                         logger.warning(
                             f'Epoch {i+1}/{self.epochs_predictor}\t'
@@ -820,32 +833,32 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                             barrier_value=np.asarray(barrier_value),
                             backtracking_iter=np.asarray(backtracking_iter),
                             gradient_norm=np.asarray(gradient_norm),
-                            max_eigenvalue=np.asarray(max_eigenvalue),
-                            min_eigenvalue=np.asarray(min_eigenvalue),
                             training_time_initializer=np.asarray(time_total_init),
                             training_time_predictor=np.asarray(time_total_pred),
                         )
                     bls_iter += 1
 
-            # decay t following the idea of interior point methods
-            # if i % self.epochs_with_const_decay == 0 and i != 0:
-            #     t = t * 1 / self.decay_rate
-            #     logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+                tracker(TrackMetrics(
+                    'track loss, validation loss and barrier',
+                    {'batch loss predictor':float(batch_loss.detach().numpy()),
+                    'batch barrier predictor': float(barrier.detach().numpy()), 
+                    'batch bls iter predictor': bls_iter}
+                ))
 
-            old_validation_loss = np.copy(validation_loss)
-            validation_loss = validate_normalized(self, self.loss, self.state_names, self.control_names, self.initial_state_names, self.sequence_length, self.device)
+            validation_loss = validate_normalized(self, self.loss, self.state_names, self.control_names, initial_state_names, self.sequence_length, self.device, tracker, horizon_size=int(4000))
+            old_lr = {p_group['lr'] for p_group in self.optimizer_pred.param_groups}
             self.scheduler.step(validation_loss)
-
-
-            if old_validation_loss - validation_loss < -1e-4 :
-                logger.info(f'steps without validation improvement: {steps_without_validation_improvement}')
-                steps_without_validation_improvement += 1
-            
-            if steps_without_validation_improvement > self.epochs_with_const_decay:
-                # decrease learning rate and decay rate
+            # if learning rate changed by scheduler also reduce decay parameter
+            if not old_lr == {p_group['lr'] for p_group in self.optimizer_pred.param_groups}:
                 t = t * 1 / self.decay_rate
                 logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
-                steps_without_validation_improvement = 1
+                tracker(TrackMetrics(
+                    'track decay and learning rate',
+                    {
+                        'learning rate': float(self.optimizer_pred.param_groups[0]['lr']),
+                        'decay rate': float(t)
+                    },i
+                ))
 
                 if t <= 1e-7:
                     time_end_pred = time.time()
@@ -863,11 +876,24 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                         training_time_predictor=np.asarray(time_total_pred),
                     )
 
-
-            min_ev = np.float64('inf')
-            max_ev = np.float64('inf')
-            if self.log_min_max_real_eigenvalues:
-                min_ev, max_ev = self._predictor.get_min_max_real_eigenvalues()
+            tracker(TrackMetrics(
+                'track loss, validation loss and barrier',
+                {'epoch barrier predictor': float(barrier),
+                 'epoch loss predictor':float(total_loss/len(data_loader)),
+                 'epoch validation loss': float(validation_loss)},i
+            ))
+            result = utils.TrainingPrediction(
+                    u=batch['x'][0, :, :],
+                    zp=batch['y'][0, :, :],
+                    zp_hat=y[0, :, :].cpu().detach().numpy(),
+                )
+            tracker(
+                TrackFigures(
+                    f'Save training trajectory {i}',
+                    result,
+                    f'training_trajectory.png',
+                )
+            )
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
@@ -877,19 +903,11 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
                 f'Backtracking Line Search iteration: {bls_iter}\t'
                 f'Max gradient norm: {(max_grad/len(data_loader)):1f}'
             )
-            tracker(
-                TrackMetrics(
-                    f'Track loss step {i}',
-                    {'loss': float(total_loss), 'barrier': float(barrier)},
-                )
-            )
 
             predictor_loss.append(np.float64(total_loss))
             barrier_value.append(barrier.cpu().detach().numpy())
             backtracking_iter.append(np.float64(bls_iter))
             gradient_norm.append(np.float64(max_grad))
-            max_eigenvalue.append(np.float64(max_ev))
-            min_eigenvalue.append(np.float64(min_ev))
 
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
@@ -906,8 +924,6 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             barrier_value=np.asarray(barrier_value),
             backtracking_iter=np.asarray(backtracking_iter),
             gradient_norm=np.asarray(gradient_norm),
-            max_eigenvalue=np.asarray(max_eigenvalue),
-            min_eigenvalue=np.asarray(min_eigenvalue),
             training_time_initializer=np.asarray(time_total_init),
             training_time_predictor=np.asarray(time_total_pred),
         )
@@ -1041,11 +1057,12 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_without_projection: int
     initial_decay_parameter: float
     extend_state: bool
+    nonlinearity: str
     enforce_constraints_method: Optional[Literal['barrier', 'projection']] = None
     epochs_with_const_decay: Optional[int]
 
 
-class HybridConstrainedRnn(base.NormalizedControlStateModel):
+class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
     CONFIG = HybridConstrainedRnnConfig
 
     def __init__(self, config: HybridConstrainedRnnConfig):
@@ -1107,6 +1124,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             C_lin_tilde = np.array(config.C_lin, dtype=np.float64)
 
         self.nx = A_lin_tilde.shape[0]
+        self._nx = A_lin_tilde.shape[0]
         self.ny = C_lin_tilde.shape[0]
 
         self.initial_decay_parameter = config.initial_decay_parameter
@@ -1123,6 +1141,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.epochs_without_projection = config.epochs_without_projection
         self.enforce_constraints_method = config.enforce_constraints_method
 
+        self.nl = retrieve_nonlinearity_class(config.nonlinearity)
+
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
         else:
@@ -1137,6 +1157,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
             nwu=self.nwu,
             nzu=self.nzu,
             gamma=config.gamma,
+            nonlinearity=self.nl,
             device=self.device,
         ).to(self.device)
 
@@ -1150,6 +1171,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
         )
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer_pred, factor=0.25, patience=self.epochs_with_const_decay, verbose=True, threshold=1e-5)
 
     def train(
         self,
@@ -1160,13 +1182,14 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
     ) -> Dict[str, NDArray[np.float64]]:
         us = control_seqs
         ys = state_seqs
-        x0s = initial_seqs
         self._predictor.train()
         self._predictor.to(self.device)
         step = 0
 
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
+        if isinstance(self.initial_state_names, List):
+            initial_state_names = self.initial_state_names
 
         n_batch = len(x0s)
         N, nx = x0s[0].shape
@@ -1178,13 +1201,16 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         )
 
         self._control_mean, self._control_std = utils.mean_stddev(us)
-        self._state_mean, self._state_std = utils.mean_stddev(xs.reshape((-1,nx)))
+        self._state_mean, self._state_std = utils.mean_stddev(list(xs.reshape((-1,nx)).detach().numpy()))
+
+        track_model_parameters(self, tracker)
 
         # self._predictor.initialize_lmi()
-        track_model_parameters(self, tracker)
+
 
         if self.enforce_constraints_method is not None:
             self._predictor.project_parameters()
+
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1193,14 +1219,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         steps_without_projection = self.epochs_without_projection
         steps_without_loss_decrease = 0
         old_loss: torch.Tensor = torch.tensor(100.0)
+        t = self.initial_decay_parameter
 
         for seq_len in self.sequence_length:
             predictor_dataset = RecurrentPredictorInitialDataset(us, ys, x0s, seq_len)
-            self.optimizer_pred = optim.Adam(
-                self._predictor.parameters(), lr=self.learning_rate
-            )
-            logger.info(f'Sequence length {seq_len}, reset optimizer')
-            t = self.initial_decay_parameter
 
             for i in range(self.epochs_predictor):
                 step += 1
@@ -1211,7 +1233,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                 max_grad: List[np.float64] = list()
                 backtracking_iter: List[int] = list()
                 for batch_idx, batch in enumerate(data_loader):
-                    self._predictor.zero_grad()
+                    # self._predictor.zero_grad()
+                    self._predictor.zero_grad(set_to_none=True)
                     if self.extend_state:
                         x0 = torch.concat(
                             [
@@ -1230,6 +1253,28 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             torch.zeros_like(x0).to(self.device),
                         ),
                     )
+                    if batch_idx == 0 and i ==0:
+                        y_lin = (
+                        self.linear.forward(
+                            batch['x0'][0, :].reshape(1, nx, 1),
+                            batch['wp'][0, :, :]
+                            .reshape(1, seq_len, self._predictor.nwp, 1)
+                            .float()
+                            .to(self.device),
+                            )[0]
+                            .cpu()
+                            .detach()
+                            .numpy()
+                        )
+                        tracker(TrackFigures(
+                            'track initial prediction',
+                            utils.TrainingPrediction(
+                                u=batch['wp'][0, :, :],
+                                zp=batch['zp'][0, :, :],
+                                zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                                y_lin=y_lin
+                            ), 'before_first_optimization.png'
+                        ))
                     zp_hat = zp_hat.to(self.device)
                     batch_loss = self.loss.forward(
                         zp_hat, batch['zp'].float().to(self.device)
@@ -1237,7 +1282,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
                     barrier = torch.tensor(0.0).to(self.device)
                     if self.enforce_constraints_method == 'barrier':
-                        barrier = self._predictor.get_barrier(
+                        barrier = self._predictor.get_barriers(
                             torch.tensor(t, device=self.device)
                         )
                         (batch_loss + barrier).backward()
@@ -1283,6 +1328,10 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
                     self.optimizer_pred.step()
 
+                    new_pars = [
+                        par.clone().detach() for par in self._predictor.parameters()
+                    ]
+
                     try:
                         self._predictor.set_lure_system()
                     except AssertionError as msg:
@@ -1291,14 +1340,13 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                     bls_iter = int(0)
                     if self.enforce_constraints_method == 'barrier':
                         max_iter = 100
-                        alpha = 0.9
+                        alpha = 0.5
                         while not self._predictor.check_constraints():
-                            for old_par, new_par in zip(
-                                old_pars, self._predictor.parameters()
-                            ):
-                                new_par.data = (
-                                    alpha * old_par.clone() + (1 - alpha) * new_par.data
-                                )
+                            new_pars = [alpha * old_par.clone() + (1- alpha)*new_par for old_par, new_par in zip(old_pars, new_pars)]
+
+                            self._predictor.write_parameters(new_pars)
+
+                            self._predictor.set_lure_system()
 
                             if bls_iter > max_iter - 1:
                                 logger.info(
@@ -1318,26 +1366,53 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
 
-                tracker(
-                    TrackMetrics(
-                        f'Track loss step {step}',
-                        {'loss': float(total_loss), 'barrier': float(barrier)},
-                    )
-                )
-                if (step - 1) % 20 == 0:
-                    nx = self._predictor.nx
-                    nwp = self._predictor.nwp
-                    lin = rnn.Linear(
-                        A=self._predictor.A_lin,
-                        B=self._predictor.B_lin,
-                        C=self._predictor.C_lin,
-                        D=torch.tensor([[0.0]]),
-                    ).to(self.device)
+                    tracker(TrackMetrics(
+                        'track loss, validation loss and barrier',
+                        {'batch loss predictor':float(batch_loss.detach().numpy()),
+                        'batch barrier predictor': float(barrier.detach().numpy()), 
+                        'batch bls iter predictor': bls_iter}
+                    ))
+
+                validation_loss = validate(self, self.loss, self.state_names, self.control_names, initial_state_names, seq_len, self.device, horizon_size=4000)
+
+                old_lr = {p_group['lr'] for p_group in self.optimizer_pred.param_groups}
+                self.scheduler.step(validation_loss)
+                if not old_lr == {p_group['lr'] for p_group in self.optimizer_pred.param_groups}:
+                    t = t * 1 / self.decay_rate
+                    logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+                    tracker(TrackMetrics(
+                        'track decay and learning rate',
+                        {
+                            'learning rate': float(self.optimizer_pred.param_groups[0]['lr']),
+                            'decay rate': float(t)
+                        },i
+                    ))
+                    # steps_without_validation_improvement = 1
+
+                    if t <= 1e-7:
+                        time_end_pred = time.time()
+                        time_total_pred = time_end_pred - time_start_pred
+                        logger.info(f'Minimum decay rate {t:1f} is reached. Stop training.')
+                        return dict(
+                            index=np.asarray(i),
+                            epoch_loss_predictor=np.asarray(predictor_loss),
+                            barrier_value=np.asarray(barrier_value),
+                            backtracking_iter=np.asarray(backtracking_iter),
+                            gradient_norm=np.asarray(gradient_norm),
+                            training_time_predictor=np.asarray(time_total_pred),
+                        )
+                tracker(TrackMetrics(
+                    'track loss, validation loss and barrier',
+                    {'epoch barrier predictor': float(barrier),
+                    'epoch loss predictor':float(total_loss/len(data_loader)),
+                    'epoch validation loss': float(validation_loss)},i
+                ))
+                if (step - 1) % 50 == 0:
                     y_lin = (
-                        lin.forward(
-                            x0[0, :].reshape(1, nx, 1),
+                        self.linear.forward(
+                            batch['x0'][0, :].reshape(1, nx, 1),
                             batch['wp'][0, :, :]
-                            .reshape(1, seq_len, nwp, 1)
+                            .reshape(1, seq_len, self._predictor.nwp, 1)
                             .float()
                             .to(self.device),
                         )[0]
@@ -1355,13 +1430,14 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                         TrackFigures(
                             f'Save output plot at step: {step}',
                             result,
-                            f'output_{step-1}.png',
+                            f'training_trajectory.png',
                         )
                     )
 
                 logger.info(
                     f'Epoch {i + 1}/{self.epochs_predictor}\t'
                     f'Total Loss (Predictor): {total_loss:1f} \t'
+                    f'Validation Loss: {validation_loss:1f} \t'
                     f'Barrier: {barrier:1f}\t'
                     f'Backtracking Line Search iteration: {max(backtracking_iter)}\t'
                     f'Max accumulated gradient norm: {np.max(max_grad):1f}'
@@ -1395,11 +1471,7 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
                                 training_time_predictor=np.asarray(time_total_pred),
                             )
                         old_loss = total_loss.detach().numpy()
-                # decay t following the idea of interior point methods
-                elif self.enforce_constraints_method == 'barrier':
-                    if i % self.epochs_with_const_decay == 0 and i != 0:
-                        t = t * 1 / self.decay_rate
-                        logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+
         time_end_pred = time.time()
         time_total_pred = time_end_pred - time_start_pred
 
@@ -1474,8 +1546,8 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
 
         torch.save(self._predictor.state_dict(), file_path[1])
         omega, sys_block_matrix = self._predictor.set_lure_system()
-        np.savetxt(file_path[3], omega, delimiter=',', fmt='%.4f')
-        np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.4f')
+        np.savetxt(file_path[3], omega, delimiter=',', fmt='%.8f')
+        np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.8f')
         tracker(
             TrackArtifacts(
                 'Save omega and system matrices',
@@ -1525,15 +1597,13 @@ class HybridConstrainedRnn(base.NormalizedControlStateModel):
         # return init_count + predictor_count
         return predictor_count
 
-    # @property
-    # def initializer(self) -> HiddenStateForwardModule:
-    #     return copy.deepcopy(self._initializer)
 
     @property
     def predictor(self) -> HiddenStateForwardModule:
-        return copy.deepcopy(self._predictor)
+        # this should only return a copy of the model, however deepcopy does not support non leaf nodes, which the parameters of the lure system are.
+        return self._predictor
 
-def validate(model:base.DynamicIdentificationModel, loss:torch.nn.Module, state_names: List[str], control_names: List[str], initial_state_names: List[str], sequence_length: int, device: torch.device, horizon_size: Optional[int] = None) -> np.float64:
+def validate(model:base.NormalizedHiddenStatePredictorModel, loss:torch.nn.Module, state_names: List[str], control_names: List[str], initial_state_names: List[str], sequence_length: int, device: torch.device, horizon_size: Optional[int] = None) -> np.float64:
     if horizon_size is None:
         horizon_size = sequence_length * 5
 
@@ -1549,16 +1619,22 @@ def validate(model:base.DynamicIdentificationModel, loss:torch.nn.Module, state_
     us_torch = torch.from_numpy(us).to(device).float()
     ys_torch = torch.from_numpy(ys).to(device).float()
     uy_init_torch = torch.from_numpy(uy_init).to(device).float()
-    x0_torch = torch.from_numpy(np.stack(x0_list)).float()
+
+    e = model._nx - x0_list[0].shape[0]
+    if e >0:
+        x0_list = [np.concatenate((x0, np.zeros(shape=(e,)))) for x0 in x0_list]
+    x0_torch = torch.from_numpy(np.stack(x0_list)).to(device).float()
+
+
 
     # evaluate model on data use sequence length x 5 as prediction horizon    
-    _, hx = model.initializer.forward(uy_init_torch)
-    ys_hat_torch, _ = model.predictor.forward(us_torch, hx=hx)
+    # _, hx = model.initializer.forward(uy_init_torch)
+    ys_hat_torch, _ = model.predictor(us_torch, hx=(x0_torch, torch.zeros_like(x0_torch)))
     # return validation error normalized over all states
     return np.float64(loss.forward(ys_torch, ys_hat_torch).detach().numpy())
 
 
-def validate_normalized(model:base.NormalizedHiddenStateInitializerPredictorModel, loss: torch.nn.Module, state_names: List[str], control_names: List[str], initial_state_names: List[str], sequence_length: int, device: torch.device, horizon_size: Optional[int] = None) -> np.float64:
+def validate_normalized(model:base.NormalizedHiddenStateInitializerPredictorModel, loss: torch.nn.Module, state_names: List[str], control_names: List[str], initial_state_names: List[str], sequence_length: int, device: torch.device, tracker: BaseEventTracker = BaseEventTracker(), horizon_size: Optional[int] = None) -> np.float64:
     if horizon_size is None:
         horizon_size = sequence_length * 5
 
@@ -1580,9 +1656,19 @@ def validate_normalized(model:base.NormalizedHiddenStateInitializerPredictorMode
     _, hx = model.initializer.forward(uy_init_torch)
     ys_hat_torch, _ = model.predictor.forward(us_torch, hx=hx)
     # return validation error normalized over all states
+    # result = utils.TrainingPrediction(
+    #     u=us_torch[0,:,:].detach().numpy(),
+    #     zp=ys_torch[0,:,:].detach().numpy(),
+    #     zp_hat=ys_hat_torch[0,:,:].detach().numpy(),
+    # )
+    # tracker(TrackFigures(
+    #     'Track first validation sequence',
+    #     result, 'validation.png'
+    # ))
     return np.float64(loss.forward(ys_torch, ys_hat_torch).detach().numpy())
 
 def get_split_validation_data(control_names: List[str], state_names: List[str], initial_state_names: List[str], sequence_length: int, horizon_size: int) -> Tuple[List[NDArray[np.float64]], List[NDArray[np.float64]], List[NDArray[np.float64]], List[NDArray[np.float64]], List[NDArray[np.float64]]]:
+    
     dataset_directory = os.path.join(os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]), 'processed', 'validation')
     us, ys, x0s = load_simulation_data(
         directory=dataset_directory,
@@ -1608,3 +1694,12 @@ def get_split_validation_data(control_names: List[str], state_names: List[str], 
         x0_list.append(sample.x0)
 
     return (u_init_list, y_init_list, x0_list, u_list, y_list)
+
+
+def retrieve_nonlinearity_class(nonlinearity: str) -> nn.Module:
+    nl: nn.Module = nn.ReLU()
+    if nonlinearity == 'Tanh':
+        nl = nn.Tanh()
+    return nl
+
+    

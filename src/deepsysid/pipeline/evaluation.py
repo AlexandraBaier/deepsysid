@@ -11,10 +11,13 @@ from ..tracker.event_data import (
     SetTags,
     StopRun,
     TrackMetrics,
+    TrackFigures,
+    TrackSequencesAsMatFile
 )
 from .configuration import ExperimentConfiguration, initialize_tracker
 from .data_io import build_result_file_name, build_score_file_name
 from .metrics import retrieve_metric_class
+from ..models.utils import TrainingPrediction
 
 
 class ReadableEvaluationScores(BaseModel):
@@ -68,6 +71,24 @@ def evaluate_model(
             true.append(
                 f['main'][str(i)]['outputs']['true_state'][:].astype(np.float64)
             )
+    tracker(TrackFigures(
+        'Track evaluation figure',
+        TrainingPrediction(
+            zp=true[-1],
+            zp_hat = pred[-1],
+            u=np.zeros_like(true[-1])
+        ), f'{mode}-output.png'
+    ))
+    tracker(TrackSequencesAsMatFile(
+        'Save .mat file of prediction and true values',
+        sequences=(true, pred),
+        file_name=build_result_file_name(
+            mode=mode,
+            window_size=config.window_size,
+            horizon_size=config.horizon_size,
+            extension='mat',
+        )
+    ))
 
     # Load metrics.
     metrics = dict()

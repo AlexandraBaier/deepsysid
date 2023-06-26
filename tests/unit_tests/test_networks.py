@@ -130,6 +130,7 @@ def test_hybrid_linearization_rnn_init() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity='Tanh'
     )
 
 

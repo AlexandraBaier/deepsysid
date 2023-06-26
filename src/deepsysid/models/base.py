@@ -20,7 +20,7 @@ class DynamicIdentificationModelConfig(BaseModel):
     device_name: str = 'cpu'
     control_names: List[str]
     state_names: List[str]
-    initial_state_names: Optional[List[str]]
+    initial_state_names: Optional[List[str]] = None
     time_delta: float
 
 
@@ -224,6 +224,8 @@ class NormalizedControlStateModel(DynamicIdentificationModel, metaclass=abc.ABCM
         self._control_mean: Optional[NDArray[np.float64]] = None
         self._control_std: Optional[NDArray[np.float64]] = None
 
+        self._nx : Optional[int] = None
+
     @property
     def state_mean(self) -> NDArray[np.float64]:
         if self._state_mean is None:
@@ -257,6 +259,12 @@ class NormalizedHiddenStateInitializerPredictorModel(
     def initializer(self) -> HiddenStateForwardModule:
         pass
 
+    @property
+    @abc.abstractmethod
+    def predictor(self) -> HiddenStateForwardModule:
+        pass
+
+class NormalizedHiddenStatePredictorModel(NormalizedControlStateModel, metaclass=abc.ABCMeta):
     @property
     @abc.abstractmethod
     def predictor(self) -> HiddenStateForwardModule:
