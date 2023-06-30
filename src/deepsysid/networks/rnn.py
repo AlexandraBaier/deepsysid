@@ -361,8 +361,11 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         beta: float,
         bias: bool,
         nonlinearity: nn.Module,
+        device: torch.device = torch.device('cpu'),
     ) -> None:
         super(LtiRnnConvConstr, self).__init__()
+
+        self.device = device
 
         # torch.set_default_dtype(torch.float64)
 
@@ -626,16 +629,16 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
                 ]
             )
 
-        return 0.5 * (M + M.T)
+        return (0.5 * (M + M.T)).to(self.device)
 
     def get_logdet(self, mat: torch.Tensor) -> torch.Tensor:
         # return logdet of matrix mat, if it is not positive semi-definite, return inf
-        logdet = mat.logdet()
-
         _, info = torch.linalg.cholesky_ex(mat.cpu())
 
         if info > 0:
-            logdet += torch.tensor(float('inf'))
+            logdet = torch.tensor(float('inf')).to(self.device)
+        else:
+            logdet = (mat.logdet()).to(self.device)
 
         return logdet
 
@@ -643,9 +646,9 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         constraints = [
             -self.get_constraints(),
             self.Y,
-            torch.diag(torch.squeeze(self.lambdas)),
+            torch.diag(torch.squeeze(self.lambdas)).to(self.device),
         ]
-        barrier = torch.tensor(0.0)
+        barrier = torch.tensor(0.0).to(self.device)
         for constraint in constraints:
             barrier += -t * self.get_logdet(constraint)
 
@@ -1263,7 +1266,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             B2_hat,
             B3_tilde,
             C1_hat,
-            torch.hstack((D11_hat, -D11_hat, torch.eye(self.nx) - D12_hat)),
+            torch.hstack(
+                (D11_hat, -D11_hat, torch.eye(self.nx).to(self.device) - D12_hat)
+            ),
             D12_hat,
             D13_hat,
             C2,
@@ -2061,12 +2066,12 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
     def get_logdet(self, mat: torch.Tensor) -> torch.Tensor:
         # return logdet of matrix mat, if it is not positive semi-definite, return inf
-        logdet = mat.logdet()
-
         _, info = torch.linalg.cholesky_ex(mat.cpu())
 
         if info > 0:
-            logdet += torch.tensor(float('inf'))
+            logdet = torch.tensor(float('inf')).to(self.device)
+        else:
+            logdet = (mat.logdet()).to(self.device)
 
         return logdet
 
@@ -2085,8 +2090,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             torch.diag(torch.squeeze(self.lam)),
             torch.concat(
                 (
-                    torch.concat((Y, torch.eye(self.nx)), dim=1),
-                    torch.concat((torch.eye(self.nx), X), dim=1),
+                    torch.concat((Y, torch.eye(self.nx).to(self.device)), dim=1),
+                    torch.concat((torch.eye(self.nx).to(self.device), X), dim=1),
                 ),
                 dim=0,
             ),

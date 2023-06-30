@@ -128,6 +128,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
     model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
     config = ConstrainedRnn.CONFIG(
         control_names=pipeline.get_4dof_ship_control_names(),
+        initial_state_names=pipeline.get_4dof_ship_state_names(),
         state_names=pipeline.get_4dof_ship_state_names(),
         device_name=pipeline.get_cpu_device_name(),
         time_delta=pipeline.get_time_delta(),
