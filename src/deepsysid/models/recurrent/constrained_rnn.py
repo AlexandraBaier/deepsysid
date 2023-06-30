@@ -763,6 +763,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
         for i in range(self.epochs_predictor):
             self._predictor.train()
+            self._initializer.train()
             data_loader = data.DataLoader(
                 predictor_dataset, self.batch_size, shuffle=True, drop_last=True
             )

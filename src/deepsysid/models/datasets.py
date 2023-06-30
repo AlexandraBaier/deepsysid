@@ -164,7 +164,7 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
 
                 x0[idx, :, :] = np.hstack(
                     (
-                        control[time + 1 : time + self.window_size + 1],
+                        control[time + 1 : time + self.window_size + 1, :],
                         state[time : time + self.window_size, :],
                     )
                 )

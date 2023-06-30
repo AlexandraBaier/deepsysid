@@ -24,7 +24,7 @@ def test_linear_model():
     control_dim = 3
     state_dim = 2
 
-    parameter_count = (control_dim + state_dim) * state_dim + state_dim
+    parameter_count = (control_dim + state_dim) * state_dim
 
     model = LinearModel(
         LinearModel.CONFIG(
@@ -51,9 +51,7 @@ def test_linear_lag():
     state_dim = 2
     lag = 3
 
-    parameter_count = (
-        state_dim * (control_dim + lag * (control_dim + state_dim)) + state_dim
-    )
+    parameter_count = state_dim * (lag * (control_dim + state_dim))
 
     model = LinearLag(
         LinearLag.CONFIG(
@@ -81,9 +79,7 @@ def test_quadratic_control_lag():
     state_dim = 2
     lag = 3
 
-    parameter_count = (
-        state_dim * (2 * control_dim + lag * (2 * control_dim + state_dim)) + state_dim
-    )
+    parameter_count = state_dim * (lag * (2 * control_dim + state_dim))
 
     model = QuadraticControlLag(
         QuadraticControlLag.CONFIG(

@@ -10,6 +10,19 @@ from deepsysid.explainability.metrics import (
     LipschitzEstimateMetric,
     NMSEInfidelityMetric,
 )
+from deepsysid.metrics import (
+    EfficiencyMetric,
+    FitRatioMetric,
+    MeanAbsoluteErrorMetric,
+    MeanSquaredErrorMetric,
+    NormalizedRootMeanSquaredErrorMetric,
+    PearsonProductMomentCorrelationCoefficientMetric,
+    RefinedEfficiencyMetric,
+    RefinedIndexOfAgreementMetric,
+    RootMeanSquaredErrorMetric,
+    Trajectory4DOFRootMeanSquaredErrorMetric,
+    TrajectoryNED6DOFRootMeanSquaredErrorMetric,
+)
 from deepsysid.models.base import DynamicIdentificationModelConfig
 from deepsysid.pipeline.configuration import (
     ExperimentConfiguration,
@@ -22,14 +35,6 @@ from deepsysid.pipeline.configuration import (
 )
 from deepsysid.pipeline.evaluation import evaluate_model
 from deepsysid.pipeline.explaining import explain_model
-from deepsysid.pipeline.metrics import (
-    MeanAbsoluteErrorMetric,
-    MeanSquaredErrorMetric,
-    NormalizedRootMeanSquaredErrorMetric,
-    RootMeanSquaredErrorMetric,
-    Trajectory4DOFRootMeanSquaredErrorMetric,
-    TrajectoryNED6DOFRootMeanSquaredErrorMetric,
-)
 from deepsysid.pipeline.testing.bounded_residual import (
     BoundedResidualInferenceTestConfig,
 )
@@ -462,27 +467,58 @@ def run_cartpole_pipeline(
         },
         metrics=dict(
             rmse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.RootMeanSquaredErrorMetric',
+                metric_class='deepsysid.metrics.RootMeanSquaredErrorMetric',
                 parameters=RootMeanSquaredErrorMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),
             mse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.MeanSquaredErrorMetric',
+                metric_class='deepsysid.metrics.MeanSquaredErrorMetric',
                 parameters=MeanSquaredErrorMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),
             mae=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.MeanAbsoluteErrorMetric',
+                metric_class='deepsysid.metrics.MeanAbsoluteErrorMetric',
                 parameters=MeanAbsoluteErrorMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),
             nrmse=ExperimentMetricConfiguration(
-                metric_class='deepsysid.pipeline.metrics.'
+                metric_class='deepsysid.metrics.'
                 'NormalizedRootMeanSquaredErrorMetric',
                 parameters=NormalizedRootMeanSquaredErrorMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            dr=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.RefinedIndexOfAgreementMetric',
+                parameters=RefinedIndexOfAgreementMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            fit=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.FitRatioMetric',
+                parameters=FitRatioMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            e=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.EfficiencyMetric',
+                parameters=EfficiencyMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            e1=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.RefinedEfficiencyMetric',
+                parameters=RefinedEfficiencyMetric.CONFIG(
+                    state_names=state_names, sample_time=get_time_delta()
+                ),
+            ),
+            r=ExperimentMetricConfiguration(
+                metric_class='deepsysid.metrics.'
+                'PearsonProductMomentCorrelationCoefficientMetric',
+                parameters=PearsonProductMomentCorrelationCoefficientMetric.CONFIG(
                     state_names=state_names, sample_time=get_time_delta()
                 ),
             ),
