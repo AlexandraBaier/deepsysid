@@ -34,6 +34,7 @@ class NMSEInfidelityMetric(BaseExplanationMetric):
                 model_input.initial_state,
                 model_input.control,
                 model_input.x0,
+                model_input.initial_x0,
             )[0]
             for model_input in model_inputs
         ]

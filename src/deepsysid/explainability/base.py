@@ -19,6 +19,7 @@ class ModelInput:
     initial_state: NDArray[np.float64]
     control: NDArray[np.float64]
     x0: Optional[NDArray[np.float64]]
+    initial_x0: Optional[NDArray[np.float64]]
 
 
 @dataclasses.dataclass

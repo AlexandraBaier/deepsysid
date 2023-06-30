@@ -48,6 +48,7 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
         x0: Optional[NDArray[np.float64]],
+        initial_x0: Optional[NDArray[np.float64]],
     ) -> Union[
         NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
     ]:
@@ -134,6 +135,7 @@ class FixedWindowModel(
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
         x0: Optional[NDArray[np.float64]],
+        initial_x0: Optional[NDArray[np.float64]],
     ) -> NDArray[np.float64]:
         """
         Multi-step prediction of system states given control inputs and initial window.
@@ -224,7 +226,7 @@ class NormalizedControlStateModel(DynamicIdentificationModel, metaclass=abc.ABCM
         self._control_mean: Optional[NDArray[np.float64]] = None
         self._control_std: Optional[NDArray[np.float64]] = None
 
-        self._nx : Optional[int] = None
+        self._nx: Optional[int] = None
 
     @property
     def state_mean(self) -> NDArray[np.float64]:
@@ -264,7 +266,10 @@ class NormalizedHiddenStateInitializerPredictorModel(
     def predictor(self) -> HiddenStateForwardModule:
         pass
 
-class NormalizedHiddenStatePredictorModel(NormalizedControlStateModel, metaclass=abc.ABCMeta):
+
+class NormalizedHiddenStatePredictorModel(
+    NormalizedControlStateModel, metaclass=abc.ABCMeta
+):
     @property
     @abc.abstractmethod
     def predictor(self) -> HiddenStateForwardModule:
@@ -278,7 +283,7 @@ def track_model_parameters(
     model_parameters = {
         name: getattr(model, name)
         for name in filter(
-            lambda attr: (isinstance(getattr(model, attr), (float, str, int)))
+            lambda attr: (isinstance(getattr(model, attr), (float, str, int, list)))
             and attr is not None,
             dir(model),
         )

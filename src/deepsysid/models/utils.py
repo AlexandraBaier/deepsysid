@@ -1,6 +1,3 @@
-from typing import Any, List, Optional, Tuple, TypeVar
-
-
 import dataclasses
 from typing import List, Optional, Tuple, TypeVar
 
@@ -18,11 +15,12 @@ class TrainingPrediction:
     u: NDArray[np.float64]
     y_lin: Optional[NDArray[np.float64]] = None
 
+
 @dataclasses.dataclass
 class XYdata:
     x: NDArray[np.float64]
     y: NDArray[np.float64]
-    title:str
+    title: str
 
 
 def mean_stddev(

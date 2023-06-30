@@ -142,6 +142,7 @@ class WashoutInitializerRecurrentNetworkModel(base.NormalizedControlStateModel):
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
         x0: Optional[NDArray[np.float64]],
+        initial_x0: Optional[NDArray[np.float64]],
     ) -> Union[
         NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
     ]:

@@ -147,7 +147,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         loss='mse',
         bias=True,
-        nonlinearity='torch.nn.Tanh()',
+        nonlinearity='ReLU',
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
@@ -186,6 +186,7 @@ def test_constrained_hybrid_rnn(tmp_path: pathlib.Path) -> None:
         loss='mse',
         enforce_constraints_method='barrier',
         epochs_without_projection=50,
+        nonlinearity='ReLU',
     )
     pipeline.run_cartpole_pipeline(
         tmp_path, model_name, model_class, model_config=config
@@ -216,7 +217,7 @@ def test_constrained_rnn_stable(tmp_path: pathlib.Path) -> None:
         epochs_predictor=2,
         bias=True,
         loss='mse',
-        nonlinearity='torch.nn.Softshrink(0.5)',
+        nonlinearity='ReLU',
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
@@ -511,6 +512,7 @@ def test_hybrid_linear_model(tmp_path: pathlib.Path) -> None:
         epochs_parallel=3,
         epochs_feedback=3,
         loss='mse',
+        nonlinearity='ReLU',
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config

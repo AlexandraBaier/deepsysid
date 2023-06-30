@@ -188,6 +188,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
         x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         if (
             self.output_mean is None

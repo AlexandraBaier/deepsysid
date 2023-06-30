@@ -22,7 +22,7 @@ from .event_data import (
     TrackFigures,
     TrackMetrics,
     TrackParameters,
-    TrackSequencesAsMatFile
+    TrackSequencesAsMatFile,
 )
 
 FIGURE_DIRECTORY_NAME = 'figures'
@@ -67,9 +67,7 @@ class MlFlowTracker(BaseEventTracker):
                 fig = plot_outputs(event.results)
             elif isinstance(event.results, XYdata):
                 fig = plot_xydata(event.results)
-            mlflow.log_figure(
-                fig, f'{FIGURE_DIRECTORY_NAME}/{event.name}'
-            )
+            mlflow.log_figure(fig, f'{FIGURE_DIRECTORY_NAME}/{event.name}')
             plt.close()
         elif isinstance(event, TrackSequencesAsMatFile):
             self.save_mat_file(event)
@@ -81,9 +79,10 @@ class MlFlowTracker(BaseEventTracker):
             raise NotImplementedError(f'{type(event)} is not implemented.')
 
     def save_mat_file(self, event: TrackSequencesAsMatFile) -> None:
-        savemat(event.file_name, 
-                {'y': np.array(event.sequences[0]),
-                 'y_hat': np.array(event.sequences[1])})
+        savemat(
+            event.file_name,
+            {'y': np.array(event.sequences[0]), 'y_hat': np.array(event.sequences[1])},
+        )
         mlflow.log_artifact(event.file_name)
 
     def save_tracking_configuration(self, event: SaveTrackingConfiguration) -> None:

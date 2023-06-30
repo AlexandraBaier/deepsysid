@@ -457,8 +457,8 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         # any feasible solution works as initialization for the parameters
         nM = M.shape[0]
         tol = 1e-4
-        
-        rand_matrix = np.random.normal(0,1/np.sqrt(self.nx), (self.nx,self.nw))
+
+        rand_matrix = np.random.normal(0, 1 / np.sqrt(self.nx), (self.nx, self.nw))
         objective = cp.Minimize(cp.norm(Y @ rand_matrix - B2_tilde))
         # nu = cp.Variable((1, nM))
         # objective = cp.Minimize(nu @ np.ones((nM, 1)))
@@ -512,7 +512,9 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         y = torch.zeros((n_batch, n_sample, self.ny))
 
         if hx is not None:
-            x = hx[0][-1] # take the hidden state of the last layer from the initializer
+            x = hx[0][
+                -1
+            ]  # take the hidden state of the last layer from the initializer
         else:
             x = torch.zeros((n_batch, self.nx))
 
@@ -636,19 +638,18 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
             logdet += torch.tensor(float('inf'))
 
         return logdet
-    
-    def get_barriers(self, t:float) -> torch.Tensor:
+
+    def get_barriers(self, t: float) -> torch.Tensor:
         constraints = [
             -self.get_constraints(),
             self.Y,
-            torch.diag(torch.squeeze(self.lambdas))
+            torch.diag(torch.squeeze(self.lambdas)),
         ]
         barrier = torch.tensor(0.0)
         for constraint in constraints:
-            barrier += - t * self.get_logdet(constraint)
+            barrier += -t * self.get_logdet(constraint)
 
         return barrier
-        
 
     def check_constr(self) -> bool:
         with torch.no_grad():
@@ -673,21 +674,27 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
     def write_flat_parameters(self, flat_param: torch.Tensor) -> None:
         idx = 0
         for p in self.parameters():
-            p.data = flat_param[idx:idx+p.numel()].view_as(p.data)
+            p.data = flat_param[idx : idx + p.numel()].view_as(p.data)
             idx = p.numel()
 
     def write_parameters(self, params: List[torch.Tensor]) -> None:
         for old_par, new_par in zip(params, self.parameters()):
             new_par.data = old_par.clone()
 
-    def get_linear_combination(self, old_pars: List[torch.Tensor], new_pars: List[torch.Tensor]) -> Tuple[List[float], List[float]]:
+    def get_linear_combination(
+        self, old_pars: List[torch.Tensor], new_pars: List[torch.Tensor]
+    ) -> Tuple[List[float], List[float]]:
         alphas = np.linspace(0, 1, 100)
         barriers: List[float] = []
         for alpha in alphas:
-            par = [(1-alpha)*old_par + alpha* new_par for old_par, new_par in zip(old_pars, new_pars)]
+            par = [
+                (1 - alpha) * old_par + alpha * new_par
+                for old_par, new_par in zip(old_pars, new_pars)
+            ]
             self.write_parameters(par)
             barriers.append(float(self.get_barriers(1.0).cpu().detach().numpy()))
         return (barriers, list(alphas))
+
 
 class Linear(nn.Module):
     def __init__(
@@ -720,10 +727,7 @@ class Linear(nn.Module):
 
     def forward(
         self, x0: torch.Tensor, us: torch.Tensor, return_state: bool = False
-    ) -> Union[
-        torch.Tensor,
-        Tuple[torch.Tensor, torch.Tensor]
-    ]:
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         device = self.A.device
         n_batch, N, _, _ = us.shape
         x = torch.zeros(size=(n_batch, N + 1, self._nx, 1)).to(device)
@@ -816,7 +820,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         nwu: int,
         nzu: int,
         gamma: float,
-        nonlinearity: nn.Module,
+        nonlinearity: Callable[[torch.Tensor], torch.Tensor],
         device: torch.device = torch.device('cpu'),
     ) -> None:
         super().__init__()
@@ -828,6 +832,11 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         assert nzu == nwu
         self.nzu = nzu  # output size of uncertainty channel
         self.nwu = nwu  # input size of uncertainty channel
+
+        self._x_mean: Optional[torch.Tensor] = None
+        self._x_std: Optional[torch.Tensor] = None
+        self._wp_mean: Optional[torch.Tensor] = None
+        self._wp_std: Optional[torch.Tensor] = None
 
         self.alpha = alpha
         self.beta = beta
@@ -894,6 +903,11 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         #     torch.zeros(size=(self.nzu, self.nwu)).float().to(device)
         # )
 
+        B_lin_hat = np.hstack(
+            (B_lin, np.zeros(shape=(B_lin.shape[0], self.nwp + self.nx)))
+        )
+        self.nwp_hat = self.nwp + self.nwp + self.nx
+
         self.S_s = torch.from_numpy(
             np.concatenate(
                 [
@@ -901,22 +915,26 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         [
                             A_lin,
                             np.zeros(shape=(self.nx, self.nx)),
-                            B_lin,
+                            B_lin_hat,
                             np.zeros(shape=(self.nx, self.nwu)),
                         ],
                         axis=1,
                     ),
-                    np.zeros(shape=(self.nx, self.nx + self.nx + self.nwp + self.nwu)),
+                    np.zeros(
+                        shape=(self.nx, self.nx + self.nx + self.nwp_hat + self.nwu)
+                    ),
                     np.concatenate(
                         [
                             C_lin,
                             np.zeros(shape=(self.nzp, self.nx)),
-                            np.zeros(shape=(self.nzp, self.nwp)),
+                            np.zeros(shape=(self.nzp, self.nwp_hat)),
                             np.zeros(shape=(self.nzp, self.nwu)),
                         ],
                         axis=1,
                     ),
-                    np.zeros(shape=(self.nzu, self.nx + self.nx + self.nwp + self.nwu)),
+                    np.zeros(
+                        shape=(self.nzu, self.nx + self.nx + self.nwp_hat + self.nwu)
+                    ),
                 ],
                 axis=0,
                 dtype=np.float32,
@@ -969,17 +987,17 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         [
                             np.zeros(shape=(self.nx, self.nx)),
                             np.eye(self.nx),
-                            np.zeros(shape=(self.nx, self.nwp)),
+                            np.zeros(shape=(self.nx, self.nwp_hat)),
                             np.zeros(shape=(self.nx, self.nwu)),
                         ],
                         axis=1,
                     ),
                     np.concatenate(
                         [
-                            np.zeros(shape=(self.nwp, self.nx)),
-                            np.zeros(shape=(self.nwp, self.nx)),
-                            np.eye(self.nwp),
-                            np.zeros(shape=(self.nwp, self.nwu)),
+                            np.zeros(shape=(self.nwp_hat, self.nx)),
+                            np.zeros(shape=(self.nwp_hat, self.nx)),
+                            np.eye(self.nwp_hat),
+                            np.zeros(shape=(self.nwp_hat, self.nwu)),
                         ],
                         axis=1,
                     ),
@@ -987,7 +1005,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         [
                             np.eye(self.ny),
                             np.zeros(shape=(self.ny, self.nx)),
-                            np.zeros(shape=(self.ny, self.nwp)),
+                            np.zeros(shape=(self.ny, self.nwp_hat)),
                             np.zeros(shape=(self.ny, self.nwu)),
                         ],
                         axis=1,
@@ -996,7 +1014,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         [
                             np.zeros(shape=(self.nwu, self.nx)),
                             np.zeros(shape=(self.nwu, self.nx)),
-                            np.zeros(shape=(self.nwu, self.nwp)),
+                            np.zeros(shape=(self.nwu, self.nwp_hat)),
                             np.eye(self.nwu),
                         ],
                         axis=1,
@@ -1007,7 +1025,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             )
         ).to(device)
 
-        self.set_lure_system()
+        # self.set_lure_system()
 
     def initialize_lmi(self) -> None:
         # 1. solve synthesis inequalities to find feasible parameter set
@@ -1191,6 +1209,15 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         return (X, Y, U, V)
 
     def set_lure_system(self) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+
+        if (
+            self._x_mean is None
+            or self._x_std is None
+            or self._wp_mean is None
+            or self._wp_std is None
+        ):
+            raise ValueError('Mean and std values of linear models are not set.')
+
         device = self.device
         omega_tilde_0 = self.get_omega_tilde().to(device)
 
@@ -1221,18 +1248,27 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             D22,
         ) = self.get_controller_matrices(omega_0)
 
+        B1_hat = B1_tilde @ torch.diag(1 / self._wp_std)
+        B2_hat = B2_tilde @ torch.diag(1 / self._x_std)
+        C1_hat = torch.diag(self._x_std) @ C1_tilde
+        D11_hat = torch.diag(self._x_std) @ D11_tilde @ torch.diag(1 / self._wp_std)
+        D12_hat = torch.diag(self._x_std) @ D12_tilde @ torch.diag(1 / self._x_std)
+        D13_hat = torch.diag(self._x_std) @ D13_tilde
+        D21_hat = D21 @ torch.diag(1 / self._wp_std)
+        D22_hat = D22 @ torch.diag(1 / self._x_std)
+
         omega = self.get_omega(
             A_tilde,
-            B1_tilde,
-            B2_tilde,
+            torch.hstack((B1_hat, -B1_hat, -B2_hat)),
+            B2_hat,
             B3_tilde,
-            C1_tilde,
-            D11_tilde,
-            D12_tilde,
-            D13_tilde,
+            C1_hat,
+            torch.hstack((D11_hat, -D11_hat, torch.eye(self.nx) - D12_hat)),
+            D12_hat,
+            D13_hat,
             C2,
-            D21,
-            D22,
+            torch.hstack((D21_hat, -D21_hat, -D22_hat)),
+            D22_hat,
         )
 
         sys_block_matrix = self.S_s + self.S_l @ omega @ self.S_r
@@ -1254,8 +1290,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         D22_cal = torch.zeros_like(D22_cal)
 
         def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
-            return (2 / (self.beta - self.alpha)) * (
-                self.nl(z) - ((self.alpha + self.beta) / 2) * z
+            return torch.tensor((2 / (self.beta - self.alpha))) * (
+                self.nl(z) - torch.tensor(((self.alpha + self.beta) / 2)) * z
             )
 
         self.lure = LureSystem(
@@ -1437,11 +1473,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     ]:
         A_cal = interconnected_block_matrix[: self.nx + self.nx, : self.nx + self.nx]
         B1_cal = interconnected_block_matrix[
-            : self.nx + self.nx, self.nx + self.nx : self.nx + self.nx + self.nwp
+            : self.nx + self.nx, self.nx + self.nx : self.nx + self.nx + self.nwp_hat
         ]
         B2_cal = interconnected_block_matrix[
             : self.nx + self.nx,
-            self.nx + self.nx + self.nwp : self.nx + self.nx + self.nwp + self.nwu,
+            self.nx
+            + self.nx
+            + self.nwp_hat : self.nx
+            + self.nx
+            + self.nwp_hat
+            + self.nwu,
         ]
 
         C1_cal = interconnected_block_matrix[
@@ -1449,11 +1490,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         ]
         D11_cal = interconnected_block_matrix[
             self.nx + self.nx : self.nx + self.nx + self.nzp,
-            self.nx + self.nx : self.nx + self.nx + self.nwp,
+            self.nx + self.nx : self.nx + self.nx + self.nwp_hat,
         ]
         D12_cal = interconnected_block_matrix[
             self.nx + self.nx : self.nx + self.nx + self.nzp,
-            self.nx + self.nx + self.nwp : self.nx + self.nx + self.nwp + self.nwu,
+            self.nx
+            + self.nx
+            + self.nwp_hat : self.nx
+            + self.nx
+            + self.nwp_hat
+            + self.nwu,
         ]
 
         C2_cal = interconnected_block_matrix[
@@ -1462,11 +1508,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         ]
         D21_cal = interconnected_block_matrix[
             self.nx + self.nx + self.nzp : self.nx + self.nx + self.nzp + self.nzu,
-            self.nx + self.nx : self.nx + self.nx + self.nwp,
+            self.nx + self.nx : self.nx + self.nx + self.nwp_hat,
         ]
         D22_cal = interconnected_block_matrix[
             self.nx + self.nx + self.nzp : self.nx + self.nx + self.nzp + self.nzu,
-            self.nx + self.nx + self.nwp : self.nx + self.nx + self.nwp + self.nwu,
+            self.nx
+            + self.nx
+            + self.nwp_hat : self.nx
+            + self.nx
+            + self.nwp_hat
+            + self.nwu,
         ]
 
         return (
@@ -1757,8 +1808,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # self.get_barrier(1e-3)
 
         return y.reshape(n_batch, N, self.lure._ny), (
-            x.reshape(n_batch, N + 1, self.lure._nx),
-            x.reshape(n_batch, N + 1, self.lure._nx),
+            x[:, :, : self.nx].reshape(n_batch, N + 1, self.nx),
+            x[:, :, self.nx :].reshape(n_batch, N + 1, self.nx),
         )
 
     def get_constraints(self) -> torch.Tensor:
@@ -2007,7 +2058,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         P = self.get_constraints()
         _, info = torch.linalg.cholesky_ex(-P)
         return True if info == 0 else False
-    
+
     def get_logdet(self, mat: torch.Tensor) -> torch.Tensor:
         # return logdet of matrix mat, if it is not positive semi-definite, return inf
         logdet = mat.logdet()
@@ -2018,8 +2069,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             logdet += torch.tensor(float('inf'))
 
         return logdet
-    
-    def get_barriers(self, t:torch.Tensor) -> torch.Tensor:
+
+    def get_barriers(self, t: torch.Tensor) -> torch.Tensor:
         L_x = self.construct_lower_triangular_matrix(
             L_flat=self.L_x_flat, diag_length=self.nx
         ).to(self.device)
@@ -2032,15 +2083,18 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         constraints = [
             -self.get_constraints(),
             torch.diag(torch.squeeze(self.lam)),
-            torch.concat((
-                torch.concat((Y, torch.eye(self.nx)), dim=1),
-                torch.concat((torch.eye(self.nx), X), dim=1)
-            ),dim=0)
+            torch.concat(
+                (
+                    torch.concat((Y, torch.eye(self.nx)), dim=1),
+                    torch.concat((torch.eye(self.nx), X), dim=1),
+                ),
+                dim=0,
+            ),
         ]
 
         barrier = torch.tensor(0.0).to(self.device)
         for constraint in constraints:
-            barrier += - t * self.get_logdet(constraint)
+            barrier += -t * self.get_logdet(constraint)
 
         return barrier
 
@@ -2330,6 +2384,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     def write_parameters(self, params: List[torch.Tensor]) -> None:
         for old_par, new_par in zip(params, self.parameters()):
             new_par.data = old_par.clone()
+
 
 class InitLSTM(nn.Module):
     def __init__(
