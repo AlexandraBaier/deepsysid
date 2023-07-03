@@ -556,7 +556,14 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
 
         with torch.no_grad():
             x_init = (
-                torch.from_numpy(np.hstack((initial_control, initial_state)))
+                torch.from_numpy(
+                    np.hstack(
+                        (
+                            np.vstack((initial_control[1:, :], control[0, :])),
+                            initial_state,
+                        )
+                    )
+                )
                 .unsqueeze(0)
                 .float()
                 .to(self.device)

@@ -450,7 +450,7 @@ class RecurrentHybridPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]
 
                 x_init[idx, :, :] = np.hstack(
                     (
-                        control[time : time + self.sequence_length, :],
+                        control[time + 1 : time + 1 + self.sequence_length, :],
                         state[time : time + self.sequence_length, :],
                     )
                 )
