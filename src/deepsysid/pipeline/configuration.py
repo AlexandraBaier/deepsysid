@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Type
 from pydantic import BaseModel, root_validator
 
 from ..explainability.base import (
-    BaseExplainerConfig,
+    AdditiveFeatureAttributionExplainerConfig,
     BaseExplanationMetricConfig,
     retrieve_explainer_class,
     retrieve_explanation_metric_class,
@@ -39,7 +39,7 @@ class ExperimentTestConfiguration(BaseModel):
 class ExperimentExplainerConfiguration(BaseModel):
     explainer_class: str
     explained_super_classes: Optional[List[str]]
-    parameters: BaseExplainerConfig
+    parameters: AdditiveFeatureAttributionExplainerConfig
 
 
 class GridSearchTrackingConfiguration(BaseModel):

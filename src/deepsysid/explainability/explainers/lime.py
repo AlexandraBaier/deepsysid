@@ -1,71 +1,69 @@
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import numpy as np
+from interpret.api.templates import FeatureValueExplanation
+from interpret.blackbox import LimeTabular
 from numpy.typing import NDArray
-from sklearn.linear_model import LassoCV
 
-from ...models import utils
 from ...models.base import DynamicIdentificationModel
-from ..base import BaseExplainer, BaseExplainerConfig, Explanation, ModelInput
-from .utils import denormalize_control_weights, denormalize_state_weights
+from ..base import (
+    AdditiveFeatureAttributionExplainer,
+    AdditiveFeatureAttributionExplainerConfig,
+    AdditiveFeatureAttributionExplanation,
+    ModelInput,
+)
 
 
-class LIMEExplainerConfig(BaseExplainerConfig):
+class LIMEExplainerConfig(AdditiveFeatureAttributionExplainerConfig):
     num_samples: int
-    cv_folds: Optional[int] = 5
+    num_features: Optional[int] = None
 
 
-class LIMEExplainer(BaseExplainer):
+class LIMEExplainer(AdditiveFeatureAttributionExplainer):
     CONFIG = LIMEExplainerConfig
 
     def __init__(self, config: LIMEExplainerConfig) -> None:
         super().__init__(config)
 
         self.num_samples = config.num_samples
-        self.cv_folds = config.cv_folds
+        self.num_features = config.num_features
 
-        self.state_mean: Optional[NDArray[np.float64]] = None
-        self.state_std: Optional[NDArray[np.float64]] = None
-        self.control_mean: Optional[NDArray[np.float64]] = None
-        self.control_std: Optional[NDArray[np.float64]] = None
-        self.input_mean: Optional[NDArray[np.float64]] = None
-        self.input_std: Optional[NDArray[np.float64]] = None
-        self.output_mean: Optional[NDArray[np.float64]] = None
-        self.output_std: Optional[NDArray[np.float64]] = None
+        self._x_train: Optional[NDArray[np.float64]] = None
+        self._y_train: Optional[NDArray[np.float64]] = None
+        self._explainers: Optional[List[LimeTabular]] = None
+        self._model: Optional[DynamicIdentificationModel] = None
 
     def initialize(
         self,
         training_inputs: List[ModelInput],
         training_outputs: List[NDArray[np.float64]],
     ) -> None:
+        assert len(training_inputs) == len(
+            training_outputs
+        ), 'Expecting the same number of inputs and outputs.'
+        assert len(training_inputs) > 0, 'Expecting at least one input/output pair.'
+
         window_size: int = training_inputs[0].initial_state.shape[0]
         horizon_size: int = training_inputs[0].control.shape[0]
+        input_size: int = training_inputs[0].control.shape[1]
+        output_size: int = training_inputs[0].initial_state.shape[1]
 
-        controls = [inp.initial_control for inp in training_inputs] + [
-            inp.control for inp in training_inputs
-        ]
-        states = [inp.initial_state for inp in training_inputs] + [
-            out for out in training_outputs
-        ]
-
-        self.control_mean, self.control_std = utils.mean_stddev(controls)
-        self.state_mean, self.state_std = utils.mean_stddev(states)
-
-        input_mean: List[NDArray[np.float64]] = (
-            window_size * [self.control_mean]
-            + window_size * [self.state_mean]
-            + horizon_size * [self.control_mean]
+        input_array = np.zeros(
+            (
+                len(training_inputs),
+                window_size * (output_size + input_size) + horizon_size * input_size,
+            ),
+            dtype=np.float64,
         )
-        self.input_mean = np.hstack(input_mean)
+        output_array = np.zeros((len(training_outputs), output_size), dtype=np.float64)
+        for idx, (x, y) in enumerate(zip(training_inputs, training_outputs)):
+            input_array[idx, :] = _flatten_model_input(x)
+            output_array[idx, :] = y
 
-        input_std: List[NDArray[np.float64]] = (
-            window_size * [self.control_std]
-            + window_size * [self.state_std]
-            + horizon_size * [self.control_std]
-        )
-        self.input_std = np.hstack(input_std)
-        self.output_mean = self.state_mean
-        self.output_std = self.state_std
+        self._x_train = input_array
+        self._y_train = output_array
+        self._explainers = None
+        self._model = None
 
     def explain(
         self,
@@ -73,127 +71,187 @@ class LIMEExplainer(BaseExplainer):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-    ) -> Explanation:
-        if (
-            self.state_mean is None
-            or self.state_std is None
-            or self.control_mean is None
-            or self.control_std is None
-            or self.input_mean is None
-            or self.input_std is None
-            or self.output_mean is None
-            or self.output_std is None
-        ):
+    ) -> AdditiveFeatureAttributionExplanation:
+        if self._x_train is None or self._y_train is None:
             raise ValueError(
                 'Explainer needs to be initialized with initialize' 'before explaining.'
             )
-        x_ref = np.hstack(
-            (initial_control.flatten(), initial_state.flatten(), control.flatten())
-        )
 
-        control_dim = initial_control.shape[1]
-        state_dim = initial_state.shape[1]
-        window_size = initial_state.shape[0]
+        window_size = initial_control.shape[0]
         horizon_size = control.shape[0]
-        input_dim = x_ref.shape[0]
-        output_dim = state_dim
+        input_size = initial_control.shape[1]
+        output_size = initial_state.shape[1]
 
-        x_ref = utils.normalize(x_ref, self.input_mean, self.input_std)
-        disturbances = np.random.normal(0.0, 1.0, (self.num_samples, input_dim))
-        x_all = x_ref + disturbances
-        x_all_dist_to_ref = (1.0 + 1e-05) / (
-            np.linalg.norm(disturbances, ord=2, axis=1) + 1e-05
-        )
-        x_all_den = utils.denormalize(x_all, self.input_mean, self.input_std)
+        # If a different model (including model reference) is passed
+        # to the explainer, we should just initialize the explainers again.
+        if self._explainers is None or self._model != model:
+            self._model = model
+            self._explainers = [
+                LimeTabular(
+                    model=_construct_predict(
+                        model=model,
+                        output_idx=output_idx,
+                        input_size=initial_control.shape[1],
+                        output_size=output_size,
+                        window_size=initial_control.shape[0],
+                        horizon_size=control.shape[0],
+                    ),
+                    data=self._x_train,
+                )
+                for output_idx in range(output_size)
+            ]
 
-        y_all = np.zeros((self.num_samples, output_dim))
-        for idx in range(self.num_samples):
-            initial_control_i = x_all_den[idx, : window_size * control_dim].reshape(
-                (window_size, control_dim)
+        self._model = model
+
+        x = _flatten_model_input(
+            ModelInput(
+                initial_control=initial_control,
+                initial_state=initial_state,
+                control=control,
+                x0=None,
             )
-            initial_state_i = x_all_den[
-                idx, window_size * control_dim : window_size * (control_dim + state_dim)
-            ].reshape((window_size, state_dim))
-            control_i = x_all_den[
-                idx, window_size * (state_dim + control_dim) :
-            ].reshape((horizon_size, control_dim))
+        ).reshape(1, -1)
 
-            model_output = model.simulate(
-                initial_control_i, initial_state_i, control_i, None
-            )
-            if isinstance(model_output, np.ndarray):
-                y_all[idx, :] = model_output[-1]
-            else:
-                y_all[idx, :] = model_output[0][-1]
-
-            y_all[idx, :] = utils.normalize(
-                y_all[idx, :], self.output_mean, self.output_std
-            )
-
-        weights_initial_control = np.zeros(
-            (state_dim, window_size, control_dim), dtype=np.float64
-        )
         weights_initial_state = np.zeros(
-            (state_dim, window_size, state_dim), dtype=np.float64
+            (output_size, window_size, output_size), dtype=np.float64
+        )
+        weights_initial_control = np.zeros(
+            (output_size, window_size, input_size), dtype=np.float64
         )
         weights_control = np.zeros(
-            (state_dim, horizon_size, control_dim), dtype=np.float64
+            (output_size, horizon_size, input_size), dtype=np.float64
         )
-        intercept = self.state_mean.copy()
-
-        for out_idx in range(state_dim):
-            local_estimator = LassoCV(fit_intercept=True, cv=self.cv_folds)
-            local_estimator.fit(
-                x_all, y_all[:, out_idx], sample_weight=x_all_dist_to_ref
+        intercept = np.zeros((output_size,), dtype=np.float64)
+        for output_idx, explainer in enumerate(self._explainers):
+            explanation = explainer.explain_local(
+                X=x,
+                num_samples=self.num_samples,
+                num_features=self.num_features
+                if self.num_features is not None
+                else x.shape[1],
             )
-
-            weights_initial_control[out_idx, :, :] = local_estimator.coef_[
-                : window_size * control_dim
-            ].reshape((window_size, control_dim))
-            weights_initial_state[out_idx, :, :] = local_estimator.coef_[
-                window_size * control_dim : window_size * (state_dim + control_dim)
-            ].reshape((window_size, state_dim))
-            weights_control[out_idx, :, :] = local_estimator.coef_[
-                window_size * (state_dim + control_dim) :
-            ].reshape((horizon_size, control_dim))
-            intercept[out_idx] = (
-                intercept[out_idx]
-                + local_estimator.intercept_ * self.state_std[out_idx]
+            intercept[output_idx] = _explanation_to_intercept(
+                explanation, intercept_key='Intercept'
             )
-
-        for time in range(window_size):
-            (
-                weights_initial_control[:, time, :],
-                intercept_delta,
-            ) = denormalize_control_weights(
-                state_std=self.state_std,
-                control_mean=self.control_mean,
-                control_std=self.control_std,
-                control_matrix=weights_initial_control[:, time, :],
+            attributions = _explanation_to_attributions(
+                explanation, array_size=x.shape[1]
             )
-            intercept = intercept + intercept_delta
-            (
-                weights_initial_state[:, time, :],
-                intercept_delta,
-            ) = denormalize_state_weights(
-                state_mean=self.state_mean,
-                state_std=self.state_std,
-                state_matrix=weights_initial_state[:, time, :],
+            input_weights = _recover_flattened_model_input(
+                x=attributions,
+                window_size=window_size,
+                horizon_size=horizon_size,
+                input_size=input_size,
+                output_size=output_size,
             )
-            intercept = intercept + intercept_delta
+            weights_initial_state[output_idx, :, :] = input_weights.initial_state
+            weights_initial_control[output_idx, :, :] = input_weights.initial_control
+            weights_control[output_idx, :, :] = input_weights.control
 
-        for time in range(horizon_size):
-            weights_control[:, time, :], intercept_delta = denormalize_control_weights(
-                state_std=self.state_std,
-                control_mean=self.control_mean,
-                control_std=self.control_std,
-                control_matrix=weights_control[:, time, :],
-            )
-            intercept = intercept + intercept_delta
-
-        return Explanation(
+        return AdditiveFeatureAttributionExplanation(
             weights_initial_control=weights_initial_control,
             weights_initial_state=weights_initial_state,
             weights_control=weights_control,
             intercept=intercept,
         )
+
+
+def _explanation_to_attributions(
+    explanation: FeatureValueExplanation, array_size: int
+) -> NDArray[np.float64]:
+    names = explanation.data(key=0)['names']
+    scores = explanation.data(key=0)['scores']
+    attributions = np.zeros((array_size,), dtype=np.float64)
+    for name, score in zip(names, scores):
+        try:
+            original_idx = int(name.split('_')[1])
+        except ValueError:
+            raise ValueError(
+                'Expected FeatureValueExplanation.data(key=?)["names"] '
+                'to only contain strings of format "feature_XXXX" where '
+                f'X are digits. Encountered {name} instead. This is '
+                f'a bug in deepsysid.'
+            )
+        attributions[original_idx] = score
+    return attributions
+
+
+def _explanation_to_intercept(
+    explanation: FeatureValueExplanation, intercept_key: str
+) -> float:
+    intercept_idx = explanation.data(key=0)['extra']['names'].index(intercept_key)
+    return float(explanation.data(key=0)['extra']['scores'][intercept_idx])
+
+
+def _construct_predict(
+    model: DynamicIdentificationModel,
+    output_idx: int,
+    window_size: int,
+    horizon_size: int,
+    input_size: int,
+    output_size: int,
+) -> Callable[
+    [NDArray[np.float64], Optional[NDArray[np.float64]]], NDArray[np.float64]
+]:
+    def _predict(
+        x: NDArray[np.float64], sample_weight: Optional[NDArray[np.float64]] = None
+    ) -> NDArray[np.float64]:
+        assert len(x.shape) == 2, 'Expecting x to be 2-dimensional.'
+
+        n_samples = x.shape[0]
+        y = np.zeros((n_samples,))
+        for sample_idx in range(n_samples):
+            model_input = _recover_flattened_model_input(
+                x=x[sample_idx, :],
+                input_size=input_size,
+                output_size=output_size,
+                window_size=window_size,
+                horizon_size=horizon_size,
+            )
+            model_output = model.simulate(
+                initial_state=model_input.initial_state,
+                initial_control=model_input.initial_control,
+                control=model_input.control,
+                x0=None,
+            )
+            if isinstance(model_output, np.ndarray):
+                y[sample_idx] = model_output[-1, output_idx]
+            else:
+                y[sample_idx] = model_output[0][-1, output_idx]
+        return y
+
+    return _predict
+
+
+def _flatten_model_input(model_input: ModelInput) -> NDArray[np.float64]:
+    return np.hstack(
+        (
+            model_input.initial_state.flatten(),
+            model_input.initial_control.flatten(),
+            model_input.control.flatten(),
+        )
+    )
+
+
+def _recover_flattened_model_input(
+    x: NDArray[np.float64],
+    window_size: int,
+    horizon_size: int,
+    input_size: int,
+    output_size: int,
+) -> ModelInput:
+    expected_size = window_size * (input_size + output_size) + horizon_size * input_size
+    assert x.shape == (expected_size,), (
+        f'Expects ndarray of shape ({expected_size},).'
+        f'Received ndarray of shape {x.shape}.'
+    )
+
+    initial_control_offset = window_size * output_size
+    control_offset = initial_control_offset + window_size * input_size
+    return ModelInput(
+        initial_state=x[:initial_control_offset].reshape(window_size, output_size),
+        initial_control=x[initial_control_offset:control_offset].reshape(
+            window_size, input_size
+        ),
+        control=x[control_offset:].reshape(horizon_size, input_size),
+        x0=None,
+    )

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepsysid"
-version = "0.1.21"
+version = "0.1.22"
 description = "A system identification toolkit for multistep prediction using deep learning and hybrid methods."
 authors = ["Alexandra Baier <alx.baier@gmail.com>", "Daniel Frank <daniel@familiefrank.eu>"]
 readme = "README.md"
@@ -24,6 +24,7 @@ rarfile = { version = "^4.0" }
 scipy = { version = "^1.9.3" }
 mlflow = { version = "^2.3.0", optional = true }
 matplotlib = { version = "^3.7.1", optional = true }
+interpret = "^0.4.2"
 
 [tool.poetry.extras]
 torch-cpu = ["torch"]

@@ -54,7 +54,7 @@ def explain_model(
                 ModelInput(
                     sim.initial_control, sim.initial_state, sim.true_control, sim.x0
                 ),
-                sim.true_state,
+                sim.true_state[-1, :],
             )
             for sim in split_simulations(
                 configuration.window_size,

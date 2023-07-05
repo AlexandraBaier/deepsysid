@@ -1,11 +1,11 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
 
 from deepsysid.explainability.base import (
-    BaseExplainer,
+    AdditiveFeatureAttributionExplainer,
     BaseExplanationMetric,
     BaseExplanationMetricConfig,
     ModelInput,
@@ -15,16 +15,23 @@ from deepsysid.models.base import DynamicIdentificationModel
 logger = logging.getLogger(__name__)
 
 
+class NMSEInfidelityMetricConfig(BaseExplanationMetricConfig):
+    explained_horizon: Optional[int] = None
+
+
 class NMSEInfidelityMetric(BaseExplanationMetric):
-    def __init__(self, config: BaseExplanationMetricConfig):
+    CONFIG = NMSEInfidelityMetricConfig
+
+    def __init__(self, config: NMSEInfidelityMetricConfig):
         super().__init__(config)
 
         self.state_dim = len(config.state_names)
+        self.explained_horizon = config.explained_horizon
 
     def measure(
         self,
         model: DynamicIdentificationModel,
-        explainer: BaseExplainer,
+        explainer: AdditiveFeatureAttributionExplainer,
         model_inputs: List[ModelInput],
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
 
@@ -57,25 +64,16 @@ class NMSEInfidelityMetric(BaseExplanationMetric):
 
         nmse = np.zeros((self.state_dim,), dtype=np.float64)
         for model_input, y, expl in zip(model_inputs, model_predictions, explanations):
-            initial_control_contr = (
-                expl.weights_initial_control.reshape(self.state_dim, -1)
-                @ model_input.initial_control.flatten()
-            )
-            initial_state_contr = (
-                expl.weights_initial_state.reshape(self.state_dim, -1)
-                @ model_input.initial_state.flatten()
-            )
-            control_contr = (
-                expl.weights_control.reshape(self.state_dim, -1)
-                @ model_input.control.flatten()
-            )
+            initial_control_contr = np.sum(expl.weights_initial_control, axis=(1, 2))
+            initial_state_contr = np.sum(expl.weights_initial_state, axis=(1, 2))
+            control_contr = np.sum(expl.weights_control, axis=(1, 2))
             yhat = (
                 initial_control_contr
                 + initial_state_contr
                 + control_contr
                 + expl.intercept
             )
-            nmse = nmse + (yhat - y[-1]) * (yhat - y[-1])
+            nmse = nmse + (yhat - y) * (yhat - y)
 
         nmse = (1.0 / ((std_y**2) * n)) * nmse
 
@@ -122,7 +120,7 @@ class LipschitzEstimateMetric(BaseExplanationMetric):
     def measure(
         self,
         model: DynamicIdentificationModel,
-        explainer: BaseExplainer,
+        explainer: AdditiveFeatureAttributionExplainer,
         model_inputs: List[ModelInput],
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         window_size = model_inputs[0].initial_state.shape[0]
@@ -216,7 +214,7 @@ class ExplanationComplexityMetric(BaseExplanationMetric):
     def measure(
         self,
         model: DynamicIdentificationModel,
-        explainer: BaseExplainer,
+        explainer: AdditiveFeatureAttributionExplainer,
         model_inputs: List[ModelInput],
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         complexities: List[float] = []

@@ -3,8 +3,9 @@ from typing import Callable, Dict, List, Literal
 
 import torch
 
-from deepsysid.explainability.base import BaseExplainerConfig
-from deepsysid.explainability.explainers.lime import LIMEExplainerConfig
+from deepsysid.explainability.base import AdditiveFeatureAttributionExplainerConfig
+from deepsysid.explainability.explainers.lime import LIMEExplainer
+from deepsysid.explainability.explainers.switching import SwitchingLSTMExplainer
 from deepsysid.explainability.metrics import (
     ExplanationComplexityMetric,
     LipschitzEstimateMetric,
@@ -550,7 +551,7 @@ def run_cartpole_pipeline(
             switching_lstm_explainer=ExperimentExplainerConfiguration(
                 explainer_class='deepsysid.explainability'
                 '.explainers.switching.SwitchingLSTMExplainer',
-                parameters=BaseExplainerConfig(),
+                parameters=SwitchingLSTMExplainer.CONFIG(),
             ),
         ),
     )
@@ -700,7 +701,7 @@ def run_4dof_ship_pipeline(
             switching_lstm_explainer=ExperimentExplainerConfiguration(
                 explainer_class='deepsysid.explainability'
                 '.explainers.switching.SwitchingLSTMExplainer',
-                parameters=BaseExplainerConfig(),
+                parameters=AdditiveFeatureAttributionExplainerConfig(),
             ),
             lime_explainer=ExperimentExplainerConfiguration(
                 explainer_class='deepsysid.explainability'
@@ -708,7 +709,7 @@ def run_4dof_ship_pipeline(
                 explained_super_classes=[
                     'deepsysid.models.base.DynamicIdentificationModel',
                 ],
-                parameters=LIMEExplainerConfig(num_samples=6, cv_folds=2),
+                parameters=LIMEExplainer.CONFIG(num_samples=6),
             ),
         ),
     )
