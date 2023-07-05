@@ -1,6 +1,7 @@
 import abc
 import dataclasses
-from typing import Dict, List, Optional, Tuple, Type
+import warnings
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import numpy as np
 from numpy.typing import NDArray
@@ -22,10 +23,16 @@ class ModelInput:
 
 
 @dataclasses.dataclass
-class Explanation:
+class AdditiveFeatureAttributionExplanation:
     """
-    weights_initial_control (N, W, N)
-    weights_initial_state (N, W, M)
+    Explanation weights should be similar to Shapley values (or Shapley values).
+    This mean the sum of all weights and the intercept
+    should reconstruct as closely as possible the original prediction.
+    For Shapley values, which are efficient/faithful, the reconstruction is perfect.
+    For LIME, the reconstruction might not be exact.
+
+    weights_initial_control (N, W, M)
+    weights_initial_state (N, W, N)
     weights_control (N, H, M)
     intercept (N,)
 
@@ -67,16 +74,16 @@ class Explanation:
             )
 
 
-class BaseExplainerConfig(BaseModel):
+class AdditiveFeatureAttributionExplainerConfig(BaseModel):
     pass
 
 
-class BaseExplainer(metaclass=abc.ABCMeta):
-    CONFIG = BaseExplainerConfig
+class AdditiveFeatureAttributionExplainer(metaclass=abc.ABCMeta):
+    CONFIG = AdditiveFeatureAttributionExplainerConfig
 
     def __init__(
         self,
-        config: BaseExplainerConfig,
+        config: AdditiveFeatureAttributionExplainerConfig,
     ):
         pass
 
@@ -91,7 +98,8 @@ class BaseExplainer(metaclass=abc.ABCMeta):
             with initial_state (window, state)
             with control (horizon, control)
         :param training_outputs: list of length n_samples
-            with arrays (horizon, state_dim).
+            with arrays (state_dim,). The array corresponds to the output
+            at the last prediction time step.
         :return:
         """
         pass
@@ -103,13 +111,12 @@ class BaseExplainer(metaclass=abc.ABCMeta):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-    ) -> Explanation:
+    ) -> AdditiveFeatureAttributionExplanation:
         """
         Return feature weights for the most recent
             initial state and sequence of control inputs.
-        Returned feature weights should be able to reproduce model prediction
-            to some degree of accuracy.
-        Feature weights must assume unnormalized inputs.
+        Returned feature weights should be able to reproduce
+            unnormalized model prediction to some degree of accuracy.
         May raise ExplainerNotImplementedForModel
             if it does not support a specific type of model.
 
@@ -140,13 +147,15 @@ class BaseExplanationMetric(metaclass=abc.ABCMeta):
     def measure(
         self,
         model: DynamicIdentificationModel,
-        explainer: BaseExplainer,
+        explainer: AdditiveFeatureAttributionExplainer,
         model_inputs: List[ModelInput],
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         pass
 
 
-def retrieve_explainer_class(explainer_class_string: str) -> Type[BaseExplainer]:
+def retrieve_explainer_class(
+    explainer_class_string: str,
+) -> Type[AdditiveFeatureAttributionExplainer]:
     # https://stackoverflow.com/a/452981
     parts = explainer_class_string.split('.')
     module_string = '.'.join(parts[:-1])
@@ -157,7 +166,7 @@ def retrieve_explainer_class(explainer_class_string: str) -> Type[BaseExplainer]
         for component in parts[2:]:
             cls = getattr(cls, component)
 
-    if not issubclass(cls, BaseExplainer):
+    if not issubclass(cls, AdditiveFeatureAttributionExplainer):
         raise ValueError(f'{cls} is not a subclass of BaseExplainer.')
     return cls  # type: ignore
 
@@ -178,3 +187,38 @@ def retrieve_explanation_metric_class(
     if not issubclass(cls, BaseExplanationMetric):
         raise ValueError(f'{cls} is not a subclass of BaseExplanationMetric.')
     return cls  # type: ignore
+
+
+class Explanation(AdditiveFeatureAttributionExplanation):
+    def __post_init__(self) -> None:
+        warnings.warn(
+            'deepsysid.explainability.explainers.base.Explanation has been deprecated '
+            'and replaced with deepsysid.explainability.explainers.base.'
+            'AdditiveFeatureAttributionExplanation.',
+            category=DeprecationWarning,
+        )
+        super().__post_init__()
+
+
+class BaseExplainerConfig(AdditiveFeatureAttributionExplainerConfig):
+    def __init__(self, **data: Dict[str, Any]) -> None:
+        warnings.warn(
+            'deepsysid.explainability.explainers.base.'
+            'BaseExplainerConfig has been deprecated '
+            'and replaced with deepsysid.explainability.explainers.base.'
+            'AdditiveFeatureAttributionExplainerConfig.',
+            category=DeprecationWarning,
+        )
+        super().__init__(**data)
+
+
+class BaseExplainer(AdditiveFeatureAttributionExplainer, abc.ABC):
+    def __init__(self, config: AdditiveFeatureAttributionExplainerConfig) -> None:
+        warnings.warn(
+            'deepsysid.explainability.explainers.base.BaseExplainer '
+            'has been deprecated and replaced with deepsysid.'
+            'explainability.explainers.base.'
+            'AdditiveFeatureAttributionExplainer.',
+            category=DeprecationWarning,
+        )
+        super().__init__(config)
