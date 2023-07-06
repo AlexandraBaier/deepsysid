@@ -1,4 +1,5 @@
 import abc
+import dataclasses
 from typing import Any, Callable, Dict, List, Optional, Type
 
 import numpy as np
@@ -19,18 +20,56 @@ Predict = Callable[
 ]
 
 
+@dataclasses.dataclass
+class TabularExplanation:
+    attributions: NDArray[np.float64]
+    intercept: float
+
+
 class TabularExplainer(abc.ABC):
     @abc.abstractmethod
     def __init__(
-        self, model: Predict, data: NDArray[np.float64], **kwargs: Dict[str, Any]
+        self, model: Predict, data: NDArray[np.float64], **kwargs: Any
     ) -> None:
         pass
 
     @abc.abstractmethod
-    def explain_local(
-        self, X: NDArray[np.float64], **kwargs: Dict[str, Any]
-    ) -> FeatureValueExplanation:
+    def explain_local(self, x: NDArray[np.float64]) -> TabularExplanation:
         pass
+
+
+class TabularLIMEExplainer(TabularExplainer):
+    def __init__(
+        self, model: Predict, data: NDArray[np.float64], **kwargs: Any
+    ) -> None:
+        self._lime = LimeTabular(model=model, data=data)
+        self.num_samples: int = kwargs['num_samples']
+        self.num_features: Optional[int] = kwargs['num_features']
+
+    def explain_local(self, x: NDArray[np.float64]) -> TabularExplanation:
+        explanation = self._lime.explain_local(
+            X=x,
+            num_samples=self.num_samples,
+            num_features=(
+                self.num_features if self.num_features is not None else x.shape[1]
+            ),
+        )
+        attributions = _explanation_to_attributions(explanation, x.shape[1])
+        intercept = _explanation_to_intercept(explanation, intercept_key='Intercept')
+        return TabularExplanation(attributions=attributions, intercept=intercept)
+
+
+class TabularKernelSHAPExplainer(TabularExplainer):
+    def __init__(
+        self, model: Predict, data: NDArray[np.float64], **kwargs: Any
+    ) -> None:
+        self._shap = ShapKernel(model=model, data=data, **kwargs)
+
+    def explain_local(self, x: NDArray[np.float64]) -> TabularExplanation:
+        explanation = self._shap.explain_local(X=x)
+        attributions = _explanation_to_attributions(explanation, x.shape[1])
+        intercept = _explanation_to_intercept(explanation, intercept_key='Base Value')
+        return TabularExplanation(attributions=attributions, intercept=intercept)
 
 
 class BlackboxExplainer(AdditiveFeatureAttributionExplainer, abc.ABC):
@@ -39,16 +78,12 @@ class BlackboxExplainer(AdditiveFeatureAttributionExplainer, abc.ABC):
         self,
         config: AdditiveFeatureAttributionExplainerConfig,
         tabular_explainer_cls: Type[TabularExplainer],
-        init_kwargs: Dict[str, Any],
-        explain_local_kwargs: Dict[str, Any],
-        intercept_key: str,
+        tabular_explainer_kwargs: Dict[str, Any],
     ) -> None:
         super().__init__(config)
 
         self.tabular_explainer_cls = tabular_explainer_cls
-        self.init_kwargs = init_kwargs
-        self.explain_local_kwargs = explain_local_kwargs
-        self.intercept_key = intercept_key
+        self.tabular_explainer_kwargs = tabular_explainer_kwargs
 
         self._x_train: Optional[NDArray[np.float64]] = None
         self._y_train: Optional[NDArray[np.float64]] = None
@@ -119,7 +154,7 @@ class BlackboxExplainer(AdditiveFeatureAttributionExplainer, abc.ABC):
                         horizon_size=horizon_size,
                     ),
                     data=self._x_train,
-                    **self.init_kwargs,
+                    **self.tabular_explainer_kwargs,
                 )
                 for output_idx in range(output_size)
             ]
@@ -146,15 +181,10 @@ class BlackboxExplainer(AdditiveFeatureAttributionExplainer, abc.ABC):
         )
         intercept = np.zeros((output_size,), dtype=np.float64)
         for output_idx, explainer in enumerate(self._explainers):
-            explanation = explainer.explain_local(X=x, **self.explain_local_kwargs)
-            intercept[output_idx] = _explanation_to_intercept(
-                explanation, intercept_key=self.intercept_key
-            )
-            attributions = _explanation_to_attributions(
-                explanation, array_size=x.shape[1]
-            )
+            explanation = explainer.explain_local(x=x)
+            intercept[output_idx] = explanation.intercept
             input_weights = _recover_flattened_model_input(
-                x=attributions,
+                x=explanation.attributions,
                 window_size=window_size,
                 horizon_size=horizon_size,
                 input_size=input_size,
@@ -172,26 +202,6 @@ class BlackboxExplainer(AdditiveFeatureAttributionExplainer, abc.ABC):
         )
 
 
-class TabularLIMEExplainer(TabularExplainer):
-    def __init__(
-        self, model: Predict, data: NDArray[np.float64], **kwargs: Dict[str, Any]
-    ) -> None:
-        self._lime = LimeTabular(model=model, data=data, **kwargs)
-
-    def explain_local(
-        self, X: NDArray[np.float64], **kwargs: Dict[str, Any]
-    ) -> FeatureValueExplanation:
-        return self._lime.explain_local(
-            X=X,
-            num_samples=kwargs['num_samples'],
-            num_features=(
-                kwargs['num_features']
-                if kwargs['num_features'] is not None
-                else X.shape[1]
-            ),
-        )
-
-
 class LIMEExplainerConfig(AdditiveFeatureAttributionExplainerConfig):
     num_samples: int
     num_features: Optional[int] = None
@@ -204,11 +214,9 @@ class LIMEExplainer(BlackboxExplainer):
         super().__init__(
             config,
             tabular_explainer_cls=TabularLIMEExplainer,
-            init_kwargs=dict(),
-            explain_local_kwargs=dict(
+            tabular_explainer_kwargs=dict(
                 num_samples=config.num_samples, num_features=config.num_features
             ),
-            intercept_key='Intercept',
         )
 
 
@@ -216,10 +224,8 @@ class KernelSHAPExplainer(BlackboxExplainer):
     def __init__(self, config: AdditiveFeatureAttributionExplainerConfig) -> None:
         super().__init__(
             config,
-            tabular_explainer_cls=ShapKernel,
-            init_kwargs=dict(),
-            explain_local_kwargs=dict(),
-            intercept_key='Base Value',
+            tabular_explainer_cls=TabularKernelSHAPExplainer,
+            tabular_explainer_kwargs=dict(),
         )
 
 
