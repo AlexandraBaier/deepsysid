@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 from torch import nn as nn
 from torch import optim as optim
 from torch.utils import data as data
+from scipy.io import savemat
 
 from deepsysid.models import base, utils
 from deepsysid.models.base import (
@@ -1802,12 +1803,13 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
         torch.save(self._predictor.state_dict(), file_path[1])
         omega, sys_block_matrix = self._predictor.set_lure_system()
-        np.savetxt(file_path[3], omega, delimiter=',', fmt='%.8f')
-        np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.8f')
+        savemat(file_path[3], {'omega': omega, 'P_cal': sys_block_matrix})
+        # np.savetxt(file_path[3], omega, delimiter=',', fmt='%.8f')
+        # np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.8f')
         tracker(
             TrackArtifacts(
                 'Save omega and system matrices',
-                {'omega': file_path[3], 'system matrices': file_path[4]},
+                {'system parameters': file_path[3]},
             )
         )
 
@@ -1838,8 +1840,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             'initializer.pth',
             'predictor.pth',
             'json',
-            'omega.csv',
-            'cal_block_matrix.csv',
+            'mat',
         )
 
     def get_parameter_count(self) -> int:

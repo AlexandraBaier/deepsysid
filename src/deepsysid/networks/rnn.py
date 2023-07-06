@@ -1308,7 +1308,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             D12=D12_cal,
             C2=C2_cal,
             D21=D21_cal,
-            Delta=Delta_tilde,
+            Delta=self.nl,
             device=self.device,
         ).to(device)
 
