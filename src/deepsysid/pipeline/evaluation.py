@@ -82,11 +82,15 @@ def evaluate_model(
         TrackSequencesAsMatFile(
             'Save .mat file of prediction and true values',
             sequences=(true, pred),
-            file_name=build_result_file_name(
-                mode=mode,
-                window_size=config.window_size,
-                horizon_size=config.horizon_size,
-                extension='mat',
+            file_name=os.path.join(
+                result_directory,
+                model_name,
+                build_result_file_name(
+                    mode=mode,
+                    window_size=config.window_size,
+                    horizon_size=config.horizon_size,
+                    extension='mat',
+                ),
             ),
         )
     )

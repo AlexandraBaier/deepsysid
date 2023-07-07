@@ -18,7 +18,7 @@ from ..tracker.event_data import (
     SetExperiment,
     SetTags,
     StopRun,
-    TrackArtifacts
+    TrackArtifacts,
 )
 from .data_io import load_simulation_data
 from .model_io import save_model
@@ -83,18 +83,17 @@ def train_model(
                 model_directory,
             )
         )
-    
+
     # Save model configuration
     config_file_path = os.path.join(model_directory, f'config-{model_name}.json')
-    with open(
-        config_file_path, mode='w'
-    ) as f:
+    with open(config_file_path, mode='w') as f:
         f.write(configuration.models[model_name].json())
 
-    tracker(TrackArtifacts(
-        'Save model configuration',
-        {'model configuration': config_file_path}
-    ))
+    tracker(
+        TrackArtifacts(
+            'Save model configuration', {'model configuration': config_file_path}
+        )
+    )
     tracker(StopRun('stop current run', None))
 
 

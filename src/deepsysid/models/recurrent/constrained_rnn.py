@@ -8,10 +8,10 @@ from typing import Dict, List, Literal, Optional, Tuple
 import numpy as np
 import torch
 from numpy.typing import NDArray
+from scipy.io import savemat
 from torch import nn as nn
 from torch import optim as optim
 from torch.utils import data as data
-from scipy.io import savemat
 
 from deepsysid.models import base, utils
 from deepsysid.models.base import (
@@ -208,8 +208,8 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
-        initial_x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
         if (
             self.state_mean is None
@@ -492,8 +492,8 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
-        initial_x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
         if (
             self.control_mean is None
@@ -971,8 +971,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
-        initial_x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
         if (
             self._control_mean is None
@@ -1685,8 +1685,8 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
-        initial_x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
         if (
             self._control_mean is None
@@ -1803,8 +1803,18 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
         torch.save(self._predictor.state_dict(), file_path[1])
         omega, sys_block_matrix = self._predictor.set_lure_system()
-        np_pars = {key:np.float64(value.cpu().detach().numpy()) for key, value in self._predictor.state_dict().items()}
-        savemat(file_path[3], {'omega': np.float64(omega), 'P_cal': np.float64(sys_block_matrix), 'predictor_parameter': np_pars})
+        np_pars = {
+            key: np.float64(value.cpu().detach().numpy())
+            for key, value in self._predictor.state_dict().items()
+        }
+        savemat(
+            file_path[3],
+            {
+                'omega': np.float64(omega),
+                'P_cal': np.float64(sys_block_matrix),
+                'predictor_parameter': np_pars,
+            },
+        )
 
         with open(file_path[2], mode='w') as f:
             json.dump(
@@ -1819,10 +1829,11 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         tracker(
             TrackArtifacts(
                 'Save omega and system matrices',
-                {'system parameters': file_path[3],
-                 'torch parameter': file_path[1],
-                 'normalization': file_path[2]}
-
+                {
+                    'system parameters': file_path[3],
+                    'torch parameter': file_path[1],
+                    'normalization': file_path[2],
+                },
             )
         )
 

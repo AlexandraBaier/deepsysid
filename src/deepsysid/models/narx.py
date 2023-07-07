@@ -114,8 +114,8 @@ class NARXDenseNetwork(base.DynamicIdentificationModel):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
-        initial_x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
         if (
             self.state_mean is None
