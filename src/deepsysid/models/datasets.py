@@ -220,7 +220,7 @@ class RecurrentPredictorInitializerInitialDataset(
         x_mean: NDArray[np.float64],
         wp_mean: NDArray[np.float64],
         window_size: int = None,
-        normalize_rnn: bool = False,
+        normalize_rnn: Optional[bool] = False,
     ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]

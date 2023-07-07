@@ -1261,6 +1261,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             gamma=config.gamma,
             nonlinearity=self.nl,
             device=self.device,
+            normalize_rnn=self.normalize_rnn,
             optimizer=self.optimizer
         ).to(self.device)
 
@@ -1909,36 +1910,40 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             horizon_size,
         )
 
-        us_wp_mean_x_mean = [
-            np.hstack(
-                (
-                    u,
-                    np.broadcast_to(
-                        np.hstack((self.control_mean, self.state_mean)),
-                        (
-                            horizon_size,
-                            self.control_mean.shape[0] + self.state_mean.shape[0],
+        if self.normalize_rnn:
+            us_wp_mean_x_mean = [
+                np.hstack(
+                    (
+                        u,
+                        np.broadcast_to(
+                            np.hstack((self.control_mean, self.state_mean)),
+                            (
+                                horizon_size,
+                                self.control_mean.shape[0] + self.state_mean.shape[0],
+                            ),
                         ),
-                    ),
+                    )
                 )
-            )
-            for u in u_list
-        ]
-        us_wp_mean_x_mean_init = [
-            np.hstack(
-                (
-                    u_init,
-                    np.broadcast_to(
-                        np.hstack((self.control_mean, self.state_mean)),
-                        (
-                            self.initial_window_size,
-                            self.control_mean.shape[0] + self.state_mean.shape[0],
+                for u in u_list
+            ]
+            us_wp_mean_x_mean_init = [
+                np.hstack(
+                    (
+                        u_init,
+                        np.broadcast_to(
+                            np.hstack((self.control_mean, self.state_mean)),
+                            (
+                                self.initial_window_size,
+                                self.control_mean.shape[0] + self.state_mean.shape[0],
+                            ),
                         ),
-                    ),
+                    )
                 )
-            )
-            for u_init in u_init_list
-        ]
+                for u_init in u_init_list
+            ]
+        else:
+            us_wp_mean_x_mean = u_list
+            us_wp_mean_x_mean_init = u_init_list
         us = np.stack(us_wp_mean_x_mean)
         us_init = np.stack(us_wp_mean_x_mean_init)
         ys = np.stack(y_list)

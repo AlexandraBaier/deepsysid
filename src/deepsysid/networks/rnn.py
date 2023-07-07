@@ -825,7 +825,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         gamma: float,
         nonlinearity: Callable[[torch.Tensor], torch.Tensor],
         device: torch.device = torch.device('cpu'),
-        normalize_rnn: bool = False,
+        normalize_rnn: Optional[bool] = False,
         optimizer: str = cp.SCS,
     ) -> None:
         super().__init__()

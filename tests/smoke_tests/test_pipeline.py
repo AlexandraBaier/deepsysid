@@ -247,7 +247,7 @@ def test_lstm_init_model(tmp_path: pathlib.Path) -> None:
     )
 
 
-def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
+def test_constrained_rnn_norm(tmp_path: pathlib.Path) -> None:
     model_name = 'ConstrainedRnn'
     model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
     config = ConstrainedRnn.CONFIG(
@@ -279,6 +279,36 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
         tmp_path, model_name, model_class, model_config=config
     )
 
+def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
+    model_name = 'ConstrainedRnn'
+    model_class = 'deepsysid.models.recurrent.ConstrainedRnn'
+    config = ConstrainedRnn.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        initial_state_names=pipeline.get_4dof_ship_state_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        nx=3,
+        recurrent_dim=2,
+        gamma=0.1,
+        beta=0.05,
+        initial_decay_parameter=1e-3,
+        decay_rate=10,
+        epochs_with_const_decay=1,
+        num_recurrent_layers_init=3,
+        dropout=0.25,
+        sequence_length=3,
+        learning_rate=0.1,
+        batch_size=2,
+        epochs_initializer=2,
+        epochs_predictor=2,
+        loss='mse',
+        bias=True,
+        nonlinearity='ReLU',
+    )
+    pipeline.run_4dof_ship_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
 
 def test_constrained_hybrid_rnn(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridConstrainedRnn'
