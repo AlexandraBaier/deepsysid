@@ -3,8 +3,7 @@ from typing import Callable, Dict, List, Literal
 
 import torch
 
-from deepsysid.explainability.base import BaseExplainerConfig
-from deepsysid.explainability.explainers.lime import LIMEExplainerConfig
+from deepsysid.explainability.explainers.switching import SwitchingLSTMExplainer
 from deepsysid.explainability.metrics import (
     ExplanationComplexityMetric,
     LipschitzEstimateMetric,
@@ -550,7 +549,7 @@ def run_cartpole_pipeline(
             switching_lstm_explainer=ExperimentExplainerConfiguration(
                 explainer_class='deepsysid.explainability'
                 '.explainers.switching.SwitchingLSTMExplainer',
-                parameters=BaseExplainerConfig(),
+                parameters=SwitchingLSTMExplainer.CONFIG(),
             ),
         ),
     )
@@ -674,43 +673,8 @@ def run_4dof_ship_pipeline(
             ),
         ),
         target_metric='rmse',
-        explanation_metrics=dict(
-            infidelity=ExperimentExplanationMetricConfiguration(
-                metric_class='deepsysid.explainability.metrics.NMSEInfidelityMetric',
-                parameters=NMSEInfidelityMetric.CONFIG(state_names=state_names),
-            ),
-            robustness=ExperimentExplanationMetricConfiguration(
-                metric_class='deepsysid.explainability.metrics.LipschitzEstimateMetric',
-                parameters=LipschitzEstimateMetric.CONFIG(
-                    state_names=state_names,
-                    n_disturbances=5,
-                    control_error_std=[0.1 for _ in control_names],
-                    state_error_std=[0.1 for _ in state_names],
-                ),
-            ),
-            simplicity=ExperimentExplanationMetricConfiguration(
-                metric_class='deepsysid.explainability.metrics'
-                '.ExplanationComplexityMetric',
-                parameters=ExplanationComplexityMetric.CONFIG(
-                    state_names=state_names, relevance_threshold=0.1
-                ),
-            ),
-        ),
-        explainers=dict(
-            switching_lstm_explainer=ExperimentExplainerConfiguration(
-                explainer_class='deepsysid.explainability'
-                '.explainers.switching.SwitchingLSTMExplainer',
-                parameters=BaseExplainerConfig(),
-            ),
-            lime_explainer=ExperimentExplainerConfiguration(
-                explainer_class='deepsysid.explainability'
-                '.explainers.lime.LIMEExplainer',
-                explained_super_classes=[
-                    'deepsysid.models.base.DynamicIdentificationModel',
-                ],
-                parameters=LIMEExplainerConfig(num_samples=6, cv_folds=2),
-            ),
-        ),
+        explanation_metrics=dict(),
+        explainers=dict(),
     )
 
     run_generic_pipeline(

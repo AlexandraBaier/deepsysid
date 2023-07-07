@@ -4,9 +4,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from deepsysid.explainability.base import (
-    BaseExplainer,
+    AdditiveFeatureAttributionExplainer,
+    AdditiveFeatureAttributionExplanation,
     ExplainerNotImplementedForModel,
-    Explanation,
 )
 
 from ...models.switching.switchrnn import SwitchingLSTMBaseModel
@@ -14,14 +14,14 @@ from ..base import DynamicIdentificationModel
 from .utils import denormalize_control_weights, denormalize_state_weights
 
 
-class SwitchingLSTMExplainer(BaseExplainer):
+class SwitchingLSTMExplainer(AdditiveFeatureAttributionExplainer):
     def explain(
         self,
         model: DynamicIdentificationModel,
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-    ) -> Explanation:
+    ) -> AdditiveFeatureAttributionExplanation:
         if not isinstance(model, SwitchingLSTMBaseModel):
             raise ExplainerNotImplementedForModel(
                 'SwitchingLSTMExplainer can only explain models '
@@ -93,10 +93,18 @@ class SwitchingLSTMExplainer(BaseExplainer):
             weights_true_control[:, time, :] = control_den
             intercept = intercept + control_intercept
 
-        return Explanation(
-            weights_initial_control=weights_initial_control,
-            weights_initial_state=weights_initial_state,
-            weights_control=weights_true_control,
+        attribution_initial_control = (
+            weights_initial_control * initial_control[np.newaxis, :, :]
+        )
+        attribution_initial_state = (
+            weights_initial_state * initial_state[np.newaxis, :, :]
+        )
+        attribution_true_control = weights_true_control * control[np.newaxis, :, :]
+
+        return AdditiveFeatureAttributionExplanation(
+            weights_initial_control=attribution_initial_control,
+            weights_initial_state=attribution_initial_state,
+            weights_control=attribution_true_control,
             intercept=intercept,
         )
 

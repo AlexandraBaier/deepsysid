@@ -58,7 +58,7 @@ def explain_model(
                     sim.x0,
                     sim.initial_x0,
                 ),
-                sim.true_state,
+                sim.true_state[-1, :],
             )
             for sim in split_simulations(
                 configuration.window_size,

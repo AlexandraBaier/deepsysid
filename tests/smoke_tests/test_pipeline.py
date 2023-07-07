@@ -6,6 +6,9 @@ from deepsysid.models.hybrid.bounded_residual import (
     HybridMinimalManeuveringModel,
     HybridPropulsionManeuveringModel,
 )
+from deepsysid.models.hybrid.physics_only import (
+    PhysicsOnlyBlankePropulsionManeuveringModel,
+)
 from deepsysid.models.hybrid.serial import (
     SerialParallel4DOFShipModel,
     SerialParallelQuadcopterModel,
@@ -923,5 +926,49 @@ def test_serial_parallel_quadcopter_model(tmp_path: pathlib.Path) -> None:
         kt=1.0,
     )
     pipeline.run_quadcopter_pipeline(
+        tmp_path, model_name, model_class, model_config=config
+    )
+
+
+def test_physics_only_blanke_propulsion_maneuvering_model(
+    tmp_path: pathlib.Path,
+) -> None:
+    model_name = 'PhysicsOnlyBlankePropulsionManeuveringModel'
+    model_class = (
+        'deepsysid.models.hybrid.physics_only'
+        '.PhysicsOnlyBlankePropulsionManeuveringModel'
+    )
+    config = PhysicsOnlyBlankePropulsionManeuveringModel.CONFIG(
+        control_names=pipeline.get_4dof_ship_control_names(),
+        state_names=pipeline.get_4dof_ship_state_names(),
+        device_name=pipeline.get_cpu_device_name(),
+        time_delta=pipeline.get_time_delta(),
+        Xud=-0.1,
+        Yvd=0.2,
+        Ypd=-0.1,
+        Yrd=0.1,
+        Kvd=0.1,
+        Kpd=0.3,
+        Krd=-0.4,
+        Nvd=0.1,
+        Npd=0.2,
+        Nrd=0.1,
+        m=10.0,
+        Ixx=0.5,
+        Izz=0.1,
+        xg=0.3,
+        zg=0.5,
+        rho_water=0.5,
+        disp=20.0,
+        gm=4,
+        g=9.81,
+        wake_factor=0.2,
+        diameter=2.0,
+        Kt=(2.0, -1.0, 0.5),
+        lx=10,
+        ly=4,
+        lz=3,
+    )
+    pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
     )
