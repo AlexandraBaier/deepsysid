@@ -20,7 +20,7 @@ class DynamicIdentificationModelConfig(BaseModel):
     device_name: str = 'cpu'
     control_names: List[str]
     state_names: List[str]
-    initial_state_names: Optional[List[str]]
+    initial_state_names: Optional[List[str]] = None
     time_delta: float
 
 
@@ -47,7 +47,8 @@ class DynamicIdentificationModel(metaclass=abc.ABCMeta):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> Union[
         NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
     ]:
@@ -133,7 +134,8 @@ class FixedWindowModel(
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
         """
         Multi-step prediction of system states given control inputs and initial window.
@@ -224,6 +226,8 @@ class NormalizedControlStateModel(DynamicIdentificationModel, metaclass=abc.ABCM
         self._control_mean: Optional[NDArray[np.float64]] = None
         self._control_std: Optional[NDArray[np.float64]] = None
 
+        self._nx: Optional[int] = None
+
     @property
     def state_mean(self) -> NDArray[np.float64]:
         if self._state_mean is None:
@@ -263,6 +267,15 @@ class NormalizedHiddenStateInitializerPredictorModel(
         pass
 
 
+class NormalizedHiddenStatePredictorModel(
+    NormalizedControlStateModel, metaclass=abc.ABCMeta
+):
+    @property
+    @abc.abstractmethod
+    def predictor(self) -> HiddenStateForwardModule:
+        pass
+
+
 def track_model_parameters(
     model: DynamicIdentificationModel,
     tracker: BaseEventTracker = BaseEventTracker(),
@@ -270,7 +283,7 @@ def track_model_parameters(
     model_parameters = {
         name: getattr(model, name)
         for name in filter(
-            lambda attr: (isinstance(getattr(model, attr), (float, str, int)))
+            lambda attr: (isinstance(getattr(model, attr), (float, str, int, list)))
             and attr is not None,
             dir(model),
         )

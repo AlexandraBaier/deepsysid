@@ -126,6 +126,7 @@ def _save_test_sequence_result_to_hdf_group(
 
 @dataclasses.dataclass
 class SimulateTestSample:
+    initial_x0: NDArray[np.float64]
     initial_control: NDArray[np.float64]
     initial_state: NDArray[np.float64]
     true_control: NDArray[np.float64]
@@ -142,6 +143,7 @@ def split_simulations(
     total_length = window_size + horizon_size
     for sim in simulations:
         for i in range(total_length, sim.control.shape[0], total_length):
+            initial_x0 = sim.initial_state[i - total_length]
             initial_control = sim.control[
                 i - total_length : i - total_length + window_size
             ]
@@ -151,6 +153,7 @@ def split_simulations(
             x0 = sim.initial_state[i - total_length + window_size]
 
             yield SimulateTestSample(
+                initial_x0,
                 initial_control,
                 initial_state,
                 true_control,

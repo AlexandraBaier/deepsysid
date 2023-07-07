@@ -41,6 +41,7 @@ class InferenceTest(BaseTest):
                 sample.initial_state,
                 sample.true_control,
                 sample.x0,
+                sample.initial_x0,
             )
             if isinstance(simulation_result, np.ndarray):
                 pred_target = simulation_result

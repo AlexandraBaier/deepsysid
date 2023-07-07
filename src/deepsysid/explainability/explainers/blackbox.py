@@ -166,7 +166,6 @@ class BlackboxExplainer(AdditiveFeatureAttributionExplainer, abc.ABC):
                 initial_control=initial_control,
                 initial_state=initial_state,
                 control=control,
-                x0=None,
             )
         ).reshape(1, -1)
 
@@ -285,7 +284,6 @@ def _construct_predict(
                 initial_state=model_input.initial_state,
                 initial_control=model_input.initial_control,
                 control=model_input.control,
-                x0=None,
             )
             if isinstance(model_output, np.ndarray):
                 y[sample_idx] = model_output[-1, output_idx]
@@ -327,5 +325,4 @@ def _recover_flattened_model_input(
             window_size, input_size
         ),
         control=x[control_offset:].reshape(horizon_size, input_size),
-        x0=None,
     )

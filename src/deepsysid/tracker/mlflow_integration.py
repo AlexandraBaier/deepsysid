@@ -5,8 +5,9 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
+from scipy.io import savemat
 
-from ..models.utils import TrainingPrediction
+from ..models.utils import TrainingPrediction, XYdata
 from ..pipeline.configuration import GridSearchTrackingConfiguration
 from ..pipeline.data_io import build_tracker_config_file_name
 from .base import BaseEventTracker, BaseEventTrackerConfig
@@ -21,6 +22,7 @@ from .event_data import (
     TrackFigures,
     TrackMetrics,
     TrackParameters,
+    TrackSequencesAsMatFile,
 )
 
 FIGURE_DIRECTORY_NAME = 'figures'
@@ -39,6 +41,7 @@ class MlFlowTracker(BaseEventTracker):
             mlflow.set_tracking_uri(config.tracking_uri)
 
     def __call__(self, event: EventData) -> None:
+        # print(f'[TRACKER:] \t {event.msg}')
         if isinstance(event, TrackParameters):
             for key, value in event.parameters.items():
                 mlflow.log_param(key, value)
@@ -58,17 +61,29 @@ class MlFlowTracker(BaseEventTracker):
             self.load_tracking_configuration(event)
         elif isinstance(event, TrackMetrics):
             for key, value in event.metrics.items():
-                mlflow.log_metric(key, value)
+                mlflow.log_metric(key, value, event.step)
         elif isinstance(event, TrackFigures):
-            mlflow.log_figure(
-                plot_outputs(event.results), f'{FIGURE_DIRECTORY_NAME}/{event.name}'
-            )
+            if isinstance(event.results, TrainingPrediction):
+                fig = plot_outputs(event.results)
+            elif isinstance(event.results, XYdata):
+                fig = plot_xydata(event.results)
+            mlflow.log_figure(fig, f'{FIGURE_DIRECTORY_NAME}/{event.name}')
+            plt.close()
+        elif isinstance(event, TrackSequencesAsMatFile):
+            self.save_mat_file(event)
         elif isinstance(event, TrackArtifacts):
             for artifact_path, local_path in event.artifacts.items():
                 mlflow.log_artifact(local_path, artifact_path)
 
         else:
             raise NotImplementedError(f'{type(event)} is not implemented.')
+
+    def save_mat_file(self, event: TrackSequencesAsMatFile) -> None:
+        savemat(
+            event.file_name,
+            {'y': np.array(event.sequences[0]), 'y_hat': np.array(event.sequences[1])},
+        )
+        mlflow.log_artifact(event.file_name)
 
     def save_tracking_configuration(self, event: SaveTrackingConfiguration) -> None:
         run = mlflow.active_run()
@@ -110,6 +125,17 @@ def plot_outputs(result: TrainingPrediction) -> plt.Figure:
         ax.plot(t, result.zp_hat[:, element], label=r'$\hat{z}_p$')
         ax.plot(t, result.y_lin[:, element], '--', label=r'$y_{lin}$')
         ax.set_title(f'$z_{element+1}$')
+        ax.set_xlabel('time step')
         ax.grid()
         ax.legend()
+    return fig
+
+
+def plot_xydata(result: XYdata) -> plt.Figure:
+    assert result.x.shape[0] == result.y.shape[0]
+    fig, ax = plt.subplots()
+    fig.suptitle(result.title)
+    ax.plot(result.x, result.y)
+    ax.grid()
+
     return fig

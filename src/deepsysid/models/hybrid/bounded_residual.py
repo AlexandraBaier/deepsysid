@@ -475,7 +475,8 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
         threshold: float = np.infty,
     ) -> Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]:
         y, whitebox, blackbox = self.simulate_hybrid(

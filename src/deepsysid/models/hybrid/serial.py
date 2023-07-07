@@ -539,7 +539,8 @@ class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMet
         initial_control: NDArray[np.float64],
         initial_state: NDArray[np.float64],
         control: NDArray[np.float64],
-        x0: Optional[NDArray[np.float64]],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> Union[
         NDArray[np.float64], Tuple[NDArray[np.float64], Dict[str, NDArray[np.float64]]]
     ]:

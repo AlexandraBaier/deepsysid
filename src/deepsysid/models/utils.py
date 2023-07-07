@@ -13,7 +13,14 @@ class TrainingPrediction:
     zp: NDArray[np.float64]
     zp_hat: NDArray[np.float64]
     u: NDArray[np.float64]
-    y_lin: Optional[NDArray[np.float64]]
+    y_lin: Optional[NDArray[np.float64]] = None
+
+
+@dataclasses.dataclass
+class XYdata:
+    x: NDArray[np.float64]
+    y: NDArray[np.float64]
+    title: str
 
 
 def mean_stddev(

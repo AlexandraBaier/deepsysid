@@ -27,6 +27,10 @@ def get_linear_matrices() -> Tuple[
     return (np.array(A), np.array(B), np.array(C), np.array(D))
 
 
+def get_mean_std() -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    return (torch.ones((nx,)), torch.ones((nx,)), torch.ones((nu,)), torch.ones((nu,)))
+
+
 def get_lure_matrices() -> Tuple[
     torch.Tensor,
     torch.Tensor,
@@ -111,12 +115,11 @@ def test_lure_forward() -> None:
         *get_lure_matrices(), Delta=Delta_tilde, device=torch.device('cpu')
     )
 
-    _, x, w = model.forward(x0=x0, us=u, return_states=True)
+    y, x = model.forward(x0=x0, us=u, return_states=True)
     y = model.forward(x0=x0, us=u)
 
     assert y.shape == (n_batch, N, ny, 1)
     assert x.shape == (n_batch, N + 1, nx, 1)
-    assert w.shape == (n_batch, N, nw, 1)
 
 
 def test_hybrid_linearization_rnn_init() -> None:
@@ -130,6 +133,7 @@ def test_hybrid_linearization_rnn_init() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity='Tanh',
     )
 
 
@@ -145,18 +149,20 @@ def test_hybrid_linearization_rnn_forward() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
+    model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
     model.set_lure_system()
-    u = torch.zeros(size=(n_batch, N, nu))
-    u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
+    u[0, :, :nu] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
 
-    y_hat, (x, w) = model.forward(x_pred=u, hx=(x0_lin, x0_rnn))
+    y_hat, (x_lin, x_rnn) = model.forward(x_pred=u, hx=(x0_lin, x0_rnn))
     assert y_hat.shape == (n_batch, N, ny)
-    assert x.shape == (n_batch, N + 1, nx * 2)
-    assert w.shape == (n_batch, N, nw)
+    assert x_lin.shape == (n_batch, N + 1, nx)
+    assert x_rnn.shape == (n_batch, N + 1, nx)
 
 
 def test_hybrid_linearization_rnn_backward() -> None:
@@ -171,12 +177,14 @@ def test_hybrid_linearization_rnn_backward() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
+    model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
     model.set_lure_system()
     opt = torch.optim.Adam(params=model.parameters(), lr=1e-3)
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu))
-    u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
+    u[0, :, :nu] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
@@ -246,23 +254,25 @@ def test_hybrid_linearization_rnn_backward_two_steps() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
+    model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
     model.set_lure_system()
     opt = torch.optim.Adam(params=model.parameters(), lr=1e-3)
 
     dataset = []
 
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu))
-    u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
+    u[0, :, :nu] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
     dataset.append({'y': y, 'u': u, 'x0_lin': x0_lin, 'x0_rnn': x0_rnn})
 
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu))
-    u[0, :, :] = torch.tensor(np.float64(np.arange(5, 5 + N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
+    u[0, :, :nu] = torch.tensor(np.float64(np.arange(5, 5 + N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-4], [0.7], [-0.5], [4]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
@@ -311,16 +321,18 @@ def test_hybrid_linearization_rnn_parameters() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
+    model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
     model.set_lure_system()
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu))
-    u[0, :, :] = torch.tensor(np.double(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu + nx + nu))
+    u[0, :, :nu] = torch.tensor(np.double(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
 
-    y_hat, (x, w) = model.forward(x_pred=u, hx=(x0_lin, x0_rnn))
+    y_hat, (x_lin, x_rnn) = model.forward(x_pred=u, hx=(x0_lin, x0_rnn))
     loss = L(y, y_hat)
 
     loss.backward()
@@ -341,7 +353,9 @@ def test_hybrid_linearization_rnn_constraints() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
+    model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
     model.set_lure_system()
     P = model.get_constraints()
     # check if P is symmetric
@@ -361,6 +375,7 @@ def test_hybrid_linearization_rnn_check_constraints() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
     model.initialize_lmi()
     assert model.check_constraints()
@@ -380,6 +395,7 @@ def test_hybrid_linearization_rnn_construct_lower_triangular_matrix() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
     diag_length = 4
     L_flat = torch.tensor(np.arange(10)).float()
@@ -400,6 +416,7 @@ def test_hybrid_linearization_rnn_extract_vector_from_lower_triangular_matrix() 
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
     L = np.array(
         [[0, 0, 0, 0], [4, 1, 0, 0], [7, 5, 2, 0], [9, 8, 6, 3]], dtype=np.float64
@@ -420,6 +437,7 @@ def test_hybrid_linearization_rnn_projection() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
+        nonlinearity=torch.tanh,
     )
     model.K.data = model.K.data + torch.eye(model.nx) * 20.0
     assert not model.check_constraints()

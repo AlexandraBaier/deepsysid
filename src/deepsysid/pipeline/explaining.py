@@ -52,7 +52,11 @@ def explain_model(
         *[
             (
                 ModelInput(
-                    sim.initial_control, sim.initial_state, sim.true_control, sim.x0
+                    sim.initial_control,
+                    sim.initial_state,
+                    sim.true_control,
+                    sim.x0,
+                    sim.initial_x0,
                 ),
                 sim.true_state[-1, :],
             )
@@ -65,7 +69,13 @@ def explain_model(
     )
 
     model_inputs = [
-        ModelInput(sim.initial_control, sim.initial_state, sim.true_control, sim.x0)
+        ModelInput(
+            sim.initial_control,
+            sim.initial_state,
+            sim.true_control,
+            sim.x0,
+            sim.initial_x0,
+        )
         for sim in split_simulations(
             configuration.window_size, configuration.horizon_size, explained_simulations
         )

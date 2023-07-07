@@ -50,6 +50,7 @@ class BoundedResidualInferenceTest(BaseTest):
                     sample.initial_state,
                     sample.true_control,
                     sample.x0,
+                    sample.initial_x0,
                     threshold=threshold,
                 )
                 metadata_ls.append(metadata_pred)
