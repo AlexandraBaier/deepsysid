@@ -1153,6 +1153,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_with_const_decay: Optional[int]
     initial_window_size: Optional[int] = None
     normalize_rnn: Optional[bool] = False
+    optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
 
 
 class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
@@ -1164,6 +1165,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
         self.normalize_rnn = config.normalize_rnn
+        self.optimizer = config.optimizer
 
         self.control_dim = len(config.control_names)  # external input
         self.state_dim = len(config.state_names)  # output
@@ -1259,6 +1261,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             gamma=config.gamma,
             nonlinearity=self.nl,
             device=self.device,
+            optimizer=self.optimizer
         ).to(self.device)
 
         self.linear = rnn.Linear(
