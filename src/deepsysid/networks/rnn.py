@@ -1294,10 +1294,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # assert torch.linalg.norm(D22_cal) - 0 < 1e-2
         D22_cal = torch.zeros_like(D22_cal)
 
-        def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
-            return torch.tensor((2 / (self.beta - self.alpha))) * (
-                self.nl(z) - torch.tensor(((self.alpha + self.beta) / 2)) * z
-            )
+        # def Delta_tilde(z: torch.Tensor) -> torch.Tensor:
+        #     return torch.tensor((2 / (self.beta - self.alpha))) * (
+        #         self.nl(z) - torch.tensor(((self.alpha + self.beta) / 2)) * z
+        #     )
 
         self.lure = LureSystem(
             A=A_cal,

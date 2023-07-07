@@ -1803,15 +1803,8 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
         torch.save(self._predictor.state_dict(), file_path[1])
         omega, sys_block_matrix = self._predictor.set_lure_system()
-        savemat(file_path[3], {'omega': omega, 'P_cal': sys_block_matrix})
-        # np.savetxt(file_path[3], omega, delimiter=',', fmt='%.8f')
-        # np.savetxt(file_path[4], sys_block_matrix, delimiter=',', fmt='%.8f')
-        tracker(
-            TrackArtifacts(
-                'Save omega and system matrices',
-                {'system parameters': file_path[3]},
-            )
-        )
+        np_pars = {key:np.float64(value.cpu().detach().numpy()) for key, value in self._predictor.state_dict().items()}
+        savemat(file_path[3], {'omega': np.float64(omega), 'P_cal': np.float64(sys_block_matrix), 'predictor_parameter': np_pars})
 
         with open(file_path[2], mode='w') as f:
             json.dump(
@@ -1823,6 +1816,15 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 },
                 f,
             )
+        tracker(
+            TrackArtifacts(
+                'Save omega and system matrices',
+                {'system parameters': file_path[3],
+                 'torch parameter': file_path[1],
+                 'normalization': file_path[2]}
+
+            )
+        )
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self._predictor.load_state_dict(
