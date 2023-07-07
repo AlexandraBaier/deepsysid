@@ -220,6 +220,7 @@ class RecurrentPredictorInitializerInitialDataset(
         x_mean: NDArray[np.float64],
         wp_mean: NDArray[np.float64],
         window_size: int = None,
+        normalize_rnn: bool = False,
     ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
@@ -227,9 +228,13 @@ class RecurrentPredictorInitializerInitialDataset(
             self.window_size = sequence_length
         else:
             self.window_size = window_size
-        self.control_dim_pred = (
-            control_seqs[0].shape[1] + x_mean.shape[0] + wp_mean.shape[0]
-        )
+        self.normalize_rnn = normalize_rnn
+        if self.normalize_rnn:
+            self.control_dim_pred = (
+                control_seqs[0].shape[1] + x_mean.shape[0] + wp_mean.shape[0]
+            )
+        else:
+            self.control_dim_pred = control_seqs[0].shape[1]
         self.wp_mean = wp_mean
         self.x_mean = x_mean
         self.state_dim = state_seqs[0].shape[1]
@@ -293,40 +298,56 @@ class RecurrentPredictorInitializerInitialDataset(
             for idx in range(n_samples):
                 time = idx * self.sequence_length
 
-                wp_init[idx, :, :] = np.hstack(
-                    (
-                        control[time + 1 : time + self.window_size + 1, :],
-                        np.broadcast_to(
-                            np.hstack((self.wp_mean, self.x_mean)),
-                            (
-                                self.window_size,
-                                self.wp_mean.shape[0] + self.x_mean.shape[0],
+                # inputs
+                if self.normalize_rnn:
+                    wp_init[idx, :, :] = np.hstack(
+                        (
+                            control[time + 1 : time + self.window_size + 1, :],
+                            np.broadcast_to(
+                                np.hstack((self.wp_mean, self.x_mean)),
+                                (
+                                    self.window_size,
+                                    self.wp_mean.shape[0] + self.x_mean.shape[0],
+                                ),
                             ),
-                        ),
+                        )
                     )
-                )
+                    wp[idx, :, :] = np.hstack(
+                        (
+                            control[
+                                time
+                                + self.window_size
+                                + 1 : time
+                                + self.sequence_length
+                                + self.window_size
+                                + 1,
+                                :,
+                            ],
+                            np.broadcast_to(
+                                np.hstack((self.wp_mean, self.x_mean)),
+                                (
+                                    self.sequence_length,
+                                    self.wp_mean.shape[0] + self.x_mean.shape[0],
+                                ),
+                            ),
+                        )
+                    )
+                else:
+                    wp_init[idx, :, :] = control[
+                        time + 1 : time + self.window_size + 1, :
+                    ]
+                    wp[idx, :, :] = control[
+                        time
+                        + self.window_size
+                        + 1 : time
+                        + self.sequence_length
+                        + self.window_size
+                        + 1,
+                        :,
+                    ]
                 x0_init[idx, :, :] = initial_state[time : time + self.window_size, :]
                 zp_init[idx, :] = state[time + self.window_size + 1, :]
-                wp[idx, :, :] = np.hstack(
-                    (
-                        control[
-                            time
-                            + self.window_size
-                            + 1 : time
-                            + self.sequence_length
-                            + self.window_size
-                            + 1,
-                            :,
-                        ],
-                        np.broadcast_to(
-                            np.hstack((self.wp_mean, self.x_mean)),
-                            (
-                                self.sequence_length,
-                                self.wp_mean.shape[0] + self.x_mean.shape[0],
-                            ),
-                        ),
-                    )
-                )
+
                 zp[idx, :, :] = state[
                     time
                     + self.window_size

@@ -825,6 +825,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         gamma: float,
         nonlinearity: Callable[[torch.Tensor], torch.Tensor],
         device: torch.device = torch.device('cpu'),
+        normalize_rnn: bool = False,
     ) -> None:
         super().__init__()
         self.nx = A_lin.shape[0]  # state size
@@ -840,6 +841,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self._x_std: Optional[torch.Tensor] = None
         self._wp_mean: Optional[torch.Tensor] = None
         self._wp_std: Optional[torch.Tensor] = None
+
+        self.normalize_rnn = normalize_rnn
 
         self.alpha = alpha
         self.beta = beta
@@ -906,10 +909,14 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         #     torch.zeros(size=(self.nzu, self.nwu)).float().to(device)
         # )
 
-        B_lin_hat = np.hstack(
-            (B_lin, np.zeros(shape=(B_lin.shape[0], self.nwp + self.nx)))
-        )
-        self.nwp_hat = self.nwp + self.nwp + self.nx
+        if self.normalize_rnn:
+            B_lin_hat = np.hstack(
+                (B_lin, np.zeros(shape=(B_lin.shape[0], self.nwp + self.nx)))
+            )
+            self.nwp_hat = self.nwp + self.nwp + self.nx
+        else:
+            B_lin_hat = B_lin
+            self.nwp_hat = self.nwp
 
         self.S_s = torch.from_numpy(
             np.concatenate(
@@ -1251,30 +1258,45 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             D22,
         ) = self.get_controller_matrices(omega_0)
 
-        B1_hat = B1_tilde @ torch.diag(1 / self._wp_std)
-        B2_hat = B2_tilde @ torch.diag(1 / self._x_std)
-        C1_hat = torch.diag(self._x_std) @ C1_tilde
-        D11_hat = torch.diag(self._x_std) @ D11_tilde @ torch.diag(1 / self._wp_std)
-        D12_hat = torch.diag(self._x_std) @ D12_tilde @ torch.diag(1 / self._x_std)
-        D13_hat = torch.diag(self._x_std) @ D13_tilde
-        D21_hat = D21 @ torch.diag(1 / self._wp_std)
-        D22_hat = D22 @ torch.diag(1 / self._x_std)
+        if self.normalize_rnn:
+            B1_hat = B1_tilde @ torch.diag(1 / self._wp_std)
+            B2_hat = B2_tilde @ torch.diag(1 / self._x_std)
+            C1_hat = torch.diag(self._x_std) @ C1_tilde
+            D11_hat = torch.diag(self._x_std) @ D11_tilde @ torch.diag(1 / self._wp_std)
+            D12_hat = torch.diag(self._x_std) @ D12_tilde @ torch.diag(1 / self._x_std)
+            D13_hat = torch.diag(self._x_std) @ D13_tilde
+            D21_hat = D21 @ torch.diag(1 / self._wp_std)
+            D22_hat = D22 @ torch.diag(1 / self._x_std)
 
-        omega = self.get_omega(
-            A_tilde,
-            torch.hstack((B1_hat, -B1_hat, -B2_hat)),
-            B2_hat,
-            B3_tilde,
-            C1_hat,
-            torch.hstack(
-                (D11_hat, -D11_hat, torch.eye(self.nx).to(self.device) - D12_hat)
-            ),
-            D12_hat,
-            D13_hat,
-            C2,
-            torch.hstack((D21_hat, -D21_hat, -D22_hat)),
-            D22_hat,
-        )
+            omega = self.get_omega(
+                A_tilde,
+                torch.hstack((B1_hat, -B1_hat, -B2_hat)),
+                B2_hat,
+                B3_tilde,
+                C1_hat,
+                torch.hstack(
+                    (D11_hat, -D11_hat, torch.eye(self.nx).to(self.device) - D12_hat)
+                ),
+                D12_hat,
+                D13_hat,
+                C2,
+                torch.hstack((D21_hat, -D21_hat, -D22_hat)),
+                D22_hat,
+            )
+        else:
+            omega = self.get_omega(
+                A_tilde,
+                B1_tilde,
+                B2_tilde,
+                B3_tilde,
+                C1_tilde,
+                D11_tilde,
+                D12_tilde,
+                D13_tilde,
+                C2,
+                D21,
+                D22,
+            )
 
         sys_block_matrix = self.S_s + self.S_l @ omega @ self.S_r
 

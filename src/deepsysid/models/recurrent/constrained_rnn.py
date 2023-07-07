@@ -1152,6 +1152,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     enforce_constraints_method: Optional[Literal['barrier', 'projection']] = None
     epochs_with_const_decay: Optional[int]
     initial_window_size: Optional[int] = None
+    normalize_rnn: Optional[bool] = False
 
 
 class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
@@ -1162,6 +1163,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
+        self.normalize_rnn = config.normalize_rnn
 
         self.control_dim = len(config.control_names)  # external input
         self.state_dim = len(config.state_names)  # output
@@ -1358,7 +1360,14 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
         for seq_len in self.sequence_length:
             predictor_dataset = RecurrentPredictorInitializerInitialDataset(
-                us, ys, x0s, seq_len, x_mean, wp_mean, self.initial_window_size
+                us,
+                ys,
+                x0s,
+                seq_len,
+                x_mean,
+                wp_mean,
+                self.initial_window_size,
+                self.normalize_rnn,
             )
 
             for i in range(self.epochs_predictor):
@@ -1730,26 +1739,29 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self._predictor.set_lure_system()
 
         N, nu = control.shape
-        u = np.hstack(
-            (
-                control,
-                np.broadcast_to(
-                    np.hstack((self._control_mean, x_mean)),
-                    (N, self._control_mean.shape[0] + x_mean.shape[0]),
-                ),
-            )
-        )
         N_init, _ = initial_control.shape
-        u_init = np.hstack(
-            (
-                initial_control[:, : self.control_dim].reshape(N_init, -1),
-                np.broadcast_to(
-                    np.hstack((self._control_mean, x_mean)),
-                    (N_init, self._control_mean.shape[0] + x_mean.shape[0]),
-                ),
+        if self.normalize_rnn:
+            u = np.hstack(
+                (
+                    control,
+                    np.broadcast_to(
+                        np.hstack((self._control_mean, x_mean)),
+                        (N, self._control_mean.shape[0] + x_mean.shape[0]),
+                    ),
+                )
             )
-        )
-
+            u_init = np.hstack(
+                (
+                    initial_control[:, : self.control_dim].reshape(N_init, -1),
+                    np.broadcast_to(
+                        np.hstack((self._control_mean, x_mean)),
+                        (N_init, self._control_mean.shape[0] + x_mean.shape[0]),
+                    ),
+                )
+            )
+        else:
+            u = control
+            u_init = initial_control[:, : self.control_dim].reshape(N_init, -1)
         with torch.no_grad():
             pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
             x0_1_torch = torch.from_numpy(x0)

@@ -133,8 +133,37 @@ def test_hybrid_linearization_rnn_init() -> None:
         nwu=nw,
         nzu=nz,
         gamma=1.0,
-        nonlinearity='Tanh',
+        nonlinearity=torch.tanh,
     )
+
+
+def test_hybrid_linearization_rnn_forward_norm() -> None:
+
+    A_lin, B_lin, C_lin, _ = get_linear_matrices()
+    model = HybridLinearizationRnn(
+        A_lin=A_lin,
+        B_lin=B_lin,
+        C_lin=C_lin,
+        alpha=0,
+        beta=1,
+        nwu=nw,
+        nzu=nz,
+        gamma=1.0,
+        nonlinearity=torch.tanh,
+        normalize_rnn=True,
+    )
+    model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
+    model.set_lure_system()
+    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
+    u[0, :, :nu] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    x0_lin = torch.zeros(size=(n_batch, nx, 1))
+    x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
+    x0_rnn = torch.zeros(size=(n_batch, nx, 1))
+
+    y_hat, (x_lin, x_rnn) = model.forward(x_pred=u, hx=(x0_lin, x0_rnn))
+    assert y_hat.shape == (n_batch, N, ny)
+    assert x_lin.shape == (n_batch, N + 1, nx)
+    assert x_rnn.shape == (n_batch, N + 1, nx)
 
 
 def test_hybrid_linearization_rnn_forward() -> None:
@@ -153,8 +182,8 @@ def test_hybrid_linearization_rnn_forward() -> None:
     )
     model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
     model.set_lure_system()
-    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
-    u[0, :, :nu] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu))
+    u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
@@ -183,8 +212,8 @@ def test_hybrid_linearization_rnn_backward() -> None:
     model.set_lure_system()
     opt = torch.optim.Adam(params=model.parameters(), lr=1e-3)
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
-    u[0, :, :nu] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu))
+    u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
@@ -263,16 +292,16 @@ def test_hybrid_linearization_rnn_backward_two_steps() -> None:
     dataset = []
 
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
-    u[0, :, :nu] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu))
+    u[0, :, :] = torch.tensor(np.float64(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
     dataset.append({'y': y, 'u': u, 'x0_lin': x0_lin, 'x0_rnn': x0_rnn})
 
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu + nu + nx))
-    u[0, :, :nu] = torch.tensor(np.float64(np.arange(5, 5 + N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu))
+    u[0, :, :] = torch.tensor(np.float64(np.arange(5, 5 + N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-4], [0.7], [-0.5], [4]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))
@@ -326,8 +355,8 @@ def test_hybrid_linearization_rnn_parameters() -> None:
     model._x_mean, model._x_std, model._wp_mean, model._wp_std = get_mean_std()
     model.set_lure_system()
     y = torch.zeros(size=(n_batch, N, ny))
-    u = torch.zeros(size=(n_batch, N, nu + nx + nu))
-    u[0, :, :nu] = torch.tensor(np.double(np.arange(N)).reshape(N, nu))
+    u = torch.zeros(size=(n_batch, N, nu))
+    u[0, :, :] = torch.tensor(np.double(np.arange(N)).reshape(N, nu))
     x0_lin = torch.zeros(size=(n_batch, nx, 1))
     x0_lin[0, :, :] = torch.tensor(data=[[-1], [1], [0.5], [-0.5]])
     x0_rnn = torch.zeros(size=(n_batch, nx, 1))

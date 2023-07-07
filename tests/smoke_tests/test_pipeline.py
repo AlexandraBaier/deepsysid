@@ -273,6 +273,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
         loss='mse',
         bias=True,
         nonlinearity='ReLU',
+        normalize_rnn=True,
     )
     pipeline.run_4dof_ship_pipeline(
         tmp_path, model_name, model_class, model_config=config
