@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Literal
+from typing import Literal, Optional
 
 import h5py
 
@@ -10,13 +10,7 @@ from deepsysid.explainability.base import (
     retrieve_explainer_class,
     retrieve_explanation_metric_class,
 )
-from deepsysid.models.base import DynamicIdentificationModel
-from deepsysid.pipeline.configuration import (
-    ExperimentConfiguration,
-    ExperimentExplainerConfiguration,
-    initialize_model,
-    retrieve_model_class,
-)
+from deepsysid.pipeline.configuration import ExperimentConfiguration, initialize_model
 from deepsysid.pipeline.data_io import build_explanation_result_file_name
 from deepsysid.pipeline.model_io import load_model
 from deepsysid.pipeline.testing.io import load_test_simulations, split_simulations
@@ -32,6 +26,7 @@ def explain_model(
     dataset_directory: str,
     result_directory: str,
     models_directory: str,
+    explainer_name: Optional[str] = None,
 ) -> None:
     model_directory = os.path.expanduser(
         os.path.normpath(os.path.join(models_directory, model_name))
@@ -85,15 +80,15 @@ def explain_model(
         return
 
     results = dict()
+    explainers = configuration.explainers
+    if explainer_name is not None:
+        explainers = {explainer_name: explainers[explainer_name]}
     for metric_name, metric_config in configuration.explanation_metrics.items():
         metric_results = dict()
         metric_cls = retrieve_explanation_metric_class(metric_config.metric_class)
         metric = metric_cls(metric_config.parameters)
 
-        for explainer_name, explainer_config in configuration.explainers.items():
-            if not should_explain_model(model, explainer_config):
-                continue
-
+        for explainer_name, explainer_config in explainers.items():
             explainer_cls = retrieve_explainer_class(explainer_config.explainer_class)
             explainer = explainer_cls(explainer_config.parameters)
             explainer.initialize(list(training_inputs), list(training_outputs))
@@ -128,18 +123,3 @@ def explain_model(
                 metadata_grp = explainer_grp.create_group('metadata')
                 for meta_name, metadata_value in metadata.items():
                     metadata_grp.create_dataset(meta_name, data=metadata_value)
-
-
-def should_explain_model(
-    model: DynamicIdentificationModel, config: ExperimentExplainerConfiguration
-) -> bool:
-    if config.explained_super_classes is None:
-        return True
-
-    explained_classes = [
-        retrieve_model_class(cls_str) for cls_str in config.explained_super_classes
-    ]
-
-    return any(
-        isinstance(model, explained_class) for explained_class in explained_classes
-    )

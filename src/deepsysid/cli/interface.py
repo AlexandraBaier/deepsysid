@@ -81,6 +81,16 @@ class DeepSysIdCommandLineInterface:
             cuda_argument=True,
             mode_argument=True,
         )
+        self.explain_parser.add_argument(
+            name='--explainer',
+            help=(
+                'Specify the name of an explainer as defined in your configuration.'
+                'Only the specified explainer, rather than all explainers, '
+                'will be executed on the model.'
+            ),
+            store=True,
+            type=str,
+        )
         self.explain_parser.set_defaults(func=explain)
 
         self.evaluate_parser = self.subparsers.add_parser(
@@ -283,9 +293,14 @@ def test(args: argparse.Namespace) -> None:
 
 def explain(args: argparse.Namespace) -> None:
     if 'device_idx' in args:
-        device_name = build_device_name(args.enable_cuda, args.device_idx)
+        device_name: str = build_device_name(args.enable_cuda, args.device_idx)
     else:
         device_name = build_device_name(args.enable_cuda, None)
+
+    if 'explainer' in args:
+        explainer_name: Optional[str] = args.explainer
+    else:
+        explainer_name = None
 
     with open(os.path.expanduser(os.environ[CONFIGURATION_ENV_VAR]), mode='r') as f:
         config_dict = json.load(f)
@@ -306,6 +321,7 @@ def explain(args: argparse.Namespace) -> None:
         dataset_directory=os.path.expanduser(os.environ[DATASET_DIR_ENV_VAR]),
         result_directory=os.path.expanduser(os.environ[RESULT_DIR_ENV_VAR]),
         models_directory=os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR]),
+        explainer_name=explainer_name,
     )
 
 
