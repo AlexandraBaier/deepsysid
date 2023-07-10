@@ -77,7 +77,7 @@ class RefinedIndexOfAgreementMetric(BaseMetric):
         y_true_mean = np.mean(y_true_np, axis=0)
 
         numerator = np.sum((y_true_np - y_pred_np) ** 2, axis=0)
-        denominator = np.sum(y_true_np - y_true_mean**2, axis=0)
+        denominator = np.sum((y_true_np - y_true_mean) ** 2, axis=0)
         option1: NDArray[np.float64] = 1.0 - numerator / denominator
         option2 = denominator / numerator - 1
         switch = (option1 >= 0).astype(np.float64)
@@ -103,7 +103,7 @@ class FitRatioMetric(BaseMetric):
         y_true_mean = np.mean(y_true_np, axis=0)
 
         numerator = np.sqrt(np.sum((y_true_np - y_pred_np) ** 2, axis=0))
-        denominator = np.sqrt(np.sum(y_true_np - y_true_mean**2, axis=0))
+        denominator = np.sqrt(np.sum((y_true_np - y_true_mean) ** 2, axis=0))
         fit: NDArray[np.float64] = 1.0 - numerator / denominator
         return fit, dict(
             fit_ratio=np.array([np.mean(fit)], dtype=np.float64),
@@ -131,7 +131,7 @@ class EfficiencyMetric(BaseMetric):
         y_true_mean = np.mean(y_true_np, axis=0)
 
         numerator = np.sum((y_true_np - y_pred_np) ** 2, axis=0)
-        denominator = np.sum(y_true_np - y_true_mean**2, axis=0)
+        denominator = np.sum((y_true_np - y_true_mean) ** 2, axis=0)
         efficiency: NDArray[np.float64] = 1.0 - numerator / denominator
         return efficiency, dict(
             efficiency=np.array([np.mean(efficiency)], dtype=np.float64)
