@@ -88,7 +88,7 @@ class DeepSysIdCommandLineInterface:
                 'Only the specified explainer, rather than all explainers, '
                 'will be executed on the model.'
             ),
-            store=True,
+            action='store',
             type=str,
         )
         self.explain_parser.set_defaults(func=explain)
