@@ -82,7 +82,7 @@ class DeepSysIdCommandLineInterface:
             mode_argument=True,
         )
         self.explain_parser.add_argument(
-            name='--explainer',
+            '--explainer',
             help=(
                 'Specify the name of an explainer as defined in your configuration.'
                 'Only the specified explainer, rather than all explainers, '
