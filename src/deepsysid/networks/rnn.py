@@ -2318,7 +2318,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         Y_0 = L_y @ L_y.T
         Lambda_0 = torch.diag(self.lam).cpu().detach().numpy()
 
-        feasibility_constraint = [P << -1e-4 * np.eye(nP)]
+        feasibility_constraint = [P << -1e-3 * np.eye(nP)]
 
         problem = cp.Problem(
             cp.Minimize(
@@ -2355,7 +2355,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             f'alpha_star = {alpha.value}'
         )
 
-        alpha_fixed = np.float64(alpha.value + 0.1)
+        alpha_fixed = np.float64(alpha.value + 1e-1)
 
         beta = cp.Variable(shape=(1,))
         problem = cp.Problem(

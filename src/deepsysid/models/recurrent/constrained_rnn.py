@@ -1149,6 +1149,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     initial_decay_parameter: float
     extend_state: bool
     nonlinearity: str
+    decay_rate_lr: Optional[int] = 4
     enforce_constraints_method: Optional[Literal['barrier', 'projection']] = None
     epochs_with_const_decay: Optional[int]
     initial_window_size: Optional[int] = None
@@ -1242,6 +1243,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.epochs_without_projection = config.epochs_without_projection
         self.enforce_constraints_method = config.enforce_constraints_method
         self.gamma = config.gamma
+        self.decay_rate_lr = config.decay_rate_lr
 
         self.nl = retrieve_nonlinearity_class(config.nonlinearity)
 
@@ -1277,7 +1279,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         )
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer_pred,
-            factor=0.25,
+            factor=1/self.decay_rate_lr,
             patience=self.epochs_with_const_decay,
             verbose=True,
             threshold=1e-5,
@@ -1388,7 +1390,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                     if self.extend_state:
                         x0 = torch.concat(
                             [
-                                batch['x0'].float(),
+                                batch['x0'].float(),    
                                 torch.zeros(size=(self.batch_size, self.e)),
                             ],
                             dim=1,
