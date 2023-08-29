@@ -24,14 +24,16 @@ from deepsysid.models.datasets import (
     RecurrentPredictorInitializerInitialDataset,
 )
 
-from ...cli.interface import DATASET_DIR_ENV_VAR
+from ...cli.interface import DATASET_DIR_ENV_VAR, MODELS_DIR_ENV_VAR
 from ...networks import loss, rnn
 from ...networks.rnn import HiddenStateForwardModule
 from ...pipeline.data_io import load_simulation_data
 from ...pipeline.testing.base import TestSimulation
 from ...pipeline.testing.io import split_simulations
+from ...pipeline.model_io import save_model
 from ...tracker.base import BaseEventTracker
 from ...tracker.event_data import TrackArtifacts, TrackFigures, TrackMetrics
+
 
 logger = logging.getLogger('deepsysid.pipeline.training')
 
@@ -685,6 +687,9 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
         )
+        # self.optimizer_pred = optim.RMSprop(
+        #     self._predictor.parameters(), lr=self.learning_rate
+        # )
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer_pred,
             factor=0.25,
@@ -866,6 +871,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             # since it loads validation data from file system.
             # This should be improved in the future.
             if "PYTEST_CURRENT_TEST" not in os.environ:
+                old_validation_loss = validation_loss
                 validation_loss = self.validate(
                     horizon_size=int(4000),
                 )
@@ -1143,7 +1149,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     sequence_length: List[int]
     learning_rate: float
     batch_size: int
-    epochs_predictor: int
+    epochs_predictor: List[int]
     clip_gradient_norm: Optional[float]
     epochs_without_projection: int
     initial_decay_parameter: float
@@ -1264,7 +1270,8 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             nonlinearity=self.nl,
             device=self.device,
             normalize_rnn=self.normalize_rnn,
-            optimizer=self.optimizer
+            optimizer=self.optimizer,
+            enforce_constraints_method=config.enforce_constraints_method
         ).to(self.device)
 
         self.linear = rnn.Linear(
@@ -1274,16 +1281,23 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             torch.tensor([[0.0]]).float().to(self.device),
         ).to(self.device)
 
+        self.init_optimizer_scheduler()
+
+
+    def init_optimizer_scheduler(self) -> None:
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
         )
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer_pred,
-            factor=1/self.decay_rate_lr,
-            patience=self.epochs_with_const_decay,
-            verbose=True,
-            threshold=1e-5,
-        )
+        # self.optimizer_pred = optim.LBFGS(
+        #     self._predictor.parameters(), lr=self.learning_rate
+        # )
+        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        #     self.optimizer_pred,
+        #     factor=1/self.decay_rate_lr,
+        #     patience=self.epochs_with_const_decay,
+        #     verbose=True,
+        #     threshold=1e-5,
+        # )
 
     def train(
         self,
@@ -1304,22 +1318,24 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         n_batch = len(x0s)
         N, nx = x0s[0].shape
         _, nu = us[0].shape
-        _, xs = self.linear.forward(
-            torch.from_numpy(np.stack(x0s)[:, 0, :])
-            .reshape(n_batch, nx, 1)
-            .to(self.device)
-            .float(),
-            torch.from_numpy(np.stack(us))
-            .reshape(n_batch, N, nu, 1)
-            .to(self.device)
-            .float(),
-            True,
-        )
+        # _, xs = self.linear.forward(
+        #     torch.from_numpy(np.stack(x0s)[:, 0, :])
+        #     .reshape(n_batch, nx, 1)
+        #     .to(self.device)
+        #     .float(),
+        #     torch.from_numpy(np.stack(us))
+        #     .reshape(n_batch, N, nu, 1)
+        #     .to(self.device)
+        #     .float(),
+        #     True,
+        # )
 
-        self._control_mean, self._control_std = utils.mean_stddev(us)
-        self._state_mean, self._state_std = utils.mean_stddev(
-            list(xs.reshape((-1, nx)).cpu().detach().numpy())
-        )
+        # self._control_mean, self._control_std = utils.mean_stddev(us)
+        # self._state_mean, self._state_std = utils.mean_stddev(
+        #     list(xs.reshape((-1, nx)).cpu().detach().numpy())
+        # )
+        self._control_mean, self._control_std = (np.zeros(shape=(self._predictor.nwp,1)), np.zeros(shape=(self._predictor.nwp,1)))
+        self._state_mean, self._state_std = (np.zeros(shape=(self._predictor.nx,1)), np.zeros(shape=(self._predictor.nx,1)))
         if self.extend_state:
             # NOT WORKING PROPERLY AS IT LEADS TO DIVISION BY ZERO
             x_mean = np.hstack(
@@ -1342,18 +1358,32 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         else:
             x_mean = self._state_mean
             x_std = self._state_std
-        self._predictor._x_mean = torch.from_numpy(x_mean).float().to(self.device)
-        self._predictor._x_std = torch.from_numpy(x_std).float().to(self.device)
+        # self._predictor._x_mean = torch.from_numpy(x_mean).float().to(self.device)
+        # self._predictor._x_std = torch.from_numpy(x_std).float().to(self.device)
+        self._predictor._x_mean = torch.zeros(size=(self._predictor.nx,1)).float().to(self.device)
+        self._predictor._x_std = torch.zeros(size=(self._predictor.nx,1)).float().to(self.device)
         wp_mean = self._control_mean
-        self._predictor._wp_mean = torch.from_numpy(wp_mean).float().to(self.device)
-        wp_std = self._control_std
-        self._predictor._wp_std = torch.from_numpy(wp_std).float().to(self.device)
+        # self._predictor._wp_mean = torch.from_numpy(wp_mean).float().to(self.device)
+        self._predictor._wp_mean = torch.zeros(size=(self._predictor.nwp,1)).float().to(self.device)
+        # wp_std = self._control_std
+        # self._predictor._wp_std = torch.from_numpy(wp_std).float().to(self.device)
+        self._predictor._wp_std = torch.zeros(size=(self._predictor.nwp,1)).float().to(self.device)
 
         track_model_parameters(self, tracker)
 
+        # self._predictor.set_lure_system()
         if self.enforce_constraints_method is not None:
             self._predictor.project_parameters()
+            # self._predictor.initialize_lmi()
+        # self._predictor.project_parameters()
+        # self._predictor.project_parameters()
         self._predictor.set_lure_system()
+        # ONLY FOR DEBUGGING SINCE FILE IS NOT SAVED IN THE CORRECT LOCATION
+        directory = os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR])
+        self.save(
+            tuple(os.path.join(directory, f'{self.__class__.__name__}-init.{ext}') for ext in self.get_file_extension()),
+            tracker,
+        )
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1364,7 +1394,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         old_loss: torch.Tensor = torch.tensor(100.0)
         t = self.initial_decay_parameter
 
-        for seq_len in self.sequence_length:
+        for seq_len, epoch_predictor in zip(self.sequence_length, self.epochs_predictor):
             predictor_dataset = RecurrentPredictorInitializerInitialDataset(
                 us,
                 ys,
@@ -1375,8 +1405,12 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 self.initial_window_size,
                 self.normalize_rnn,
             )
+            no_decrease_count: int = 0
+            old_validation_loss= np.float64(0.0)
 
-            for i in range(self.epochs_predictor):
+            # for debugging
+            # torch.autograd.set_detect_anomaly(True)
+            for i in range(epoch_predictor):
                 step += 1
                 data_loader = data.DataLoader(
                     predictor_dataset, self.batch_size, shuffle=True, drop_last=True
@@ -1386,81 +1420,98 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 backtracking_iter: List[int] = list()
                 for batch_idx, batch in enumerate(data_loader):
 
-                    self._predictor.zero_grad(set_to_none=True)
-                    if self.extend_state:
-                        x0 = torch.concat(
-                            [
-                                batch['x0'].float(),    
-                                torch.zeros(size=(self.batch_size, self.e)),
-                            ],
-                            dim=1,
-                        ).to(self.device)
-                        x0_init = torch.concat(
-                            [
-                                batch['x0_init'][:, 0, :].float(),
-                                torch.zeros(size=(self.batch_size, self.e)),
-                            ],
-                            dim=1,
-                        ).to(self.device)
-                    else:
-                        x0_init = batch['x0_init'][:, 0, :].float().to(self.device)
-                        x0 = batch['x0'].float().to(self.device)
+                    def closure():
+                        self._predictor.zero_grad(set_to_none=True)
+                        if self.extend_state:
+                            x0 = torch.concat(
+                                [
+                                    batch['x0'].float(),    
+                                    torch.zeros(size=(self.batch_size, self.e)),
+                                ],
+                                dim=1,
+                            ).to(self.device)
+                            x0_init = torch.concat(
+                                [
+                                    batch['x0_init'][:, 0, :].float(),
+                                    torch.zeros(size=(self.batch_size, self.e)),
+                                ],
+                                dim=1,
+                            ).to(self.device)
+                        else:
+                            x0_init = batch['x0_init'][:, 0, :].float().to(self.device)
+                            x0 = batch['x0'].float().to(self.device)
 
-                    # warmstart
-                    _, (_, x_rnns) = self._predictor.forward(
-                        x_pred=batch['wp_init'].float().to(self.device),
-                        hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
-                    )
-
-                    # Predict and optimize
-                    zp_hat, _ = self._predictor.forward(
-                        x_pred=batch['wp'].float().to(self.device),
-                        hx=(
-                            x0,
-                            x_rnns[:, -1, :],
-                        ),
-                    )
-                    if batch_idx == 0 and i == 0:
-                        y_lin = (
-                            self.linear.forward(
-                                batch['x0'][0, :].reshape(1, nx, 1),
-                                batch['wp'][0, :, : self._predictor.nwp]
-                                .reshape(1, seq_len, self._predictor.nwp, 1)
-                                .float()
-                                .to(self.device),
-                            )[0]
-                            .cpu()
-                            .detach()
-                            .numpy()
+                        # warmstart
+                        _, (_, x_rnns) = self._predictor.forward(
+                            x_pred=batch['wp_init'].float().to(self.device),
+                            hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
                         )
+
+                        # Predict and optimize
+                        zp_hat, _ = self._predictor.forward(
+                            x_pred=batch['wp'].float().to(self.device),
+                            hx=(
+                                x0,
+                                x_rnns,
+                            ),
+                        )
+                        
+                        zp_hat = zp_hat.to(self.device)
+                        batch_loss = self.loss.forward(
+                            zp_hat, batch['zp'].float().to(self.device)
+                        )
+
+                        barrier = torch.tensor(0.0).to(self.device)
+                        if self.enforce_constraints_method == 'barrier':
+                            barrier = self._predictor.get_barriers(
+                                torch.tensor(t, device=self.device)
+                            )
+                            (batch_loss + barrier).backward(retain_graph=True)
+                        elif (
+                            self.enforce_constraints_method == 'projection'
+                            or self.enforce_constraints_method is None
+                        ):
+                            batch_loss.backward()
+
+                        if self.clip_gradient_norm is not None:
+                            torch.nn.utils.clip_grad_norm_(
+                                parameters=self._predictor.parameters(),
+                                max_norm=self.clip_gradient_norm,
+                            )
+
+                        # gradient infos
+                        grads_norm = [
+                            torch.linalg.norm(p.grad)
+                            for p in filter(
+                                lambda p: p.grad is not None, self._predictor.parameters()
+                            )
+                        ]
+                        # print(f'Loss: {batch_loss:.2f}\t max grad: {max(grads_norm):.2f}')
+                        max_grad.append(max(grads_norm).cpu().detach().numpy())
+
                         tracker(
-                            TrackFigures(
-                                'track initial prediction',
-                                utils.TrainingPrediction(
-                                    u=batch['wp'][0, :, : self._predictor.nwp],
-                                    zp=batch['zp'][0, :, :],
-                                    zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
-                                    y_lin=y_lin,
-                                ),
-                                'before_first_optimization.png',
+                            TrackMetrics(
+                                'track loss, validation loss and barrier',
+                                {
+                                    'batch loss predictor': float(
+                                        batch_loss.cpu().detach().numpy()
+                                    ),
+                                    'batch barrier predictor': float(
+                                        barrier.cpu().detach().numpy()
+                                    ),
+                                    # 'batch bls iter predictor': bls_iter,
+                                },
                             )
                         )
-                    zp_hat = zp_hat.to(self.device)
-                    batch_loss = self.loss.forward(
-                        zp_hat, batch['zp'].float().to(self.device)
-                    )
 
-                    barrier = torch.tensor(0.0).to(self.device)
-                    if self.enforce_constraints_method == 'barrier':
-                        barrier = self._predictor.get_barriers(
-                            torch.tensor(t, device=self.device)
-                        )
-                        (batch_loss + barrier).backward()
-                    elif (
-                        self.enforce_constraints_method == 'projection'
-                        or self.enforce_constraints_method is None
-                    ):
-                        batch_loss.backward()
+                        return batch_loss, barrier
+
+                    # save old parameter set
+                    old_pars = [
+                        par.clone().detach() for par in self._predictor.parameters()
+                    ]
+
+                    batch_loss, barrier = self.optimizer_pred.step(closure)
 
                     if torch.isnan(batch_loss):
                         logger.info('Stop training. Batch loss is None.')
@@ -1473,30 +1524,9 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                             gradient_norm=np.asarray(gradient_norm),
                             training_time_predictor=np.asarray(time_total_pred),
                         )
-                    total_loss += batch_loss.item()
 
-                    if self.clip_gradient_norm is not None:
-                        torch.nn.utils.clip_grad_norm_(
-                            parameters=self._predictor.parameters(),
-                            max_norm=self.clip_gradient_norm,
-                        )
-
-                    # gradient infos
-                    grads_norm = [
-                        torch.linalg.norm(p.grad)
-                        for p in filter(
-                            lambda p: p.grad is not None, self._predictor.parameters()
-                        )
-                    ]
-                    # print(f'Loss: {batch_loss:.2f}\t max grad: {max(grads_norm):.2f}')
-                    max_grad.append(max(grads_norm).cpu().detach().numpy())
-
-                    # save old parameter set
-                    old_pars = [
-                        par.clone().detach() for par in self._predictor.parameters()
-                    ]
-
-                    self.optimizer_pred.step()
+                    total_loss += batch_loss
+                    # total_loss += batch_loss.item()
 
                     new_pars = [
                         par.clone().detach() for par in self._predictor.parameters()
@@ -1539,20 +1569,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                             bls_iter += 1
                     backtracking_iter.append(bls_iter)
 
-                    tracker(
-                        TrackMetrics(
-                            'track loss, validation loss and barrier',
-                            {
-                                'batch loss predictor': float(
-                                    batch_loss.cpu().detach().numpy()
-                                ),
-                                'batch barrier predictor': float(
-                                    barrier.cpu().detach().numpy()
-                                ),
-                                'batch bls iter predictor': bls_iter,
-                            },
-                        )
-                    )
+
 
                 validation_loss = np.float64(0.0)
                 # skip validation for testing
@@ -1564,15 +1581,24 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         horizon_size=4000,
                     )
 
-                    old_lr = {
-                        p_group['lr'] for p_group in self.optimizer_pred.param_groups
-                    }
-                    self.scheduler.step(validation_loss)
-                    if not old_lr == {
-                        p_group['lr'] for p_group in self.optimizer_pred.param_groups
-                    }:
+                    # old_lr = {
+                    #     p_group['lr'] for p_group in self.optimizer_pred.param_groups
+                    # }
+                    e = old_validation_loss - validation_loss 
+                    if e < -1e-5 and i>0:
+                        no_decrease_count+=1
+                        # logger.info(f'New validation loss not smaller than old validation loss: \t no decrease counter {no_decrease_count} \t error: {e}')
+                    
+                    # update old validation loss
+                    old_validation_loss = validation_loss.copy()
+                    if no_decrease_count >= self.epochs_with_const_decay:
+                        # decay learning rate
+                        for p_group in self.optimizer_pred.param_groups:
+                            p_group['lr'] = p_group['lr'] * 1/self.decay_rate_lr
+                        # decay regularization
                         t = t * 1 / self.decay_rate
-                        logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+                        logger.info(f'Decay t by {self.decay_rate} \t t: {t:1f} \n'
+                                    f'Decay learning rate by {self.decay_rate_lr} \t lr: {self.optimizer_pred.param_groups[0]["lr"]:1f} ')
                         tracker(
                             TrackMetrics(
                                 'track decay and learning rate',
@@ -1585,8 +1611,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                 i,
                             )
                         )
-                        # steps_without_validation_improvement = 1
-
+                        # stop training if decay rate is too small
                         if t <= 1e-7:
                             time_end_pred = time.time()
                             time_total_pred = time_end_pred - time_start_pred
@@ -1601,6 +1626,30 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                 gradient_norm=np.asarray(gradient_norm),
                                 training_time_predictor=np.asarray(time_total_pred),
                             )
+                        # reset counter
+                        no_decrease_count = 0
+
+                    # self.scheduler.step(validation_loss)
+                    # if not old_lr == {
+                    #     p_group['lr'] for p_group in self.optimizer_pred.param_groups
+                    # }:
+                    #     t = t * 1 / self.decay_rate
+                    #     logger.info(f'Decay t by {self.decay_rate} \t' f't: {t:1f}')
+                    #     tracker(
+                    #         TrackMetrics(
+                    #             'track decay and learning rate',
+                    #             {
+                    #                 'learning rate': float(
+                    #                     self.optimizer_pred.param_groups[0]['lr']
+                    #                 ),
+                    #                 'decay rate': float(t),
+                    #             },
+                    #             i,
+                    #         )
+                    #     )
+                    #     # steps_without_validation_improvement = 1
+
+                    
                 tracker(
                     TrackMetrics(
                         'track loss, validation loss and barrier',
@@ -1614,35 +1663,35 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         i,
                     )
                 )
-                if (step - 1) % 50 == 0:
-                    y_lin = (
-                        self.linear.forward(
-                            batch['x0'][0, :].reshape(1, nx, 1),
-                            batch['wp'][0, :, : self._predictor.nwp]
-                            .reshape(1, seq_len, self._predictor.nwp, 1)
-                            .float()
-                            .to(self.device),
-                        )[0]
-                        .cpu()
-                        .detach()
-                        .numpy()
-                    )
-                    result = utils.TrainingPrediction(
-                        u=batch['wp'][0, :, : self._predictor.nwp],
-                        zp=batch['zp'][0, :, :],
-                        zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
-                        y_lin=y_lin[:, :, 0],
-                    )
-                    tracker(
-                        TrackFigures(
-                            f'Save output plot at step: {step}',
-                            result,
-                            'training_trajectory.png',
-                        )
-                    )
+                # if (step - 1) % 50 == 0:
+                #     # y_lin = (
+                #     #     self.linear.forward(
+                #     #         batch['x0'][0, :].reshape(1, self._predictor.nx, 1),
+                #     #         batch['wp'][0, :, : self._predictor.nwp]
+                #     #         .reshape(1, seq_len, self._predictor.nwp, 1)
+                #     #         .float()
+                #     #         .to(self.device),
+                #     #     )[0]
+                #     #     .cpu()
+                #     #     .detach()
+                #     #     .numpy()
+                #     # )
+                #     result = utils.TrainingPrediction(
+                #         u=batch['wp'][0, :, : self._predictor.nwp],
+                #         zp=batch['zp'][0, :, :],
+                #         zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                #         # y_lin=y_lin[:, :, 0],
+                #     )
+                #     tracker(
+                #         TrackFigures(
+                #             f'Save output plot at step: {step}',
+                #             result,
+                #             'training_trajectory.png',
+                #         )
+                #     )
 
                 logger.info(
-                    f'Epoch {i + 1}/{self.epochs_predictor}\t'
+                    f'Epoch {i + 1}/{epoch_predictor}\t'
                     f'Total Loss (Predictor): {total_loss:1f} \t'
                     f'Validation Loss: {validation_loss:1f} \t'
                     f'Barrier: {barrier:1f}\t'
@@ -1678,6 +1727,9 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                 training_time_predictor=np.asarray(time_total_pred),
                             )
                         old_loss = total_loss.cpu().detach().numpy()
+
+            # reset optimizer and scheduler
+            self.init_optimizer_scheduler()
 
         time_end_pred = time.time()
         time_total_pred = time_end_pred - time_start_pred
@@ -1799,7 +1851,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 torch.from_numpy(u_init).unsqueeze(0).float().to(self.device),
                 (initial_x0_torch, torch.zeros_like(initial_x0_torch)),
             )
-            y, _ = self._predictor.forward(pred_x, hx=(x0_torch, x_rnns[:, -1, :]))
+            y, _ = self._predictor.forward(pred_x, hx=(x0_torch, x_rnns[:, :]))
             y_np: NDArray[np.float64] = (
                 y.cpu().detach().numpy().reshape((N, self.ny)).astype(np.float64)
             )
@@ -1977,7 +2029,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 us_torch,
                 hx=(
                     x0_torch,
-                    x_rnns[:, -1, :],
+                    x_rnns[:, :],
                 ),
             )
         # return validation error normalized over all states

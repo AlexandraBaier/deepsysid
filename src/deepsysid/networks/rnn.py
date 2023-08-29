@@ -629,6 +629,8 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
                 ]
             )
 
+        # https://yalmip.github.io/faq/semidefiniteelementwise/
+        # symmetrize variable
         return (0.5 * (M + M.T)).to(self.device)
 
     def get_logdet(self, mat: torch.Tensor) -> torch.Tensor:
@@ -636,7 +638,7 @@ class LtiRnnConvConstr(HiddenStateForwardModule):
         _, info = torch.linalg.cholesky_ex(mat.cpu())
 
         if info > 0:
-            logdet = torch.tensor(float('inf')).to(self.device)
+            logdet = torch.tensor(float('inf')).to(self.device)            
         else:
             logdet = (mat.logdet()).to(self.device)
 
@@ -771,26 +773,53 @@ class LureSystem(Linear):
         self.Delta = Delta  # static nonlinearity
         self.device = device
 
+    # def forward(
+    #     self, x0: torch.Tensor, us: torch.Tensor, return_states: bool = False
+    # ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    #     n_batch, N, _, _ = us.shape
+    #     x_int = torch.zeros(size=(n_batch, N + 1, self._nx, 1)).to(self.device)
+    #     y = torch.zeros(size=(n_batch, N, self._ny, 1)).to(self.device)
+    #     w = torch.zeros(size=(n_batch, N, self._nw, 1)).to(self.device)
+    #     x_int[:, 0, :, :] = x0
+
+    #     for k in range(N):
+    #         w[:, k, :, :] = self.Delta(
+    #             self.C2 @ x_int[:, k, :, :] + self.D21 @ us[:, k, :, :]
+    #         )
+    #         x_int[:, k + 1, :, :] = (
+    #             super().state_dynamics(x=x_int[:, k, :, :], u=us[:, k, :, :])
+    #             + self.B2 @ w[:, k, :, :]
+    #         )
+    #         y[:, k, :, :] = (
+    #             super().output_dynamics(x=x_int[:, k, :, :], u=us[:, k, :, :])
+    #             + self.D12 @ w[:, k, :, :]
+    #         )
+    #     x = x_int[:,:N,:,:]
+    #     if return_states:
+    #         return (y, x)
+    #     else:
+    #         return y
+        
     def forward(
         self, x0: torch.Tensor, us: torch.Tensor, return_states: bool = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         n_batch, N, _, _ = us.shape
-        x = torch.zeros(size=(n_batch, N + 1, self._nx, 1)).to(self.device)
+        # x = torch.zeros(size=(n_batch, N + 1, self._nx, 1)).to(self.device)
         y = torch.zeros(size=(n_batch, N, self._ny, 1)).to(self.device)
-        w = torch.zeros(size=(n_batch, N, self._nw, 1)).to(self.device)
-        x[:, 0, :, :] = x0
+        # w = torch.zeros(size=(n_batch, self._nw, 1)).to(self.device)
+        x = x0.reshape(n_batch, self._nx, 1)
 
         for k in range(N):
-            w[:, k, :, :] = self.Delta(
-                self.C2 @ x[:, k, :, :] + self.D21 @ us[:, k, :, :]
+            w = self.Delta(
+                self.C2 @ x + self.D21 @ us[:, k, :, :]
             )
-            x[:, k + 1, :, :] = (
-                super().state_dynamics(x=x[:, k, :, :], u=us[:, k, :, :])
-                + self.B2 @ w[:, k, :, :]
+            x = (
+                super().state_dynamics(x=x, u=us[:, k, :, :])
+                + self.B2 @ w
             )
             y[:, k, :, :] = (
-                super().output_dynamics(x=x[:, k, :, :], u=us[:, k, :, :])
-                + self.D12 @ w[:, k, :, :]
+                super().output_dynamics(x=x, u=us[:, k, :, :])
+                + self.D12 @ w
             )
         if return_states:
             return (y, x)
@@ -827,6 +856,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         device: torch.device = torch.device('cpu'),
         normalize_rnn: Optional[bool] = False,
         optimizer: str = cp.SCS,
+        enforce_constraints_method: Optional[str] = 'barrier'
     ) -> None:
         super().__init__()
         self.nx = A_lin.shape[0]  # state size
@@ -861,53 +891,88 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.gamma = gamma
         epsilon = 1e-3
 
+    
         L_flat_size = self.extract_vector_from_lower_triangular_matrix(
-            np.zeros(shape=(self.nx, self.nx))
+            torch.zeros(size=(self.nx,self.nx))
         ).shape[0]
-        self.L_x_flat = torch.nn.Parameter(
-            epsilon * torch.ones(size=(L_flat_size,)).float().to(device)
-        )
-        self.L_y_flat = torch.nn.Parameter(
-            -epsilon * torch.ones(size=(L_flat_size,)).float().to(device)
-        )
+        # self.L_x_flat = torch.nn.Parameter(
+        #     torch.zeros(size=(L_flat_size,)).float().to(device)
+        # )
+        # L_x_flat_init = self.extract_vector_from_lower_triangular_matrix(
+        #     torch.linalg.cholesky(torch.randn(size=(self.nx,self.nx)))
+        # )
+        if enforce_constraints_method is None:
+            self.L_x_flat = 0.1*torch.randn(size=(L_flat_size,)).float().to(device)
+            self.L_y_flat = 10*torch.randn(size=(L_flat_size,)).float().to(device)
+        else:
+            self.L_x_flat = torch.nn.Parameter(
+                0.1*torch.randn(size=(L_flat_size,)).float().to(device)
+            )
+            self.L_y_flat = torch.nn.Parameter(
+                10*torch.randn(size=(L_flat_size,)).float().to(device)
+            )
+        # self.L_x_flat = torch.nn.Parameter(epsilon*nn.init.normal_(
+        #     torch.empty(size=(L_flat_size,)).float().to(device)
+        # ))
+        # self.L_y_flat = torch.nn.Parameter(
+        #     torch.zeros(size=(L_flat_size,)).float().to(device)
+        # )
+        # L_y_flat_init = self.extract_vector_from_lower_triangular_matrix(
+        #     torch.linalg.cholesky(torch.randn(size=(self.nx,self.nx)))
+        # )
+        
+        # self.L_y_flat = torch.nn.Parameter(epsilon*nn.init.normal_(
+        #     torch.empty(size=(L_flat_size,)).float().to(device)
+        # ))
 
+        # self.lam = torch.nn.Parameter(
+        #     epsilon * torch.ones(size=(self.nzu,)).float().to(device)
+        # )
         self.lam = torch.nn.Parameter(
-            epsilon * torch.ones(size=(self.nzu,)).float().to(device)
+            torch.ones(size=(self.nzu,)).float().to(device)
         )
 
-        self.K = torch.nn.Parameter(epsilon * torch.eye(self.nx).float().to(device))
-        self.L1 = torch.nn.Parameter(
-            torch.zeros(size=(self.nx, self.nwp)).float().to(device)
-        )
-        self.L2 = torch.nn.Parameter(
-            torch.zeros(size=(self.nx, self.ny)).float().to(device)
-        )
-        self.L3 = torch.nn.Parameter(
-            torch.zeros(size=(self.nx, self.nwu)).float().to(device)
-        )
+        # self.K = torch.nn.Parameter(epsilon * torch.eye(self.nx).float().to(device))1
+        # self.K = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nx)).float().to(device))
+        self.K = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(torch.empty(size=(self.nx,self.nx)).float().to(device)))
+        self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nx, self.nwp)).float().to(device)
+        ))
+        self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nx, self.nwp)).float().to(device)
+        ))
+        self.L2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nx, self.ny)).float().to(device)
+        ))
+        # self.L2 = torch.nn.Parameter(
+        #     torch.tensor(XY @ A_lin @ XY).float().to(device)
+        # )
+        self.L3 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nx, self.nwu)).float().to(device)
+        ))
 
-        self.M1 = torch.nn.Parameter(
-            torch.zeros(size=(self.nu, self.nx)).float().to(device)
-        )
-        self.N11 = torch.nn.Parameter(
-            torch.zeros(size=(self.nu, self.nwp)).float().to(device)
-        )
-        self.N12 = torch.nn.Parameter(
-            torch.zeros(size=(self.nu, self.ny)).float().to(device)
-        )
-        self.N13 = torch.nn.Parameter(
-            torch.zeros(size=(self.nu, self.nwu)).float().to(device)
-        )
+        self.M1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nu, self.nx)).float().to(device)
+        ))
+        self.N11 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nu, self.nwp)).float().to(device)
+        ))
+        self.N12 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nu, self.ny)).float().to(device)
+        ))
+        self.N13 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nu, self.nwu)).float().to(device)
+        ))
 
-        self.M2 = torch.nn.Parameter(
-            torch.zeros(size=(self.nzu, self.nx)).float().to(device)
-        )
-        self.N21 = torch.nn.Parameter(
-            torch.zeros(size=(self.nzu, self.nwp)).float().to(device)
-        )
-        self.N22 = torch.nn.Parameter(
-            torch.zeros(size=(self.nzu, self.ny)).float().to(device)
-        )
+        self.M2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nzu, self.nx)).float().to(device)
+        ))
+        self.N21 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nzu, self.nwp)).float().to(device)
+        ))
+        self.N22 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+            torch.empty(size=(self.nzu, self.ny)).float().to(device)
+        ))
         # self.N23 = torch.nn.Parameter(
         #     torch.zeros(size=(self.nzu, self.nwu)).float().to(device)
         # )
@@ -1214,10 +1279,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         Y = L_y @ L_y.T
 
         # 2. Determine non-singular U,V with V U^T = I - Y X
-        # U = torch.linalg.inv(Y) - X
-        # V = Y
-        U = torch.eye(self.nx).to(self.device)
-        V = torch.eye(self.nx).to(self.device) - Y @ X
+        U = torch.linalg.inv(Y) - X
+        V = Y
+        # U = torch.eye(self.nx).to(self.device)
+        # V = torch.eye(self.nx).to(self.device) - Y @ X
 
         return (X, Y, U, V)
 
@@ -1431,6 +1496,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         C1 = C1_tilde - L * D13 @ C2
         D11 = D11_tilde - L * D13 @ D21
         D12 = D12_tilde - L * D13 @ D22
+
+        # A = A_tilde
+        # B1 = B1_tilde
+        # B2 = B2_tilde
+        # B3 = B3_tilde
+        
+        # C1 = C1_tilde
+        # D11 = D11_tilde
+        # D12 = D12_tilde
+        # D13 = D13_tilde
 
         return torch.concat(
             [
@@ -1838,8 +1913,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # self.get_barrier(1e-3)
 
         return y.reshape(n_batch, N, self.lure._ny), (
-            x[:, :, : self.nx].reshape(n_batch, N + 1, self.nx),
-            x[:, :, self.nx :].reshape(n_batch, N + 1, self.nx),
+            x[:, : self.nx].reshape(n_batch, self.nx),
+            x[:, self.nx :].reshape(n_batch, self.nx),
         )
 
     def get_constraints(self) -> torch.Tensor:
@@ -2082,7 +2157,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             dim=0,
         ).to(self.device)
 
-        return P
+        # https://yalmip.github.io/faq/semidefiniteelementwise/
+        # symmetrize variable
+        return 0.5 * (P + P.T)
 
     def check_constraints(self) -> bool:
         P = self.get_constraints()
@@ -2091,10 +2168,11 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
     def get_logdet(self, mat: torch.Tensor) -> torch.Tensor:
         # return logdet of matrix mat, if it is not positive semi-definite, return inf
+
         _, info = torch.linalg.cholesky_ex(mat.cpu())
 
         if info > 0:
-            logdet = torch.tensor(float('inf')).to(self.device)
+            logdet = torch.tensor(float('inf')).to(self.device)            
         else:
             logdet = (mat.logdet()).to(self.device)
 
@@ -2318,11 +2396,27 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         Y_0 = L_y @ L_y.T
         Lambda_0 = torch.diag(self.lam).cpu().detach().numpy()
 
-        feasibility_constraint = [P << -1e-3 * np.eye(nP)]
+        feasibility_constraint = [
+            P << -1e-3 * np.eye(nP),
+            cp.bmat([[Y, np.eye(self.nx)],
+                     [np.eye(self.nx), X]])>> 0
+        ]
+        # feasibility_constraint = [P << 0]
+
+        L3_0 = np.random.normal(0,1, size=(self.nx,self.nwu))
+        M2_0 = np.random.normal(0,10, size=(self.nwu, self.nx))
+        N21_0 = np.random.normal(0,1, size=(self.nwu, self.nwp))
+        N22_0 = np.random.normal(0,1, size=(self.nwu, self.ny))
 
         problem = cp.Problem(
             cp.Minimize(
-                cp.norm(Omega_tilde - Omega_tilde_0)
+                # cp.norm(Omega_tilde - Omega_tilde_0)
+                cp.norm(Omega_tilde)
+                # cp.norm(L3_0-L3)
+                # + cp.norm(M2_0 - M2)
+                # + cp.norm(N21_0 - N21)
+                # + cp.norm(N22_0 - N22)
+                # cp.norm(L2-self.L2.detach().numpy())
                 + cp.norm(Lambda - Lambda_0)
                 + cp.norm(X - X_0)
                 + cp.norm(Y - Y_0)
@@ -2332,44 +2426,46 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         problem.solve(solver=self.optimizer)
 
         d = np.linalg.norm(Omega_tilde.value - Omega_tilde_0)
-        +np.linalg.norm(Lambda.value - Lambda_0)
-        +np.linalg.norm(X.value - X_0)
-        +np.linalg.norm(Y.value - Y_0)
+        size_klmn = np.linalg.norm(Omega_tilde.value)
+        # +np.linalg.norm(Lambda.value - Lambda_0)
+        # +np.linalg.norm(X.value - X_0)
+        # +np.linalg.norm(Y.value - Y_0)
 
         logger.info(
             f'1. run: projection. '
             f'problem status {problem.status},'
-            f'||X-X_0|| + ||Y-Y_0|| + ||Omega - Omega_0|| + ||Lambda-Lambda_0|| = {d}'
+            f'||X-X_0|| + ||Y-Y_0|| + ||Omega - Omega_0|| + ||Lambda-Lambda_0|| = {d}\n'
+            f'||Omega|| = {size_klmn}'
         )
 
-        alpha = cp.Variable(shape=(1,))
-        problem = cp.Problem(
-            cp.Minimize(expr=alpha),
-            feasibility_constraint
-            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
-        )
-        problem.solve(solver=self.optimizer)
-        logger.info(
-            f'2. run: parameter bounds. '
-            f'problem status {problem.status},'
-            f'alpha_star = {alpha.value}'
-        )
+        # alpha = cp.Variable(shape=(1,))
+        # problem = cp.Problem(
+        #     cp.Minimize(expr=alpha),
+        #     feasibility_constraint
+        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
+        # )
+        # problem.solve(solver=self.optimizer)
+        # logger.info(
+        #     f'2. run: parameter bounds. '
+        #     f'problem status {problem.status},'
+        #     f'alpha_star = {alpha.value}'
+        # )
 
-        alpha_fixed = np.float64(alpha.value + 1e-1)
+        # alpha_fixed = np.float64(alpha.value + 1e-1)
 
-        beta = cp.Variable(shape=(1,))
-        problem = cp.Problem(
-            cp.Maximize(expr=beta),
-            feasibility_constraint
-            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
-            + utils.get_conditioning_constraints(Y, X, beta),
-        )
-        problem.solve(solver=self.optimizer)
-        logger.info(
-            f'3. run: coupling conditions. '
-            f'problem status {problem.status},'
-            f'beta_star = {beta.value}'
-        )
+        # beta = cp.Variable(shape=(1,))
+        # problem = cp.Problem(
+        #     cp.Maximize(expr=beta),
+        #     feasibility_constraint
+        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
+        #     + utils.get_conditioning_constraints(Y, X, beta),
+        # )
+        # problem.solve(solver=self.optimizer)
+        # logger.info(
+        #     f'3. run: coupling conditions. '
+        #     f'problem status {problem.status},'
+        #     f'beta_star = {beta.value}'
+        # )
 
         if not write_parameter:
             logger.info('Return distance.')
