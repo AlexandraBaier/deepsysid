@@ -906,10 +906,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             self.L_y_flat = 10*torch.randn(size=(L_flat_size,)).float().to(device)
         else:
             self.L_x_flat = torch.nn.Parameter(
-                0.1*torch.randn(size=(L_flat_size,)).float().to(device)
+                torch.randn(size=(L_flat_size,)).float().to(device)
             )
             self.L_y_flat = torch.nn.Parameter(
-                10*torch.randn(size=(L_flat_size,)).float().to(device)
+                torch.randn(size=(L_flat_size,)).float().to(device)
             )
         # self.L_x_flat = torch.nn.Parameter(epsilon*nn.init.normal_(
         #     torch.empty(size=(L_flat_size,)).float().to(device)
@@ -931,48 +931,59 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.lam = torch.nn.Parameter(
             torch.ones(size=(self.nzu,)).float().to(device)
         )
+        # self.klmn = torch.nn.Parameter(
+        #     # epsilon*
+        #     nn.init.xavier_normal_(
+        #         torch.empty(size=(self.nx+self.nu+self.nzu, self.nx+self.nwp+self.ny+self.nwu))
+        #     )
+        # )
+        self.klmn = torch.nn.Parameter(
+            torch.zeros(size=(self.nx+self.nu+self.nzu, self.nx+self.nwp+self.ny+self.nwu))
+        ).to(device)
+        self.klmn.data[self.nx+self.nu:,:self.nx+self.nwp+self.ny] = torch.randn(self.nzu,self.nx+self.nwp+self.ny)
+        self.klmn.data[:self.nx+self.nu,self.nx+self.nwp+self.ny:] = torch.randn(self.nx+self.nu,nwu)
 
         # self.K = torch.nn.Parameter(epsilon * torch.eye(self.nx).float().to(device))1
         # self.K = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nx)).float().to(device))
-        self.K = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(torch.empty(size=(self.nx,self.nx)).float().to(device)))
-        self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nx, self.nwp)).float().to(device)
-        ))
-        self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nx, self.nwp)).float().to(device)
-        ))
-        self.L2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nx, self.ny)).float().to(device)
-        ))
-        # self.L2 = torch.nn.Parameter(
-        #     torch.tensor(XY @ A_lin @ XY).float().to(device)
-        # )
-        self.L3 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nx, self.nwu)).float().to(device)
-        ))
+        # self.K = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(torch.empty(size=(self.nx,self.nx)).float().to(device)))
+        # self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nx, self.nwp)).float().to(device)
+        # ))
+        # self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nx, self.nwp)).float().to(device)
+        # ))
+        # self.L2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nx, self.ny)).float().to(device)
+        # ))
+        # # self.L2 = torch.nn.Parameter(
+        # #     torch.tensor(XY @ A_lin @ XY).float().to(device)
+        # # )
+        # self.L3 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nx, self.nwu)).float().to(device)
+        # ))
 
-        self.M1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nu, self.nx)).float().to(device)
-        ))
-        self.N11 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nu, self.nwp)).float().to(device)
-        ))
-        self.N12 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nu, self.ny)).float().to(device)
-        ))
-        self.N13 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nu, self.nwu)).float().to(device)
-        ))
+        # self.M1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nu, self.nx)).float().to(device)
+        # ))
+        # self.N11 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nu, self.nwp)).float().to(device)
+        # ))
+        # self.N12 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nu, self.ny)).float().to(device)
+        # ))
+        # self.N13 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nu, self.nwu)).float().to(device)
+        # ))
 
-        self.M2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nzu, self.nx)).float().to(device)
-        ))
-        self.N21 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nzu, self.nwp)).float().to(device)
-        ))
-        self.N22 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-            torch.empty(size=(self.nzu, self.ny)).float().to(device)
-        ))
+        # self.M2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nzu, self.nx)).float().to(device)
+        # ))
+        # self.N21 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nzu, self.nwp)).float().to(device)
+        # ))
+        # self.N22 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
+        #     torch.empty(size=(self.nzu, self.ny)).float().to(device)
+        # ))
         # self.N23 = torch.nn.Parameter(
         #     torch.zeros(size=(self.nzu, self.nwu)).float().to(device)
         # )
@@ -1107,11 +1118,11 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
     def initialize_lmi(self) -> None:
         # 1. solve synthesis inequalities to find feasible parameter set
-        omega_tilde_0_numpy, X, Y, Lambda = self.get_initial_parameters()
+        klmn_0, X, Y, Lambda = self.get_initial_parameters()
 
-        (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23) = self.get_matrices(
-            omega_tilde_0_numpy
-        )
+        # (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23) = self.get_matrices(
+        #     omega_tilde_0_numpy
+        # )
 
         L_x = np.linalg.cholesky(a=X)
         L_x_flat = self.extract_vector_from_lower_triangular_matrix(L_x)
@@ -1123,19 +1134,21 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         self.lam.data = torch.tensor(np.diag(Lambda)).float()
 
-        self.K.data = torch.tensor(K).float()
-        self.L1.data = torch.tensor(L1).float()
-        self.L2.data = torch.tensor(L2).float()
-        self.L3.data = torch.tensor(L3).float()
+        self.klmn.data = torch.tensor(klmn_0).float()
 
-        self.M1.data = torch.tensor(M1).float()
-        self.N11.data = torch.tensor(N11).float()
-        self.N12.data = torch.tensor(N12).float()
-        self.N13.data = torch.tensor(N13).float()
+        # self.K.data = torch.tensor(K).float()
+        # self.L1.data = torch.tensor(L1).float()
+        # self.L2.data = torch.tensor(L2).float()
+        # self.L3.data = torch.tensor(L3).float()
 
-        self.M2.data = torch.tensor(M2).float()
-        self.N21.data = torch.tensor(N21).float()
-        self.N22.data = torch.tensor(N22).float()
+        # self.M1.data = torch.tensor(M1).float()
+        # self.N11.data = torch.tensor(N11).float()
+        # self.N12.data = torch.tensor(N12).float()
+        # self.N13.data = torch.tensor(N13).float()
+
+        # self.M2.data = torch.tensor(M2).float()
+        # self.N21.data = torch.tensor(N21).float()
+        # self.N22.data = torch.tensor(N22).float()
         # self.N23.data = torch.tensor(N23).float()
 
     def construct_lower_triangular_matrix(
@@ -1297,7 +1310,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             raise ValueError('Mean and std values of linear models are not set.')
 
         device = self.device
-        omega_tilde_0 = self.get_omega_tilde().to(device)
+        omega_tilde_0 = self.klmn.to(device)
+        # omega_tilde_0 = self.get_omega_tilde().to(device)
 
         # construct X, Y, and Lambda
         X, Y, U, V = self.get_coupling_matrices()
@@ -1452,24 +1466,24 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             D22,
         )
 
-    def get_omega_tilde(self) -> torch.Tensor:
+    # def get_omega_tilde(self) -> torch.Tensor:
 
-        return torch.concat(
-            [
-                torch.concat([self.K, self.L1, self.L2, self.L3], dim=1),
-                torch.concat([self.M1, self.N11, self.N12, self.N13], dim=1),
-                torch.concat(
-                    [
-                        self.M2,
-                        self.N21,
-                        self.N22,
-                        torch.zeros(size=(self.nwu, self.nzu), device=self.device),
-                    ],
-                    dim=1,
-                ),
-            ],
-            dim=0,
-        )
+    #     return torch.concat(
+    #         [
+    #             torch.concat([self.K, self.L1, self.L2, self.L3], dim=1),
+    #             torch.concat([self.M1, self.N11, self.N12, self.N13], dim=1),
+    #             torch.concat(
+    #                 [
+    #                     self.M2,
+    #                     self.N21,
+    #                     self.N22,
+    #                     torch.zeros(size=(self.nwu, self.nzu), device=self.device),
+    #                 ],
+    #                 dim=1,
+    #             ),
+    #         ],
+    #         dim=0,
+    #     )
 
     def get_omega(
         self,
@@ -1524,44 +1538,44 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             dim=0,
         )
 
-    def get_matrices(
-        self, block_matrix: NDArray[np.float64]
-    ) -> Tuple[
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-        NDArray[np.float64],
-    ]:
-        K = block_matrix[: self.nx, : self.nx]
-        L1 = block_matrix[: self.nx, self.nx : self.nx + self.nwp]
-        L2 = block_matrix[: self.nx, self.nx + self.nwp : self.nx + self.nwp + self.ny]
-        L3 = block_matrix[: self.nx, self.nx + self.nwp + self.ny :]
+    # def get_matrices(
+    #     self, block_matrix: NDArray[np.float64]
+    # ) -> Tuple[
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    #     NDArray[np.float64],
+    # ]:
+    #     K = block_matrix[: self.nx, : self.nx]
+    #     L1 = block_matrix[: self.nx, self.nx : self.nx + self.nwp]
+    #     L2 = block_matrix[: self.nx, self.nx + self.nwp : self.nx + self.nwp + self.ny]
+    #     L3 = block_matrix[: self.nx, self.nx + self.nwp + self.ny :]
 
-        M1 = block_matrix[self.nx : self.nx + self.nu, : self.nx]
-        N11 = block_matrix[self.nx : self.nx + self.nu, self.nx : self.nx + self.nwp]
-        N12 = block_matrix[
-            self.nx : self.nx + self.nu,
-            self.nx + self.nwp : self.nx + self.nwp + self.ny,
-        ]
-        N13 = block_matrix[self.nx : self.nx + self.nu, self.nx + self.nwp + self.ny :]
+    #     M1 = block_matrix[self.nx : self.nx + self.nu, : self.nx]
+    #     N11 = block_matrix[self.nx : self.nx + self.nu, self.nx : self.nx + self.nwp]
+    #     N12 = block_matrix[
+    #         self.nx : self.nx + self.nu,
+    #         self.nx + self.nwp : self.nx + self.nwp + self.ny,
+    #     ]
+    #     N13 = block_matrix[self.nx : self.nx + self.nu, self.nx + self.nwp + self.ny :]
 
-        M2 = block_matrix[self.nx + self.nu :, : self.nx]
-        N21 = block_matrix[self.nx + self.nu :, self.nx : self.nx + self.nwp]
-        N22 = block_matrix[
-            self.nx + self.nu :, self.nx + self.nwp : self.nx + self.nwp + self.ny
-        ]
-        N23 = block_matrix[self.nx + self.nu :, self.nx + self.nwp + self.ny :]
-        # assert np.linalg.norm(D23) < 1e-4
+    #     M2 = block_matrix[self.nx + self.nu :, : self.nx]
+    #     N21 = block_matrix[self.nx + self.nu :, self.nx : self.nx + self.nwp]
+    #     N22 = block_matrix[
+    #         self.nx + self.nu :, self.nx + self.nwp : self.nx + self.nwp + self.ny
+    #     ]
+    #     N23 = block_matrix[self.nx + self.nu :, self.nx + self.nwp + self.ny :]
+    #     # assert np.linalg.norm(D23) < 1e-4
 
-        return (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23)
+    #     return (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23)
 
     def get_interconnected_matrices(
         self, interconnected_block_matrix: torch.Tensor
@@ -1650,27 +1664,27 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         lam = cp.Variable(shape=(self.nzu, 1), pos=True, name='lam')
         Lambda = cp.diag(lam)
 
-        K = cp.Variable(shape=(self.nx, self.nx))
-        # K = np.zeros(shape=(self.nx,self.nx))
-        L1 = cp.Variable(shape=(self.nx, self.nwp))
-        # L1 = np.zeros(shape=(self.nx, self.nwp))
-        L2 = cp.Variable(shape=(self.nx, self.ny))
-        # L2 = np.zeros(shape=(self.nx, self.ny))
-        L3 = cp.Variable(shape=(self.nx, self.nwu))
+        # K = cp.Variable(shape=(self.nx, self.nx))
+        # # K = np.zeros(shape=(self.nx,self.nx))
+        # L1 = cp.Variable(shape=(self.nx, self.nwp))
+        # # L1 = np.zeros(shape=(self.nx, self.nwp))
+        # L2 = cp.Variable(shape=(self.nx, self.ny))
+        # # L2 = np.zeros(shape=(self.nx, self.ny))
+        # L3 = cp.Variable(shape=(self.nx, self.nwu))
 
-        M1 = cp.Variable(shape=(self.nu, self.nx))
-        # M1 = np.zeros(shape=(self.nu, self.nx))
-        N11 = cp.Variable(shape=(self.nu, self.nwp))
-        # N11 = np.zeros(shape=(self.nu, self.nwp))
-        N12 = cp.Variable(shape=(self.nu, self.ny))
-        # N12 = np.zeros(shape=(self.nu, self.ny))
-        N13 = cp.Variable(shape=(self.nu, self.nwu))
+        # M1 = cp.Variable(shape=(self.nu, self.nx))
+        # # M1 = np.zeros(shape=(self.nu, self.nx))
+        # N11 = cp.Variable(shape=(self.nu, self.nwp))
+        # # N11 = np.zeros(shape=(self.nu, self.nwp))
+        # N12 = cp.Variable(shape=(self.nu, self.ny))
+        # # N12 = np.zeros(shape=(self.nu, self.ny))
+        # N13 = cp.Variable(shape=(self.nu, self.nwu))
 
-        M2 = cp.Variable(shape=(self.nzu, self.nx))
-        N21 = cp.Variable(shape=(self.nzu, self.nwp))
-        N22 = cp.Variable(shape=(self.nzu, self.ny))
-        N23 = np.zeros(shape=(self.nzu, self.nwu))
-        # N23 = cp.Variable(shape=(self.nzu, self.nwu))
+        # M2 = cp.Variable(shape=(self.nzu, self.nx))
+        # N21 = cp.Variable(shape=(self.nzu, self.nwp))
+        # N22 = cp.Variable(shape=(self.nzu, self.ny))
+        # N23 = np.zeros(shape=(self.nzu, self.nwu))
+        # # N23 = cp.Variable(shape=(self.nzu, self.nwu))
 
         P_21_1 = cp.bmat(
             [
@@ -1724,13 +1738,15 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
             ]
         )
-        Omega_tilde = cp.bmat(
-            [
-                [K, L1, L2, L3],
-                [M1, N11, N12, N13],
-                [M2, N21, N22, N23],
-            ]
-        )
+        
+        klmn = cp.Variable(shape=(self.nx+self.nu+self.nzu, self.nx+self.nwp+self.ny+self.nwu))
+        # Omega_tilde = cp.bmat(
+        #     [
+        #         [K, L1, L2, L3],
+        #         [M1, N11, N12, N13],
+        #         [M2, N21, N22, N23],
+        #     ]
+        # )
         P_21_4 = cp.bmat(
             [
                 [
@@ -1760,7 +1776,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             ]
         )
 
-        P_21 = P_21_1 + P_21_2 @ Omega_tilde @ P_21_4
+        P_21 = P_21_1 + P_21_2 @ klmn @ P_21_4
         P_11 = -cp.bmat(
             [
                 [
@@ -1839,7 +1855,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         problem = cp.Problem(
             objective=cp.Minimize(expr=alpha),
             constraints=utils.get_feasibility_constraint(P, t_fixed)
-            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
+            + utils.get_bounding_inequalities(X, Y, klmn, alpha),
         )
         problem.solve(solver=self.optimizer)
 
@@ -1857,7 +1873,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         problem = cp.Problem(
             objective=cp.Maximize(expr=beta),
             constraints=utils.get_feasibility_constraint(P, t_fixed)
-            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
+            + utils.get_bounding_inequalities(X, Y, klmn, alpha_fixed)
             + utils.get_conditioning_constraints(X, Y, beta),
         )
         problem.solve(solver=self.optimizer)
@@ -1871,25 +1887,25 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             f'Max real eigenvalue of P: {np.max(np.real(np.linalg.eig(P.value)[0]))}'
         )
 
-        omega_tilde_0 = np.concatenate(
-            [
-                np.concatenate([K.value, L1.value, L2.value, L3.value], axis=1),
-                np.concatenate(
-                    [
-                        M1.value,
-                        N11.value,
-                        N12.value,
-                        N13.value,
-                    ],
-                    axis=1,
-                ),
-                np.concatenate([M2.value, N21.value, N22.value, N23], axis=1),
-            ],
-            axis=0,
-        )
+        # omega_tilde_0 = np.concatenate(
+        #     [
+        #         np.concatenate([K.value, L1.value, L2.value, L3.value], axis=1),
+        #         np.concatenate(
+        #             [
+        #                 M1.value,
+        #                 N11.value,
+        #                 N12.value,
+        #                 N13.value,
+        #             ],
+        #             axis=1,
+        #         ),
+        #         np.concatenate([M2.value, N21.value, N22.value, N23], axis=1),
+        #     ],
+        #     axis=0,
+        # )
 
         return (
-            omega_tilde_0,
+            klmn.value,
             np.array(X.value, dtype=np.float64),
             np.array(Y.value, dtype=np.float64),
             np.array(Lambda.value, dtype=np.float64),
@@ -1932,7 +1948,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         B_lin = self.B_lin
         C_lin = self.C_lin
         Lambda = torch.diag(self.lam).to(self.device)
-        omega_tilde = self.get_omega_tilde().float().to(self.device)
+        # omega_tilde = self.get_omega_tilde().float().to(self.device)
+        omega_tilde = self.klmn.float().to(self.device)
 
         P_21_1 = (
             torch.concat(
@@ -2215,20 +2232,20 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         lam = cp.Variable(shape=(self.nzu, 1), pos=True, name='lam')
         Lambda = cp.diag(lam)
 
-        K = cp.Variable(shape=(self.nx, self.nx))
-        L1 = cp.Variable(shape=(self.nx, self.nwp))
-        L2 = cp.Variable(shape=(self.nx, self.ny))
-        L3 = cp.Variable(shape=(self.nx, self.nwu))
+        # K = cp.Variable(shape=(self.nx, self.nx))
+        # L1 = cp.Variable(shape=(self.nx, self.nwp))
+        # L2 = cp.Variable(shape=(self.nx, self.ny))
+        # L3 = cp.Variable(shape=(self.nx, self.nwu))
 
-        M1 = cp.Variable(shape=(self.nu, self.nx))
-        N11 = cp.Variable(shape=(self.nu, self.nwp))
-        N12 = cp.Variable(shape=(self.nu, self.ny))
-        N13 = cp.Variable(shape=(self.nu, self.nwu))
+        # M1 = cp.Variable(shape=(self.nu, self.nx))
+        # N11 = cp.Variable(shape=(self.nu, self.nwp))
+        # N12 = cp.Variable(shape=(self.nu, self.ny))
+        # N13 = cp.Variable(shape=(self.nu, self.nwu))
 
-        M2 = cp.Variable(shape=(self.nzu, self.nx))
-        N21 = cp.Variable(shape=(self.nzu, self.nwp))
-        N22 = cp.Variable(shape=(self.nzu, self.ny))
-        N23 = np.zeros(shape=(self.nzu, self.nwu))
+        # M2 = cp.Variable(shape=(self.nzu, self.nx))
+        # N21 = cp.Variable(shape=(self.nzu, self.nwp))
+        # N22 = cp.Variable(shape=(self.nzu, self.ny))
+        # N23 = np.zeros(shape=(self.nzu, self.nwu))
         # N23 = cp.Variable(shape=(self.nzu, self.nwu))
 
         P_21_1 = cp.bmat(
@@ -2311,13 +2328,15 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
             ]
         )
-        Omega_tilde = cp.bmat(
-            [
-                [K, L1, L2, L3],
-                [M1, N11, N12, N13],
-                [M2, N21, N22, N23],
-            ]
-        )
+        
+        Omega_tilde = cp.Variable(shape=(self.nx+self.nu+self.nzu, self.nx+self.nwp+self.ny+self.nwu))
+        # Omega_tilde = cp.bmat(
+        #     [
+        #         [K, L1, L2, L3],
+        #         [M1, N11, N12, N13],
+        #         [M2, N21, N22, N23],
+        #     ]
+        # )
         P_21 = P_21_1 + P_21_2 @ Omega_tilde @ P_21_4
         P_11 = -cp.bmat(
             [
@@ -2378,8 +2397,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
         nP = P.shape[0]
 
-        device = self.get_omega_tilde().device
-        Omega_tilde_0 = self.get_omega_tilde().cpu().detach().numpy()
+        device = self.klmn.device
+        # Omega_tilde_0 = self.get_omega_tilde().cpu().detach().numpy()
+        Omega_tilde_0 = self.klmn.cpu().detach().numpy()
         L_x = (
             self.construct_lower_triangular_matrix(self.L_x_flat, self.nx)
             .cpu()
@@ -2410,16 +2430,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         problem = cp.Problem(
             cp.Minimize(
-                # cp.norm(Omega_tilde - Omega_tilde_0)
-                cp.norm(Omega_tilde)
+                cp.norm(Omega_tilde - Omega_tilde_0)
+                # cp.norm(Omega_tilde)
                 # cp.norm(L3_0-L3)
                 # + cp.norm(M2_0 - M2)
                 # + cp.norm(N21_0 - N21)
                 # + cp.norm(N22_0 - N22)
                 # cp.norm(L2-self.L2.detach().numpy())
-                + cp.norm(Lambda - Lambda_0)
-                + cp.norm(X - X_0)
-                + cp.norm(Y - Y_0)
+                # + cp.norm(Lambda - Lambda_0)
+                # + cp.norm(X - X_0)
+                # + cp.norm(Y - Y_0)
             ),
             feasibility_constraint,
         )
@@ -2434,38 +2454,38 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         logger.info(
             f'1. run: projection. '
             f'problem status {problem.status},'
-            f'||X-X_0|| + ||Y-Y_0|| + ||Omega - Omega_0|| + ||Lambda-Lambda_0|| = {d}\n'
+            f'||Omega - Omega_0|| = {d} \t'
             f'||Omega|| = {size_klmn}'
         )
 
-        # alpha = cp.Variable(shape=(1,))
-        # problem = cp.Problem(
-        #     cp.Minimize(expr=alpha),
-        #     feasibility_constraint
-        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
-        # )
-        # problem.solve(solver=self.optimizer)
-        # logger.info(
-        #     f'2. run: parameter bounds. '
-        #     f'problem status {problem.status},'
-        #     f'alpha_star = {alpha.value}'
-        # )
+        alpha = cp.Variable(shape=(1,))
+        problem = cp.Problem(
+            cp.Minimize(expr=alpha),
+            feasibility_constraint
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
+        )
+        problem.solve(solver=self.optimizer)
+        logger.info(
+            f'2. run: parameter bounds. '
+            f'problem status {problem.status},'
+            f'alpha_star = {alpha.value}'
+        )
 
-        # alpha_fixed = np.float64(alpha.value + 1e-1)
+        alpha_fixed = np.float64(alpha.value + 1e-1)
 
-        # beta = cp.Variable(shape=(1,))
-        # problem = cp.Problem(
-        #     cp.Maximize(expr=beta),
-        #     feasibility_constraint
-        #     + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
-        #     + utils.get_conditioning_constraints(Y, X, beta),
-        # )
-        # problem.solve(solver=self.optimizer)
-        # logger.info(
-        #     f'3. run: coupling conditions. '
-        #     f'problem status {problem.status},'
-        #     f'beta_star = {beta.value}'
-        # )
+        beta = cp.Variable(shape=(1,))
+        problem = cp.Problem(
+            cp.Maximize(expr=beta),
+            feasibility_constraint
+            + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed)
+            + utils.get_conditioning_constraints(Y, X, beta),
+        )
+        problem.solve(solver=self.optimizer)
+        logger.info(
+            f'3. run: coupling conditions. '
+            f'problem status {problem.status},'
+            f'beta_star = {beta.value}'
+        )
 
         if not write_parameter:
             logger.info('Return distance.')
@@ -2492,17 +2512,19 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         )
         self.lam.data = torch.tensor(np.diag(np.array(Lambda.value))).float().to(device)
 
-        self.K.data = torch.tensor(K.value).float().to(device)
-        self.L1.data = torch.tensor(L1.value).float().to(device)
-        self.L2.data = torch.tensor(L2.value).float().to(device)
-        self.L3.data = torch.tensor(L3.value).float().to(device)
-        self.M1.data = torch.tensor(M1.value).float().to(device)
-        self.N11.data = torch.tensor(N11.value).float().to(device)
-        self.N12.data = torch.tensor(N12.value).float().to(device)
-        self.N13.data = torch.tensor(N13.value).float().to(device)
-        self.M2.data = torch.tensor(M2.value).float().to(device)
-        self.N21.data = torch.tensor(N21.value).float().to(device)
-        self.N22.data = torch.tensor(N22.value).float().to(device)
+        self.klmn.data = torch.tensor(Omega_tilde.value).float().to(device)
+
+        # self.K.data = torch.tensor(K.value).float().to(device)
+        # self.L1.data = torch.tensor(L1.value).float().to(device)
+        # self.L2.data = torch.tensor(L2.value).float().to(device)
+        # self.L3.data = torch.tensor(L3.value).float().to(device)
+        # self.M1.data = torch.tensor(M1.value).float().to(device)
+        # self.N11.data = torch.tensor(N11.value).float().to(device)
+        # self.N12.data = torch.tensor(N12.value).float().to(device)
+        # self.N13.data = torch.tensor(N13.value).float().to(device)
+        # self.M2.data = torch.tensor(M2.value).float().to(device)
+        # self.N21.data = torch.tensor(N21.value).float().to(device)
+        # self.N22.data = torch.tensor(N22.value).float().to(device)
         # self.N23.data = torch.tensor(N23).float().to(device)
 
         return np.float64(d)

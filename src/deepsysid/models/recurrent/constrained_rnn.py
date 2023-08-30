@@ -1379,11 +1379,11 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         # self._predictor.project_parameters()
         self._predictor.set_lure_system()
         # ONLY FOR DEBUGGING SINCE FILE IS NOT SAVED IN THE CORRECT LOCATION
-        directory = os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR])
-        self.save(
-            tuple(os.path.join(directory, f'{self.__class__.__name__}-init.{ext}') for ext in self.get_file_extension()),
-            tracker,
-        )
+        # directory = os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR])
+        # self.save(
+        #     tuple(os.path.join(directory, f'{self.__class__.__name__}-init.{ext}') for ext in self.get_file_extension()),
+        #     tracker,
+        # )
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
