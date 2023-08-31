@@ -871,7 +871,6 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             # since it loads validation data from file system.
             # This should be improved in the future.
             if "PYTEST_CURRENT_TEST" not in os.environ:
-                old_validation_loss = validation_loss
                 validation_loss = self.validate(
                     horizon_size=int(4000),
                 )
@@ -1415,7 +1414,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 data_loader = data.DataLoader(
                     predictor_dataset, self.batch_size, shuffle=True, drop_last=True
                 )
-                total_loss: torch.Tensor = torch.tensor(0.0)
+                total_loss: torch.Tensor = torch.tensor(0.0).to(self.device)
                 max_grad: List[np.float64] = list()
                 backtracking_iter: List[int] = list()
                 for batch_idx, batch in enumerate(data_loader):
