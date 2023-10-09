@@ -1,4 +1,5 @@
 from typing import List, Union
+from numpy.typing import NDArray
 
 import cvxpy as cp
 import numpy as np
@@ -42,3 +43,6 @@ def get_conditioning_constraints(
     nx = X.shape[0]
     constraints = [cp.bmat([[Y, beta * np.eye(nx)], [beta * np.eye(nx), X]]) >> 0]
     return constraints
+
+def get_distance_constraints(klmn_0: NDArray[np.float64], klmn: cp.Variable, d: Union[cp.Variable, np.float64]) -> List:
+    return [cp.norm(klmn_0 - klmn) <= d]
