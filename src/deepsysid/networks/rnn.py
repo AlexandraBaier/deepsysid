@@ -1561,25 +1561,6 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             D22,
         )
 
-    # def get_omega_tilde(self) -> torch.Tensor:
-
-    #     return torch.concat(
-    #         [
-    #             torch.concat([self.K, self.L1, self.L2, self.L3], dim=1),
-    #             torch.concat([self.M1, self.N11, self.N12, self.N13], dim=1),
-    #             torch.concat(
-    #                 [
-    #                     self.M2,
-    #                     self.N21,
-    #                     self.N22,
-    #                     torch.zeros(size=(self.nwu, self.nzu), device=self.device),
-    #                 ],
-    #                 dim=1,
-    #             ),
-    #         ],
-    #         dim=0,
-    #     )
-
     def get_omega(
         self,
         A_tilde: torch.Tensor,
@@ -1632,45 +1613,6 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             ],
             dim=0,
         )
-
-    # def get_matrices(
-    #     self, block_matrix: NDArray[np.float64]
-    # ) -> Tuple[
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    #     NDArray[np.float64],
-    # ]:
-    #     K = block_matrix[: self.nx, : self.nx]
-    #     L1 = block_matrix[: self.nx, self.nx : self.nx + self.nwp]
-    #     L2 = block_matrix[: self.nx, self.nx + self.nwp : self.nx + self.nwp + self.ny]
-    #     L3 = block_matrix[: self.nx, self.nx + self.nwp + self.ny :]
-
-    #     M1 = block_matrix[self.nx : self.nx + self.nu, : self.nx]
-    #     N11 = block_matrix[self.nx : self.nx + self.nu, self.nx : self.nx + self.nwp]
-    #     N12 = block_matrix[
-    #         self.nx : self.nx + self.nu,
-    #         self.nx + self.nwp : self.nx + self.nwp + self.ny,
-    #     ]
-    #     N13 = block_matrix[self.nx : self.nx + self.nu, self.nx + self.nwp + self.ny :]
-
-    #     M2 = block_matrix[self.nx + self.nu :, : self.nx]
-    #     N21 = block_matrix[self.nx + self.nu :, self.nx : self.nx + self.nwp]
-    #     N22 = block_matrix[
-    #         self.nx + self.nu :, self.nx + self.nwp : self.nx + self.nwp + self.ny
-    #     ]
-    #     N23 = block_matrix[self.nx + self.nu :, self.nx + self.nwp + self.ny :]
-    #     # assert np.linalg.norm(D23) < 1e-4
-
-    #     return (K, L1, L2, L3, M1, N11, N12, N13, M2, N21, N22, N23)
 
     def get_interconnected_matrices(
         self, interconnected_block_matrix: torch.Tensor
@@ -2620,8 +2562,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         klmn_0 = self.klmn.cpu().detach().numpy()
         # random C2, D21, D22
         # klmn_0[self.nx+self.nu:,:self.nx+self.nwp+self.ny] = np.random.normal(0,1,size=(self.nzu, self.nx+self.nwp+self.ny))
-        klmn_0[self.nx+self.nu:,:self.nx+self.nwp+self.ny] = np.random.normal(0,1/10,size=(self.nzu, self.nx+self.nwp+self.ny))
-        klmn_0[:self.nx,self.nx+self.nwp+self.ny:] = np.random.normal(0,1/10, size=(self.nx,self.nwu))
+        # klmn_0[self.nx+self.nu:,:self.nx+self.nwp+self.ny] = np.random.normal(0,1/10,size=(self.nzu, self.nx+self.nwp+self.ny))
+        # klmn_0[:self.nx,self.nx+self.nwp+self.ny:] = np.random.normal(0,1/10, size=(self.nx,self.nwu))
 
         # klmn_0[:self.nx+self.nu,self.nx+self.nwp+self.ny:] = np.random.normal(0,1, size=(self.nx+self.nu,self.nwu))
 
@@ -2733,6 +2675,54 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     def write_parameters(self, params: List[torch.Tensor]) -> None:
         for old_par, new_par in zip(params, self.parameters()):
             new_par.data = old_par.clone()
+
+
+class BasicHybridRnn(ConstrainedForwardModule):
+
+    def __init__(self,
+        A_lin: NDArray[np.float64],
+        B_lin: NDArray[np.float64],
+        C_lin: NDArray[np.float64],
+        alpha: float,
+        beta: float,
+        nwu: int,
+        nzu: int,
+        gamma: float,
+        nonlinearity: Callable[[torch.Tensor], torch.Tensor],
+        device: torch.device = torch.device('cpu'),
+        optimizer: str = cp.SCS,
+    ) -> None:
+        super().__init__()
+        self.nx = A_lin.shape[0]  # state size
+        self.ny = self.nx  # output size of linearization
+        self.nwp = B_lin.shape[1]  # input size of performance channel
+        self.nzp = C_lin.shape[0]  # output size of performance channel
+        self.nzu = nzu  # output size of uncertainty channel
+        self.nwu = nwu  # input size of uncertainty channel
+        self.nu = self.nzp
+
+        self.optimizer=optimizer
+        self.alpha = alpha
+        self.beta = beta
+        self.nl = nonlinearity
+        self.gamma = gamma
+        self.device = device
+
+        self.A_lin = torch.tensor(A_lin, dtype=torch.float32).to(device)
+        self.B_lin = torch.tensor(B_lin, dtype=torch.float32).to(device)
+        self.C_lin = torch.tensor(C_lin, dtype=torch.float32).to(device)
+
+        self.B3 = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nwu)))
+        self.D13 = torch.nn.Parameter(torch.zeros(size=(self.nu,self.nwu)))
+        self.C2 = torch.nn.Parameter(torch.zeros(size=(self.nzu,self.nx)))
+        self.D11 = torch.nn.Parameter(torch.zeros(size=(self.nzu,self.nwp)))
+        self.D12 = torch.nn.Parameter(torch.zeros(size=(self.nzu,self.ny)))
+        
+    # def get_initial_parameters(
+    #         self,
+    #     ) -> Tuple[
+    #         NDArray[float64], NDArray[float64], NDArray[float64], NDArray[float64]]:
+    #     return super().get_initial_parameters()
 
 
 class InitLSTM(nn.Module):
