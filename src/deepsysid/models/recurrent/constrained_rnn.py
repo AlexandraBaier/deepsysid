@@ -1229,6 +1229,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 axis=1,
             )
         else:
+            self.e = 0
             A_lin_tilde = np.array(config.A_lin, dtype=np.float64)
             B_lin_tilde = np.array(config.B_lin, dtype=np.float64)
             C_lin_tilde = np.array(config.C_lin, dtype=np.float64)
@@ -1300,6 +1301,13 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         #     verbose=True,
         #     threshold=1e-5,
         # )
+        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        #     self.optimizer_pred,
+        #     factor=0.25,
+        #     patience=self.epochs_with_const_decay,
+        #     verbose=True,
+        #     threshold=1e-5,
+        # )
 
     def train(
         self,
@@ -1344,28 +1352,28 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             np.zeros(shape=(self._predictor.nx, 1)),
             np.zeros(shape=(self._predictor.nx, 1)),
         )
-        if self.extend_state:
-            # NOT WORKING PROPERLY AS IT LEADS TO DIVISION BY ZERO
-            x_mean = np.hstack(
-                (
-                    self._state_mean,
-                    np.ones(
-                        shape=self.e,
-                    ),
-                )
-            )
+        # if self.extend_state:
+        #     # NOT WORKING PROPERLY AS IT LEADS TO DIVISION BY ZERO
+        #     x_mean = np.hstack(
+        #         (
+        #             self._state_mean,
+        #             np.ones(
+        #                 shape=self.e,
+        #             ),
+        #         )
+        #     )
 
-            x_std = np.hstack(
-                (
-                    self._state_std,
-                    np.ones(
-                        shape=self.e,
-                    ),
-                )
-            )
-        else:
-            x_mean = self._state_mean
-            x_std = self._state_std
+        #     x_std = np.hstack(
+        #         (
+        #             self._state_std,
+        #             np.ones(
+        #                 shape=self.e,
+        #             ),
+        #         )
+        #     )
+        # else:
+        #     x_mean = self._state_mean
+        #     x_std = self._state_std
         # self._predictor._x_mean = torch.from_numpy(x_mean).float().to(self.device)
         # self._predictor._x_std = torch.from_numpy(x_std).float().to(self.device)
         self._predictor._x_mean = (
@@ -1374,6 +1382,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self._predictor._x_std = (
             torch.zeros(size=(self._predictor.nx, 1)).float().to(self.device)
         )
+        x_mean = self._state_mean
         wp_mean = self._control_mean
         # self._predictor._wp_mean = torch.from_numpy(wp_mean).float().to(self.device)
         self._predictor._wp_mean = (
@@ -1595,6 +1604,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         seq_len,
                         horizon_size=4000,
                     )
+                    # self.scheduler.step(validation_loss)
                     e = old_validation_loss - validation_loss
                     if e < -1e-5 and i > 0:
                         no_decrease_count += 1
@@ -1659,7 +1669,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                     with torch.no_grad():
                         y_lin = (
                             self.linear.forward(
-                                batch['x0'][0, :].reshape(1, self._predictor.nx, 1),
+                                batch['x0'][0, :].reshape(1, self._predictor.nx-self.e, 1),
                                 batch['wp'][0, :, : self._predictor.nwp]
                                 .reshape(1, seq_len, self._predictor.nwp, 1)
                                 .float()
