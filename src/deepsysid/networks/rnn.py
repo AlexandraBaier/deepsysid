@@ -887,9 +887,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         self.device = device
 
-        self.A_lin = torch.tensor(A_lin, dtype=torch.float32).to(device)
-        self.B_lin = torch.tensor(B_lin, dtype=torch.float32).to(device)
-        self.C_lin = torch.tensor(C_lin, dtype=torch.float32).to(device)
+        self.A_lin = torch.tensor(A_lin, dtype=torch.float64).to(device)
+        self.B_lin = torch.tensor(B_lin, dtype=torch.float64).to(device)
+        self.C_lin = torch.tensor(C_lin, dtype=torch.float64).to(device)
 
         self.nl = nonlinearity
 
@@ -911,42 +911,42 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # problem = cp.Problem(cp.Maximize(beta), conditioning_lmi)
         # problem.solve(solver=self.optimizer)
         # self.L_x_flat = torch.nn.Parameter(
-        #     torch.zeros(size=(L_flat_size,)).float().to(device)
+        #     torch.zeros(size=(L_flat_size,)).double().to(device)
         # )
         # L_x_flat_init = self.extract_vector_from_lower_triangular_matrix(
         #     torch.linalg.cholesky(torch.randn(size=(self.nx,self.nx)))
         # )
-        # self.L_x_flat = torch.randn(size=(L_flat_size,)).float().to(device)
-        # self.L_y_flat = torch.randn(size=(L_flat_size,)).float().to(device)
+        # self.L_x_flat = torch.randn(size=(L_flat_size,)).double().to(device)
+        # self.L_y_flat = torch.randn(size=(L_flat_size,)).double().to(device)
         if enforce_constraints_method is None:
-            self.L_x_flat = torch.normal(0,1/self.nx, size=(L_flat_size,)).float().to(device)
-            self.L_y_flat = torch.normal(0,1/self.nx, size=(L_flat_size,)).float().to(device)
+            self.L_x_flat = torch.normal(0,1/self.nx, size=(L_flat_size,)).double().to(device)
+            self.L_y_flat = torch.normal(0,1/self.nx, size=(L_flat_size,)).double().to(device)
         else:
             self.L_x_flat = torch.nn.Parameter(
-                torch.normal(0,1/self.nx, size=(L_flat_size,)).float().to(device)
+                torch.normal(0,1/self.nx, size=(L_flat_size,)).double().to(device)
             )
             self.L_y_flat = torch.nn.Parameter(
-                torch.normal(0,1/self.nx, size=(L_flat_size,)).float().to(device)
+                torch.normal(0,1/self.nx, size=(L_flat_size,)).double().to(device)
             )
         # self.L_x_flat = torch.nn.Parameter(epsilon*nn.init.normal_(
-        #     torch.empty(size=(L_flat_size,)).float().to(device)
+        #     torch.empty(size=(L_flat_size,)).double().to(device)
         # ))
         # self.L_y_flat = torch.nn.Parameter(
-        #     torch.zeros(size=(L_flat_size,)).float().to(device)
+        #     torch.zeros(size=(L_flat_size,)).double().to(device)
         # )
         # L_y_flat_init = self.extract_vector_from_lower_triangular_matrix(
         #     torch.linalg.cholesky(torch.randn(size=(self.nx,self.nx)))
         # )
         
         # self.L_y_flat = torch.nn.Parameter(epsilon*nn.init.normal_(
-        #     torch.empty(size=(L_flat_size,)).float().to(device)
+        #     torch.empty(size=(L_flat_size,)).double().to(device)
         # ))
 
         # self.lam = torch.nn.Parameter(
-        #     epsilon * torch.ones(size=(self.nzu,)).float().to(device)
+        #     epsilon * torch.ones(size=(self.nzu,)).double().to(device)
         # )
         self.lam = torch.nn.Parameter(
-            torch.ones(size=(self.nzu,)).float().to(device)
+            torch.ones(size=(self.nzu,)).double().to(device)
         )
         # self.klmn = torch.nn.Parameter(
         #     # epsilon*
@@ -960,49 +960,49 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # self.klmn.data[self.nx+self.nu:,:self.nx+self.nwp+self.ny] = torch.randn(self.nzu,self.nx+self.nwp+self.ny)
         # self.klmn.data[:self.nx+self.nu,self.nx+self.nwp+self.ny:] = torch.randn(self.nx+self.nu,nwu)
 
-        # self.K = torch.nn.Parameter(epsilon * torch.eye(self.nx).float().to(device))1
-        # self.K = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nx)).float().to(device))
-        # self.K = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(torch.empty(size=(self.nx,self.nx)).float().to(device)))
+        # self.K = torch.nn.Parameter(epsilon * torch.eye(self.nx).double().to(device))1
+        # self.K = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nx)).double().to(device))
+        # self.K = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(torch.empty(size=(self.nx,self.nx)).double().to(device)))
         # self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nx, self.nwp)).float().to(device)
+        #     torch.empty(size=(self.nx, self.nwp)).double().to(device)
         # ))
         # self.L1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nx, self.nwp)).float().to(device)
+        #     torch.empty(size=(self.nx, self.nwp)).double().to(device)
         # ))
         # self.L2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nx, self.ny)).float().to(device)
+        #     torch.empty(size=(self.nx, self.ny)).double().to(device)
         # ))
         # # self.L2 = torch.nn.Parameter(
-        # #     torch.tensor(XY @ A_lin @ XY).float().to(device)
+        # #     torch.tensor(XY @ A_lin @ XY).double().to(device)
         # # )
         # self.L3 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nx, self.nwu)).float().to(device)
+        #     torch.empty(size=(self.nx, self.nwu)).double().to(device)
         # ))
 
         # self.M1 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nu, self.nx)).float().to(device)
+        #     torch.empty(size=(self.nu, self.nx)).double().to(device)
         # ))
         # self.N11 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nu, self.nwp)).float().to(device)
+        #     torch.empty(size=(self.nu, self.nwp)).double().to(device)
         # ))
         # self.N12 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nu, self.ny)).float().to(device)
+        #     torch.empty(size=(self.nu, self.ny)).double().to(device)
         # ))
         # self.N13 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nu, self.nwu)).float().to(device)
+        #     torch.empty(size=(self.nu, self.nwu)).double().to(device)
         # ))
 
         # self.M2 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nzu, self.nx)).float().to(device)
+        #     torch.empty(size=(self.nzu, self.nx)).double().to(device)
         # ))
         # self.N21 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nzu, self.nwp)).float().to(device)
+        #     torch.empty(size=(self.nzu, self.nwp)).double().to(device)
         # ))
         # self.N22 = torch.nn.Parameter(epsilon*nn.init.xavier_normal_(
-        #     torch.empty(size=(self.nzu, self.ny)).float().to(device)
+        #     torch.empty(size=(self.nzu, self.ny)).double().to(device)
         # ))
         # self.N23 = torch.nn.Parameter(
-        #     torch.zeros(size=(self.nzu, self.nwu)).float().to(device)
+        #     torch.zeros(size=(self.nzu, self.nwu)).double().to(device)
         # )
 
         if self.normalize_rnn:
@@ -1045,7 +1045,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     ),
                 ],
                 axis=0,
-                dtype=np.float32,
+                dtype=np.float64,
             )
         ).to(device)
         if controller_feedback:
@@ -1086,7 +1086,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         ),
                     ],
                     axis=0,
-                    dtype=np.float32,
+                    dtype=np.float64,
                 )
             ).to(device)
         else:
@@ -1127,7 +1127,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         ),
                     ],
                     axis=0,
-                    dtype=np.float32,
+                    dtype=np.float64,
                 )
             ).to(device)
         self.S_r = torch.from_numpy(
@@ -1171,7 +1171,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     ),
                 ],
                 axis=0,
-                dtype=np.float32,
+                dtype=np.float64,
             )
         ).to(device)
 
@@ -1188,30 +1188,30 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         L_x = np.linalg.cholesky(a=X)
         L_x_flat = self.extract_vector_from_lower_triangular_matrix(L_x)
-        self.L_x_flat.data = torch.tensor(L_x_flat).float()
+        self.L_x_flat.data = torch.tensor(L_x_flat).double()
 
         L_y = np.linalg.cholesky(a=Y)
         L_y_flat = self.extract_vector_from_lower_triangular_matrix(L_y)
-        self.L_y_flat.data = torch.tensor(L_y_flat).float()
+        self.L_y_flat.data = torch.tensor(L_y_flat).double()
 
-        self.lam.data = torch.tensor(np.diag(Lambda)).float()
+        self.lam.data = torch.tensor(np.diag(Lambda)).double()
 
-        self.klmn.data = torch.tensor(klmn_0).float()
+        self.klmn.data = torch.tensor(klmn_0).double()
 
-        # self.K.data = torch.tensor(K).float()
-        # self.L1.data = torch.tensor(L1).float()
-        # self.L2.data = torch.tensor(L2).float()
-        # self.L3.data = torch.tensor(L3).float()
+        # self.K.data = torch.tensor(K).double()
+        # self.L1.data = torch.tensor(L1).double()
+        # self.L2.data = torch.tensor(L2).double()
+        # self.L3.data = torch.tensor(L3).double()
 
-        # self.M1.data = torch.tensor(M1).float()
-        # self.N11.data = torch.tensor(N11).float()
-        # self.N12.data = torch.tensor(N12).float()
-        # self.N13.data = torch.tensor(N13).float()
+        # self.M1.data = torch.tensor(M1).double()
+        # self.N11.data = torch.tensor(N11).double()
+        # self.N12.data = torch.tensor(N12).double()
+        # self.N13.data = torch.tensor(N13).double()
 
-        # self.M2.data = torch.tensor(M2).float()
-        # self.N21.data = torch.tensor(N21).float()
-        # self.N22.data = torch.tensor(N22).float()
-        # self.N23.data = torch.tensor(N23).float()
+        # self.M2.data = torch.tensor(M2).double()
+        # self.N21.data = torch.tensor(N21).double()
+        # self.N22.data = torch.tensor(N22).double()
+        # self.N23.data = torch.tensor(N23).double()
 
     def construct_lower_triangular_matrix(
         self, L_flat: torch.Tensor, diag_length: int
@@ -1219,7 +1219,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         device = L_flat.device
         flat_idx = 0
         L = torch.zeros(
-            size=(diag_length, diag_length), dtype=torch.float32, device=device
+            size=(diag_length, diag_length), dtype=torch.float64, device=device
         )
         for diag_idx, diag_size in zip(
             range(0, -diag_length, -1), range(diag_length, 0, -1)
@@ -1277,7 +1277,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     ),
                 ],
                 dim=0,
-            ).float()
+            ).double()
         else:
             T_l = torch.concat(
                 [
@@ -1307,7 +1307,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     ),
                 ],
                 dim=0,
-            ).float()
+            ).double()
 
         T_r = torch.concat(
             [
@@ -1349,7 +1349,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ).to(self.device),
             ],
             dim=0,
-        ).float()
+        ).double()
         T_s = torch.concat(
             [
                 torch.concat(
@@ -1368,7 +1368,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ).to(self.device),
             ],
             dim=0,
-        ).float()
+        ).double()
 
 
         return (T_l, T_r, T_s)
@@ -1416,9 +1416,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # transform to original parameters
         T_l, T_r, T_s = self.get_T(X, Y, U, V, Lambda)
         omega_0 = (
-            torch.linalg.inv(T_l).float().to(device)
-            @ (omega_tilde_0 - T_s.float().to(device))
-            @ torch.linalg.inv(T_r).float().to(device)
+            torch.linalg.inv(T_l).double().to(device)
+            @ (omega_tilde_0 - T_s.double().to(device))
+            @ torch.linalg.inv(T_r).double().to(device)
         )
 
         (
@@ -2011,8 +2011,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         B_lin = self.B_lin
         C_lin = self.C_lin
         Lambda = torch.diag(self.lam).to(self.device)
-        # omega_tilde = self.get_omega_tilde().float().to(self.device)
-        klmn = self.klmn.float().to(self.device)
+        # omega_tilde = self.get_omega_tilde().double().to(self.device)
+        klmn = self.klmn.double().to(self.device)
 
         P_21_1 = (
             torch.concat(
@@ -2056,7 +2056,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
                 dim=0,
             )
-            .float()
+            .double()
             .to(self.device)
         )
         if self.controller_feedback:
@@ -2098,7 +2098,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     ],
                     dim=0,
                 )
-                .float()
+                .double()
                 .to(self.device)
             )
         else:
@@ -2140,7 +2140,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     ],
                     dim=0,
                 )
-                .float()
+                .double()
                 .to(self.device)
             )
 
@@ -2186,7 +2186,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
                 dim=0,
             )
-            .float()
+            .double()
             .to(self.device)
         )
 
@@ -2232,7 +2232,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ).to(self.device),
             ],
             dim=0,
-        ).float()
+        ).double()
         P_22 = -torch.concat(
             [
                 torch.concat(
@@ -2273,7 +2273,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ).to(self.device),
             ],
             dim=0,
-        ).float()
+        ).double()
         P = torch.concat(
             [torch.concat([P_11, P_21.T], dim=1), torch.concat([P_21, P_22], dim=1)],
             dim=0,
@@ -2654,7 +2654,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.linalg.cholesky(np.array(X.value))
                 )
             )
-            .float()
+            .double()
             .to(device)
         )
         self.L_y_flat.data = (
@@ -2663,12 +2663,12 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.linalg.cholesky(np.array(Y.value))
                 )
             )
-            .float()
+            .double()
             .to(device)
         )
-        self.lam.data = torch.tensor(np.diag(np.array(Lambda.value))).float().to(device)
+        self.lam.data = torch.tensor(np.diag(np.array(Lambda.value))).double().to(device)
 
-        self.klmn.data = torch.tensor(klmn.value).float().to(device)
+        self.klmn.data = torch.tensor(klmn.value).double().to(device)
 
         return np.float64(d.value)
 
@@ -2690,9 +2690,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # transform to original parameters
         T_l, T_r, T_s = self.get_T(X, Y, U, V, Lambda)
         omega_0 = (
-            torch.linalg.inv(T_l).float().to(device)
-            @ (omega_tilde_0 - T_s.float().to(device))
-            @ torch.linalg.inv(T_r).float().to(device)
+            torch.linalg.inv(T_l).double().to(device)
+            @ (omega_tilde_0 - T_s.double().to(device))
+            @ torch.linalg.inv(T_r).double().to(device)
         )
 
         _,_,_,B3,_,_,_,D13,C2,D21,D22 = self.get_controller_matrices(omega_0)
@@ -2736,9 +2736,9 @@ class BasicHybridRnn(ConstrainedForwardModule):
         self.gamma = gamma
         self.device = device
 
-        self.A_lin = torch.tensor(A_lin, dtype=torch.float32).to(device)
-        self.B_lin = torch.tensor(B_lin, dtype=torch.float32).to(device)
-        self.C_lin = torch.tensor(C_lin, dtype=torch.float32).to(device)
+        self.A_lin = torch.tensor(A_lin, dtype=torch.float64).to(device)
+        self.B_lin = torch.tensor(B_lin, dtype=torch.float64).to(device)
+        self.C_lin = torch.tensor(C_lin, dtype=torch.float64).to(device)
 
         self.B3 = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nwu)))
         self.D13 = torch.nn.Parameter(torch.zeros(size=(self.nu,self.nwu)))

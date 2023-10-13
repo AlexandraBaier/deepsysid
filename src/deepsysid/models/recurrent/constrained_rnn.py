@@ -144,8 +144,8 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self._initializer.zero_grad()
-                y, _ = self._initializer.forward(batch['x'].float().to(self.device))
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                y, _ = self._initializer.forward(batch['x'].double().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_init.step()
@@ -170,13 +170,13 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
             for batch_idx, batch in enumerate(data_loader):
                 self._predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
+                _, hx = self._initializer.forward(batch['x0'].double().to(self.device))
                 # Predict and optimize
                 y, _ = self._predictor.forward(
-                    batch['x'].float().to(self.device), hx=hx
+                    batch['x'].double().to(self.device), hx=hx
                 )
                 y = y.to(self.device)
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 torch.nn.utils.clip_grad_norm_(
@@ -234,10 +234,10 @@ class RnnInitFlexibleNonlinearity(base.NormalizedHiddenStateInitializerPredictor
             init_x = (
                 torch.from_numpy(np.hstack((initial_control[1:], initial_state[:-1])))
                 .unsqueeze(0)
-                .float()
+                .double()
                 .to(self.device)
             )
-            pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
+            pred_x = torch.from_numpy(control).unsqueeze(0).double().to(self.device)
 
             _, hx = self._initializer.forward(init_x)
             y, _ = self._predictor.forward(pred_x, hx=hx)
@@ -414,8 +414,8 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self._initializer.zero_grad()
-                y, _ = self._initializer.forward(batch['x'].float().to(self.device))
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                y, _ = self._initializer.forward(batch['x'].double().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_init.step()
@@ -442,13 +442,13 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
             for batch_idx, batch in enumerate(data_loader):
                 self._predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
+                _, hx = self._initializer.forward(batch['x0'].double().to(self.device))
                 # Predict and optimize
                 y, _ = self._predictor.forward(
-                    batch['x'].float().to(self.device), hx=hx
+                    batch['x'].double().to(self.device), hx=hx
                 )
                 y = y.to(self.device)
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
 
@@ -520,10 +520,10 @@ class LtiRnnInit(base.NormalizedHiddenStateInitializerPredictorModel):
             init_x = (
                 torch.from_numpy(np.hstack((initial_u[1:], initial_y[:-1])))
                 .unsqueeze(0)
-                .float()
+                .double()
                 .to(self.device)
             )
-            pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
+            pred_x = torch.from_numpy(u).unsqueeze(0).double().to(self.device)
 
             _, hx = self._initializer.forward(init_x)
             y, _ = self._predictor.forward(pred_x, hx=hx)
@@ -738,8 +738,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self._initializer.zero_grad()
-                y, _ = self._initializer.forward(batch['x'].float().to(self.device))
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                y, _ = self._initializer.forward(batch['x'].double().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_init.step()
@@ -778,14 +778,14 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             for batch_idx, batch in enumerate(data_loader):
                 self._predictor.zero_grad(set_to_none=True)
                 # Initialize predictor with state of initializer network
-                _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
+                _, hx = self._initializer.forward(batch['x0'].double().to(self.device))
                 y, _ = self._predictor.forward(
-                    batch['x'].float().to(self.device), hx=hx
+                    batch['x'].double().to(self.device), hx=hx
                 )
                 y = y.to(self.device)
                 barrier = self._predictor.get_barriers(t).to(self.device)
 
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 (batch_loss + barrier).backward()
 
@@ -1004,10 +1004,10 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             init_x = (
                 torch.from_numpy(np.hstack((initial_u[1:], initial_y[:-1])))
                 .unsqueeze(0)
-                .float()
+                .double()
                 .to(self.device)
             )
-            pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
+            pred_x = torch.from_numpy(u).unsqueeze(0).double().to(self.device)
 
             _, hx = self._initializer.forward(init_x)
             y, _ = self._predictor.forward(pred_x, hx=hx)
@@ -1110,9 +1110,9 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         )
         uy_init = np.concatenate((us_init[:, 1:, :], ys_init[:, :-1, :]), axis=2)
 
-        us_torch = torch.from_numpy(us).to(self.device).float()
-        ys_torch = torch.from_numpy(ys).to(self.device).float()
-        uy_init_torch = torch.from_numpy(uy_init).to(self.device).float()
+        us_torch = torch.from_numpy(us).to(self.device).double()
+        ys_torch = torch.from_numpy(ys).to(self.device).double()
+        uy_init_torch = torch.from_numpy(uy_init).to(self.device).double()
 
         # evaluate model on data use sequence length x 5 as prediction horizon
         with torch.no_grad():
@@ -1169,6 +1169,8 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
     def __init__(self, config: HybridConstrainedRnnConfig):
         super().__init__(config)
+
+        torch.set_default_dtype(torch.float64)
 
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
@@ -1282,10 +1284,10 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         ).to(self.device)
 
         self.linear = rnn.Linear(
-            torch.tensor(config.A_lin).float().to(self.device),
-            torch.tensor(config.B_lin).float().to(self.device),
-            torch.tensor(config.C_lin).float().to(self.device),
-            torch.tensor([[0.0]]).float().to(self.device),
+            torch.tensor(config.A_lin).double().to(self.device),
+            torch.tensor(config.B_lin).double().to(self.device),
+            torch.tensor(config.C_lin).double().to(self.device),
+            torch.tensor([[0.0]]).double().to(self.device),
         ).to(self.device)
 
         self.init_optimizer_scheduler()
@@ -1335,11 +1337,11 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         #     torch.from_numpy(np.stack(x0s)[:, 0, :])
         #     .reshape(n_batch, nx, 1)
         #     .to(self.device)
-        #     .float(),
+        #     .double(),
         #     torch.from_numpy(np.stack(us))
         #     .reshape(n_batch, N, nu, 1)
         #     .to(self.device)
-        #     .float(),
+        #     .double(),
         #     True,
         # )
 
@@ -1377,24 +1379,24 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         # else:
         #     x_mean = self._state_mean
         #     x_std = self._state_std
-        # self._predictor._x_mean = torch.from_numpy(x_mean).float().to(self.device)
-        # self._predictor._x_std = torch.from_numpy(x_std).float().to(self.device)
+        # self._predictor._x_mean = torch.from_numpy(x_mean).double().to(self.device)
+        # self._predictor._x_std = torch.from_numpy(x_std).double().to(self.device)
         self._predictor._x_mean = (
-            torch.zeros(size=(self._predictor.nx,)).float().to(self.device)
+            torch.zeros(size=(self._predictor.nx,)).double().to(self.device)
         )
         self._predictor._x_std = (
-            torch.zeros(size=(self._predictor.nx,)).float().to(self.device)
+            torch.zeros(size=(self._predictor.nx,)).double().to(self.device)
         )
         x_mean = self._state_mean
         wp_mean = self._control_mean
-        # self._predictor._wp_mean = torch.from_numpy(wp_mean).float().to(self.device)
+        # self._predictor._wp_mean = torch.from_numpy(wp_mean).double().to(self.device)
         self._predictor._wp_mean = (
-            torch.zeros(size=(self._predictor.nwp, 1)).float().to(self.device)
+            torch.zeros(size=(self._predictor.nwp, 1)).double().to(self.device)
         )
         # wp_std = self._control_std
-        # self._predictor._wp_std = torch.from_numpy(wp_std).float().to(self.device)
+        # self._predictor._wp_std = torch.from_numpy(wp_std).double().to(self.device)
         self._predictor._wp_std = (
-            torch.zeros(size=(self._predictor.nwp, 1)).float().to(self.device)
+            torch.zeros(size=(self._predictor.nwp, 1)).double().to(self.device)
         )
 
         track_model_parameters(self, tracker)
@@ -1454,31 +1456,31 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         if self.extend_state:
                             x0 = torch.concat(
                                 [
-                                    batch['x0'].float(),
+                                    batch['x0'].double(),
                                     torch.zeros(size=(self.batch_size, self.e)),
                                 ],
                                 dim=1,
                             ).to(self.device)
                             x0_init = torch.concat(
                                 [
-                                    batch['x0_init'][:, 0, :].float(),
+                                    batch['x0_init'][:, 0, :].double(),
                                     torch.zeros(size=(self.batch_size, self.e)),
                                 ],
                                 dim=1,
                             ).to(self.device)
                         else:
-                            x0_init = batch['x0_init'][:, 0, :].float().to(self.device)
-                            x0 = batch['x0'].float().to(self.device)
+                            x0_init = batch['x0_init'][:, 0, :].double().to(self.device)
+                            x0 = batch['x0'].double().to(self.device)
 
                         # warmstart
                         _, (_, x_rnns) = self._predictor.forward(
-                            x_pred=batch['wp_init'].float().to(self.device),
+                            x_pred=batch['wp_init'].double().to(self.device),
                             hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
                         )
 
                         # Predict and optimize
                         zp_hat, _ = self._predictor.forward(
-                            x_pred=batch['wp'].float().to(self.device),
+                            x_pred=batch['wp'].double().to(self.device),
                             hx=(
                                 x0,
                                 x_rnns,
@@ -1487,7 +1489,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
                         zp_hat = zp_hat.to(self.device)
                         batch_loss = self.loss.forward(
-                            zp_hat, batch['zp'].float().to(self.device)
+                            zp_hat, batch['zp'].double().to(self.device)
                         )
 
                         regularization = torch.tensor(0.0)
@@ -1683,7 +1685,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                 batch['x0'][0, :].reshape(1, self._predictor.nx-self.e, 1),
                                 batch['wp'][0, :, : self._predictor.nwp]
                                 .reshape(1, seq_len, self._predictor.nwp, 1)
-                                .float()
+                                .double()
                                 .to(self.device),
                             )[0]
                             .cpu()
@@ -1799,13 +1801,13 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         else:
             x_mean = self._state_mean
             x_std = self._state_std
-        self._predictor._x_mean = torch.from_numpy(x_mean).float().to(self.device)
-        self._predictor._x_std = torch.from_numpy(x_std).float().to(self.device)
+        self._predictor._x_mean = torch.from_numpy(x_mean).double().to(self.device)
+        self._predictor._x_std = torch.from_numpy(x_std).double().to(self.device)
         self._predictor._wp_mean = (
-            torch.from_numpy(self._control_mean).float().to(self.device)
+            torch.from_numpy(self._control_mean).double().to(self.device)
         )
         self._predictor._wp_std = (
-            torch.from_numpy(self._control_std).float().to(self.device)
+            torch.from_numpy(self._control_std).double().to(self.device)
         )
 
         self._predictor.eval()
@@ -1836,7 +1838,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             u = control
             u_init = initial_control[:, : self.control_dim].reshape(N_init, -1)
         with torch.no_grad():
-            pred_x = torch.from_numpy(u).unsqueeze(0).float().to(self.device)
+            pred_x = torch.from_numpy(u).unsqueeze(0).double().to(self.device)
             x0_1_torch = torch.from_numpy(x0)
             initial_x0_1_torch = torch.from_numpy(initial_x0)
 
@@ -1844,7 +1846,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 x0_torch = (
                     torch.concat([x0_1_torch, torch.zeros(size=(self.e,))], dim=0)
                     .reshape(shape=(1, self.nx))
-                    .float()
+                    .double()
                     .to(self.device)
                 )
                 initial_x0_torch = (
@@ -1852,18 +1854,18 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         [initial_x0_1_torch, torch.zeros(size=(self.e,))], dim=0
                     )
                     .reshape(shape=(1, self.nx))
-                    .float()
+                    .double()
                     .to(self.device)
                 )
             else:
-                x0_torch = x0_1_torch.reshape(shape=(1, -1)).float().to(self.device)
+                x0_torch = x0_1_torch.reshape(shape=(1, -1)).double().to(self.device)
                 initial_x0_torch = (
-                    initial_x0_1_torch.reshape(shape=(1, -1)).float().to(self.device)
+                    initial_x0_1_torch.reshape(shape=(1, -1)).double().to(self.device)
                 )
 
             # warmstart fo hidden rnn state
             _, (_, x_rnns) = self._predictor.forward(
-                torch.from_numpy(u_init).unsqueeze(0).float().to(self.device),
+                torch.from_numpy(u_init).unsqueeze(0).double().to(self.device),
                 (initial_x0_torch, torch.zeros_like(initial_x0_torch)),
             )
             y, _ = self._predictor.forward(pred_x, hx=(x0_torch, x_rnns[:, :]))
@@ -2017,9 +2019,9 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         us_init = np.stack(us_wp_mean_x_mean_init)
         ys = np.stack(y_list)
 
-        ys_torch = torch.from_numpy(ys).to(self.device).float()
-        us_torch = torch.from_numpy(us).to(self.device).float()
-        us_init_torch = torch.from_numpy(us_init).to(self.device).float()
+        ys_torch = torch.from_numpy(ys).to(self.device).double()
+        us_torch = torch.from_numpy(us).to(self.device).double()
+        us_init_torch = torch.from_numpy(us_init).to(self.device).double()
 
         if self._nx is None:
             raise ValueError('size of internal state is not set.')
@@ -2031,8 +2033,8 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 np.concatenate((x0_init, np.zeros(shape=(e,))))
                 for x0_init in x0_init_list
             ]
-        x0_torch = torch.from_numpy(np.stack(x0_list)).to(self.device).float()
-        x0_init_torch = torch.from_numpy(np.stack(x0_list)).to(self.device).float()
+        x0_torch = torch.from_numpy(np.stack(x0_list)).to(self.device).double()
+        x0_init_torch = torch.from_numpy(np.stack(x0_list)).to(self.device).double()
 
         with torch.no_grad():
             # warmstart
