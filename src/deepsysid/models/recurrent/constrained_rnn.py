@@ -624,6 +624,8 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
     def __init__(self, config: ConstrainedRnnConfig):
         super().__init__(config)
 
+        torch.set_default_dtype(torch.float64)
+
         self.device_name = config.device_name
         self.device = torch.device(self.device_name)
 
