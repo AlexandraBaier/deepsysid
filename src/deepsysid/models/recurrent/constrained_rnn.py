@@ -1161,6 +1161,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     normalize_rnn: Optional[bool] = False
     optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
     controller_feedback: Optional[bool] = True
+    regularization: Optional[bool] = False
 
 
 class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
@@ -1180,6 +1181,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.control_names = config.control_names
         self.state_names = config.state_names
         self.initial_state_names = config.initial_state_names
+        self.regularization = config.regularization
 
         self.controller_feedback = config.controller_feedback
 
@@ -1345,12 +1347,12 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         #     list(xs.reshape((-1, nx)).cpu().detach().numpy())
         # )
         self._control_mean, self._control_std = (
-            np.zeros(shape=(self._predictor.nwp, 1)),
-            np.zeros(shape=(self._predictor.nwp, 1)),
+            np.zeros(shape=(self._predictor.nwp,)),
+            np.zeros(shape=(self._predictor.nwp,)),
         )
         self._state_mean, self._state_std = (
-            np.zeros(shape=(self._predictor.nx, 1)),
-            np.zeros(shape=(self._predictor.nx, 1)),
+            np.zeros(shape=(self._predictor.nx,)),
+            np.zeros(shape=(self._predictor.nx,)),
         )
         # if self.extend_state:
         #     # NOT WORKING PROPERLY AS IT LEADS TO DIVISION BY ZERO
@@ -1377,10 +1379,10 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         # self._predictor._x_mean = torch.from_numpy(x_mean).float().to(self.device)
         # self._predictor._x_std = torch.from_numpy(x_std).float().to(self.device)
         self._predictor._x_mean = (
-            torch.zeros(size=(self._predictor.nx, 1)).float().to(self.device)
+            torch.zeros(size=(self._predictor.nx,)).float().to(self.device)
         )
         self._predictor._x_std = (
-            torch.zeros(size=(self._predictor.nx, 1)).float().to(self.device)
+            torch.zeros(size=(self._predictor.nx,)).float().to(self.device)
         )
         x_mean = self._state_mean
         wp_mean = self._control_mean
@@ -1487,6 +1489,12 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                             zp_hat, batch['zp'].float().to(self.device)
                         )
 
+                        regularization = torch.tensor(0.0)
+                        if self.regularization:
+                            regularization = self._predictor.get_regularization(torch.tensor(1e-1))
+
+                            batch_loss += regularization
+
                         barrier = torch.tensor(0.0).to(self.device)
                         if self.enforce_constraints_method == 'barrier':
                             barrier = self._predictor.get_barriers(
@@ -1526,19 +1534,20 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                     'batch barrier predictor': float(
                                         barrier.cpu().detach().numpy()
                                     ),
+                                    'batch regularization': float(regularization.cpu().detach().numpy())
                                     # 'batch bls iter predictor': bls_iter,
                                 },
                             )
                         )
 
-                        return batch_loss, barrier, zp_hat
+                        return batch_loss, barrier, zp_hat, regularization
 
                     # save old parameter set
                     old_pars = [
                         par.clone().detach() for par in self._predictor.parameters()
                     ]
 
-                    batch_loss, barrier, zp_hat = self.optimizer_pred.step(closure)
+                    batch_loss, barrier, zp_hat, regularization = self.optimizer_pred.step(closure)
 
                     if torch.isnan(batch_loss):
                         logger.info('Stop training. Batch loss is None.')
@@ -1661,6 +1670,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                 total_loss / len(data_loader)
                             ),
                             'epoch validation loss': float(validation_loss),
+                            'epoch regularization': float(regularization)
                         },
                         i,
                     )
@@ -1697,6 +1707,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                     f'Epoch {i + 1}/{epoch_predictor}\t'
                     f'Total Loss (Predictor): {total_loss:1f} \t'
                     f'Validation Loss: {validation_loss:1f} \t'
+                    f'Regularization: {regularization:1f} \t'
                     f'Barrier: {barrier:1f}\t'
                     f'Backtracking Line Search iteration: {max(backtracking_iter)}\t'
                     f'Max accumulated gradient norm: {np.max(max_grad):1f}'

@@ -2677,6 +2677,34 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             new_par.data = old_par.clone()
 
 
+    def get_regularization(self, decay_param: torch.Tensor) -> torch.Tensor:
+        device = self.device
+        omega_tilde_0 = self.klmn.to(device)
+        # omega_tilde_0 = self.get_omega_tilde().to(device)
+
+        # construct X, Y, and Lambda
+        X, Y, U, V = self.get_coupling_matrices()
+
+        Lambda = torch.diag(input=self.lam).to(device)
+
+        # transform to original parameters
+        T_l, T_r, T_s = self.get_T(X, Y, U, V, Lambda)
+        omega_0 = (
+            torch.linalg.inv(T_l).float().to(device)
+            @ (omega_tilde_0 - T_s.float().to(device))
+            @ torch.linalg.inv(T_r).float().to(device)
+        )
+
+        _,_,_,B3,_,_,_,D13,C2,D21,D22 = self.get_controller_matrices(omega_0)
+
+        # par_norm = (torch.linalg.norm(B3)+torch.linalg.norm(D13)+torch.linalg.norm(C2)+torch.linalg.norm(D21)+torch.linalg.norm(D22))
+        par_norm = (torch.linalg.norm(C2)+torch.linalg.norm(D21)+torch.linalg.norm(D22))
+
+
+        return decay_param/torch.max(torch.tensor(1e-5),par_norm)
+
+
+
 class BasicHybridRnn(ConstrainedForwardModule):
 
     def __init__(self,
