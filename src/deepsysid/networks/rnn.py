@@ -838,7 +838,7 @@ class LureSystem(Linear):
             self.D21,
         ]
         for matrix in matrices:
-            matrix = matrix.detach()
+            matrix = matrix.cpu().detach()
 
 
 class HybridLinearizationRnn(ConstrainedForwardModule):
@@ -2526,7 +2526,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         #     .numpy()
         # )
         X_0_torch, Y_0_torch, U_0_torch, V_0_torch = self.get_coupling_matrices()
-        Ts = (T.detach().numpy() for T in self.get_T(X_0_torch, Y_0_torch, U_0_torch, V_0_torch, Lambda_0_torch))
+        Ts = (T.cpu().detach().numpy() for T in self.get_T(X_0_torch, Y_0_torch, U_0_torch, V_0_torch, Lambda_0_torch))
         T_l, T_r, T_s = Ts
 
         A_0 = np.zeros(shape=(self.nx,self.nx))
