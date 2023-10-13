@@ -1257,6 +1257,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.decay_rate_lr = config.decay_rate_lr
 
         self.nl = retrieve_nonlinearity_class(config.nonlinearity)
+        self.nonlinearity = config.nonlinearity
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
