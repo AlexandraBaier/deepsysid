@@ -130,8 +130,8 @@ class SeparateInitializerRecurrentNetworkModel(
             total_loss = 0.0
             for batch_idx, batch in enumerate(data_loader):
                 self._initializer.zero_grad()
-                y, _ = self._initializer.forward(batch['x'].float().to(self.device))
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                y, _ = self._initializer.forward(batch['x'].double().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 self.optimizer_init.step()
@@ -156,12 +156,12 @@ class SeparateInitializerRecurrentNetworkModel(
             for batch_idx, batch in enumerate(data_loader):
                 self._predictor.zero_grad()
                 # Initialize predictor with state of initializer network
-                _, hx = self._initializer.forward(batch['x0'].float().to(self.device))
+                _, hx = self._initializer.forward(batch['x0'].double().to(self.device))
                 # Predict and optimize
                 y, _ = self._predictor.forward(
-                    batch['x'].float().to(self.device), hx=hx
+                    batch['x'].double().to(self.device), hx=hx
                 )
-                batch_loss = self.loss.forward(y, batch['y'].float().to(self.device))
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 torch.nn.utils.clip_grad_norm_(
@@ -230,10 +230,10 @@ class SeparateInitializerRecurrentNetworkModel(
                     )
                 )
                 .unsqueeze(0)
-                .float()
+                .double()
                 .to(self.device)
             )
-            pred_x = torch.from_numpy(control).unsqueeze(0).float().to(self.device)
+            pred_x = torch.from_numpy(control).unsqueeze(0).double().to(self.device)
 
             _, hx = self._initializer.forward(init_x)
             y, _ = self._predictor.forward(pred_x, hx=hx)
@@ -358,6 +358,8 @@ class GRUInitModel(SeparateInitializerRecurrentNetworkModel):
 
 class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
     def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
+
+        torch.set_default_dtype(torch.float64)
         input_dim = len(config.control_names)
         output_dim = len(config.state_names)
 
