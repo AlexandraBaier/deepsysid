@@ -660,6 +660,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         self.gamma = config.gamma
 
         self.nl = retrieve_nonlinearity_class(config.nonlinearity)
+        self.nonlinearity = config.nonlinearity
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -1164,6 +1165,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
     controller_feedback: Optional[bool] = True
     regularization: Optional[bool] = False
+    multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
 
 
 class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
@@ -1186,6 +1188,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.state_names = config.state_names
         self.initial_state_names = config.initial_state_names
         self.regularization = config.regularization
+        self.multiplier_type = config.multiplier_type
 
         self.controller_feedback = config.controller_feedback
 
@@ -1283,6 +1286,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             optimizer=self.optimizer,
             enforce_constraints_method=config.enforce_constraints_method,
             controller_feedback=self.controller_feedback,
+            multiplier_type=self.multiplier_type,
         ).to(self.device)
 
         self.linear = rnn.Linear(
@@ -1298,23 +1302,6 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
         )
-        # self.optimizer_pred = optim.LBFGS(
-        #     self._predictor.parameters(), lr=self.learning_rate
-        # )
-        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        #     self.optimizer_pred,
-        #     factor=1/self.decay_rate_lr,
-        #     patience=self.epochs_with_const_decay,
-        #     verbose=True,
-        #     threshold=1e-5,
-        # )
-        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        #     self.optimizer_pred,
-        #     factor=0.25,
-        #     patience=self.epochs_with_const_decay,
-        #     verbose=True,
-        #     threshold=1e-5,
-        # )
 
     def train(
         self,
@@ -1351,6 +1338,8 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         # self._state_mean, self._state_std = utils.mean_stddev(
         #     list(xs.reshape((-1, nx)).cpu().detach().numpy())
         # )
+
+        ## normalization currently not supported -> set zero
         self._control_mean, self._control_std = (
             np.zeros(shape=(self._predictor.nwp,)),
             np.zeros(shape=(self._predictor.nwp,)),
@@ -1359,30 +1348,6 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             np.zeros(shape=(self._predictor.nx,)),
             np.zeros(shape=(self._predictor.nx,)),
         )
-        # if self.extend_state:
-        #     # NOT WORKING PROPERLY AS IT LEADS TO DIVISION BY ZERO
-        #     x_mean = np.hstack(
-        #         (
-        #             self._state_mean,
-        #             np.ones(
-        #                 shape=self.e,
-        #             ),
-        #         )
-        #     )
-
-        #     x_std = np.hstack(
-        #         (
-        #             self._state_std,
-        #             np.ones(
-        #                 shape=self.e,
-        #             ),
-        #         )
-        #     )
-        # else:
-        #     x_mean = self._state_mean
-        #     x_std = self._state_std
-        # self._predictor._x_mean = torch.from_numpy(x_mean).double().to(self.device)
-        # self._predictor._x_std = torch.from_numpy(x_std).double().to(self.device)
         self._predictor._x_mean = (
             torch.zeros(size=(self._predictor.nx,)).double().to(self.device)
         )
@@ -1391,31 +1356,19 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         )
         x_mean = self._state_mean
         wp_mean = self._control_mean
-        # self._predictor._wp_mean = torch.from_numpy(wp_mean).double().to(self.device)
         self._predictor._wp_mean = (
             torch.zeros(size=(self._predictor.nwp, 1)).double().to(self.device)
         )
-        # wp_std = self._control_std
-        # self._predictor._wp_std = torch.from_numpy(wp_std).double().to(self.device)
         self._predictor._wp_std = (
             torch.zeros(size=(self._predictor.nwp, 1)).double().to(self.device)
         )
 
         track_model_parameters(self, tracker)
 
-        # self._predictor.set_lure_system()
         if self.enforce_constraints_method is not None:
             self._predictor.project_parameters()
-            # self._predictor.initialize_lmi()
-        # self._predictor.project_parameters()
-        # self._predictor.project_parameters()
+
         self._predictor.set_lure_system()
-        # ONLY FOR DEBUGGING SINCE FILE IS NOT SAVED IN THE CORRECT LOCATION
-        # directory = os.path.expanduser(os.environ[MODELS_DIR_ENV_VAR])
-        # self.save(
-        #     tuple(os.path.join(directory, f'{self.__class__.__name__}-init.{ext}') for ext in self.get_file_extension()),
-        #     tracker,
-        # )
 
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
@@ -1494,10 +1447,11 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                             zp_hat, batch['zp'].double().to(self.device)
                         )
 
-                        regularization = torch.tensor(0.0)
+                        regularization = torch.tensor(0.0).to(self.device)
                         if self.regularization:
-                            regularization = self._predictor.get_regularization(torch.tensor(1e-1))
-
+                            regularization = self._predictor.get_regularization(
+                                torch.tensor(1e-1)
+                            )
                             batch_loss += regularization
 
                         barrier = torch.tensor(0.0).to(self.device)
@@ -1505,7 +1459,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                             barrier = self._predictor.get_barriers(
                                 torch.tensor(t, device=self.device)
                             )
-                            (batch_loss + barrier).backward(retain_graph=True)
+                            (batch_loss + barrier).backward()
                         elif (
                             self.enforce_constraints_method == 'projection'
                             or self.enforce_constraints_method is None
@@ -1526,7 +1480,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                 self._predictor.parameters(),
                             )
                         ]
-                        # print(f'Loss: {batch_loss:.2f}\t max grad: {max(grads_norm):.2f}')
+
                         max_grad.append(max(grads_norm).cpu().detach().numpy())
 
                         tracker(
@@ -1539,8 +1493,9 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                     'batch barrier predictor': float(
                                         barrier.cpu().detach().numpy()
                                     ),
-                                    'batch regularization': float(regularization.cpu().detach().numpy())
-                                    # 'batch bls iter predictor': bls_iter,
+                                    'batch regularization': float(
+                                        regularization.cpu().detach().numpy()
+                                    ),
                                 },
                             )
                         )
@@ -1552,8 +1507,14 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         par.clone().detach() for par in self._predictor.parameters()
                     ]
 
-                    batch_loss, barrier, zp_hat, regularization = self.optimizer_pred.step(closure)
+                    (
+                        batch_loss,
+                        barrier,
+                        zp_hat,
+                        regularization,
+                    ) = self.optimizer_pred.step(closure)
 
+                    # early stopping if prediction is NaN
                     if torch.isnan(batch_loss):
                         logger.info('Stop training. Batch loss is None.')
                         time_end_pred = time.time()
@@ -1591,6 +1552,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
                             self._predictor.set_lure_system()
 
+                            # no feasible parameter set
                             if bls_iter > max_iter - 1:
                                 logger.info(
                                     f'BLS did not find feasible parameter set'
@@ -1618,11 +1580,9 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         seq_len,
                         horizon_size=4000,
                     )
-                    # self.scheduler.step(validation_loss)
                     e = old_validation_loss - validation_loss
                     if e < -1e-5 and i > 0:
                         no_decrease_count += 1
-                        # logger.info(f'New validation loss not smaller than old validation loss: \t no decrease counter {no_decrease_count} \t error: {e}')
 
                     # update old validation loss
                     old_validation_loss = validation_loss.copy()
@@ -1675,16 +1635,24 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                                 total_loss / len(data_loader)
                             ),
                             'epoch validation loss': float(validation_loss),
-                            'epoch regularization': float(regularization)
+                            'epoch regularization': float(regularization),
                         },
                         i,
                     )
                 )
-                if (step) % 10 == 0:
+
+                # plot training trajectories
+                if (
+                    step == 0
+                    or step == int(epoch_predictor / 2)
+                    or step == epoch_predictor - 1
+                ):
                     with torch.no_grad():
                         y_lin = (
                             self.linear.forward(
-                                batch['x0'][0, :].reshape(1, self._predictor.nx-self.e, 1),
+                                batch['x0'][0, :].reshape(
+                                    1, self._predictor.nx - self.e, 1
+                                ),
                                 batch['wp'][0, :, : self._predictor.nwp]
                                 .reshape(1, seq_len, self._predictor.nwp, 1)
                                 .double()

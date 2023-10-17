@@ -44,5 +44,8 @@ def get_conditioning_constraints(
     constraints = [cp.bmat([[Y, beta * np.eye(nx)], [beta * np.eye(nx), X]]) >> 0]
     return constraints
 
-def get_distance_constraints(klmn_0: NDArray[np.float64], klmn: cp.Variable, d: Union[cp.Variable, np.float64]) -> List:
+
+def get_distance_constraints(
+    klmn_0: NDArray[np.float64], klmn: cp.Variable, d: Union[cp.Variable, np.float64]
+) -> List:
     return [cp.norm(klmn_0 - klmn) <= d]
