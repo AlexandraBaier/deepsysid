@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from pydantic import BaseModel
 
 from ...models.base import DynamicIdentificationModel
+from ...tracker.base import BaseEventTracker
 
 TestResultMetadata = Dict[str, Union[List[str], List[float], List[int]]]
 
@@ -48,7 +49,10 @@ class BaseTest(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def test(
-        self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
+        self,
+        model: DynamicIdentificationModel,
+        simulations: List[TestSimulation],
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> TestResult:
         pass
 

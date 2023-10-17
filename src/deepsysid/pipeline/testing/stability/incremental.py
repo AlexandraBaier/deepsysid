@@ -14,6 +14,8 @@ from ....models.base import (
 from ..base import TestResult, TestSequenceResult, TestSimulation
 from ..io import split_simulations
 from .base import BaseStabilityTest, StabilityTestConfig
+from ....tracker.base import BaseEventTracker
+from ....tracker.event_data import TrackMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +42,15 @@ class IncrementalStabilityTest(BaseStabilityTest):
         self.clip_gradient_norm = config.clip_gradient_norm
 
     def test(
-        self, model: DynamicIdentificationModel, simulations: List[TestSimulation]
+        self,
+        model: DynamicIdentificationModel,
+        simulations: List[TestSimulation],
+        tracker: BaseEventTracker = BaseEventTracker(),
     ) -> TestResult:
-        if not isinstance(model, NormalizedHiddenStateInitializerPredictorModel):
-            return TestResult(list(), dict())
+        # if not isinstance(model, NormalizedHiddenStateInitializerPredictorModel):
+        #     return TestResult(list(), dict())
 
-        test_sequence_results = []
+        test_sequence_results: List[TestSequenceResult] = []
 
         time_start_test = time.time()
 
@@ -63,9 +68,19 @@ class IncrementalStabilityTest(BaseStabilityTest):
                     model=model,
                     device_name=self.device_name,
                     control_dim=self.control_dim,
-                    initial_control=sim.initial_control,
-                    initial_state=sim.initial_state,
                     true_control=sim.true_control,
+                    tracker=tracker,
+                )
+            )
+            tracker(
+                TrackMetrics(
+                    f'incremental stability gain for sequence {self.evaluation_sequence}',
+                    {
+                        'incremental gamma': float(
+                            test_sequence_results[-1].metadata.stability_gain
+                        )
+                    },
+                    self.evaluation_sequence,
                 )
             )
 
@@ -83,9 +98,19 @@ class IncrementalStabilityTest(BaseStabilityTest):
                         model=model,
                         device_name=self.device_name,
                         control_dim=self.control_dim,
-                        initial_control=sim.initial_control,
-                        initial_state=sim.initial_state,
                         true_control=sim.true_control,
+                        tracker=tracker,
+                    )
+                )
+                tracker(
+                    TrackMetrics(
+                        f'incremental stability gain for sequence {idx_data}',
+                        {
+                            'incremental gamma': float(
+                                test_sequence_results[-1].metadata.stability_gain
+                            )
+                        },
+                        idx_data,
                     )
                 )
 
@@ -102,8 +127,6 @@ class IncrementalStabilityTest(BaseStabilityTest):
         model: NormalizedHiddenStateInitializerPredictorModel,
         device_name: str,
         control_dim: int,
-        initial_control: NDArray[np.float64],
-        initial_state: NDArray[np.float64],
         true_control: NDArray[np.float64],
     ) -> TestSequenceResult:
         if (
@@ -118,25 +141,7 @@ class IncrementalStabilityTest(BaseStabilityTest):
 
         model.predictor.train()
 
-        # normalize data
-        u_init_norm_numpy = utils.normalize(
-            initial_control, model.control_mean, model.control_std
-        )
-        u_norm_numpy = utils.normalize(
-            true_control, model.control_mean, model.control_std
-        )
-        y_init_norm_numpy = utils.normalize(
-            initial_state, model.state_mean, model.state_std
-        )
-
-        # convert to tensors
-        u_init_norm = (
-            torch.from_numpy(np.hstack((u_init_norm_numpy[1:], y_init_norm_numpy[:-1])))
-            .unsqueeze(0)
-            .float()
-            .to(device_name)
-        )
-        u_norm = torch.from_numpy(u_norm_numpy).float().to(device_name)
+        u_norm = torch.from_numpy(true_control).double().to(device_name)
 
         # disturb input
         delta = torch.normal(
@@ -158,14 +163,8 @@ class IncrementalStabilityTest(BaseStabilityTest):
             u_b = u_norm.clone()
 
             # model prediction
-            _, hx = model.initializer(u_init_norm)
-            # TODO set initial state to zero should be good to find unstable sequences
-            hx = (
-                torch.zeros_like(hx[0]).to(device_name),
-                torch.zeros_like(hx[1]).to(device_name),
-            )
-            y_hat_a, _ = model.predictor(u_a.unsqueeze(0), hx=hx)
-            y_hat_b, _ = model.predictor(u_b.unsqueeze(0), hx=hx)
+            y_hat_a, _ = model.predictor(u_a.unsqueeze(0))
+            y_hat_b, _ = model.predictor(u_b.unsqueeze(0))
             y_hat_a = y_hat_a.squeeze()
             y_hat_b = y_hat_b.squeeze()
 
@@ -183,6 +182,7 @@ class IncrementalStabilityTest(BaseStabilityTest):
             opt.step()
 
             gamma_2 = gamma_2_torch.cpu().detach().numpy()
+
             if step_idx % 100 == 0:
                 logger.info(
                     f'step: {step_idx} \t '
@@ -199,38 +199,14 @@ class IncrementalStabilityTest(BaseStabilityTest):
 
         return TestSequenceResult(
             inputs=dict(
-                a=utils.denormalize(
-                    u_a.cpu().detach().numpy().squeeze(),
-                    model.control_mean,
-                    model.control_std,
-                ),
-                b=utils.denormalize(
-                    u_b.cpu().detach().numpy().squeeze(),
-                    model.control_mean,
-                    model.control_std,
-                ),
-                delta=utils.denormalize(
-                    (u_a - u_b).cpu().detach().numpy().squeeze(),
-                    model.control_mean,
-                    model.control_std,
-                ),
+                a=u_a.cpu().detach().numpy(),
+                b=u_b.cpu().detach().numpy(),
+                delta=(u_a - u_b).cpu().detach().numpy().squeeze(),
             ),
             outputs=dict(
-                a=utils.denormalize(
-                    y_hat_a.cpu().detach().numpy(),
-                    model.state_mean,
-                    model.state_std,
-                ),
-                b=utils.denormalize(
-                    y_hat_b.cpu().detach().numpy(),
-                    model.state_mean,
-                    model.state_std,
-                ),
-                delta=utils.denormalize(
-                    (y_hat_a - y_hat_b).cpu().detach().numpy(),
-                    model.state_mean,
-                    model.state_std,
-                ),
+                a=y_hat_a.cpu().detach().numpy(),
+                b=y_hat_b.cpu().detach().numpy(),
+                delta=(y_hat_a - y_hat_b).cpu().detach().numpy(),
             ),
             initial_states=dict(),
             metadata=dict(stability_gain=np.array([gamma_2])),

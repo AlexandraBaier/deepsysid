@@ -3,10 +3,16 @@ import os
 from typing import Literal
 
 from ...pipeline.model_io import load_model
-from ..configuration import ExperimentConfiguration, initialize_model
+from ..configuration import (
+    ExperimentConfiguration,
+    initialize_model,
+    initialize_tracker,
+)
 from .base import BaseTestConfig, retrieve_test_class
 from .inference import InferenceTest
 from .io import load_test_simulations, save_model_tests
+
+from ...tracker.event_data import LoadTrackingConfiguration, SetTags, StopRun
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +31,14 @@ def test_model(
     )
     model = initialize_model(configuration, model_name, device_name)
     load_model(model, model_directory, model_name)
+
+    tracker = initialize_tracker(experiment_config=configuration)
+    tracker(
+        LoadTrackingConfiguration(
+            f'Load configuration from {model_directory}', model_directory, model_name
+        )
+    )
+    tracker(SetTags(f'Evaluation mode {mode}', {'mode': mode}))
 
     simulations = load_test_simulations(
         configuration=configuration,
@@ -48,7 +62,7 @@ def test_model(
         test_cls = retrieve_test_class(test_config.test_class)
         test_instance = test_cls(test_config.parameters, device_name)
 
-        additional_results[test_name] = test_instance.test(model, simulations)
+        additional_results[test_name] = test_instance.test(model, simulations, tracker)
 
     save_model_tests(
         main_result=main_results,
@@ -58,3 +72,4 @@ def test_model(
         model_name=model_name,
         mode=mode,
     )
+    tracker(StopRun('Stop validation run', None))
