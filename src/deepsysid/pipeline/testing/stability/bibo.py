@@ -75,9 +75,9 @@ class BiboStabilityTest(BaseStabilityTest):
             )
             tracker(
                 TrackMetrics(
-                    f'incremental stability gain for sequence {self.evaluation_sequence}',
+                    f'stability gain for sequence {self.evaluation_sequence}',
                     {
-                        'incremental gamma': float(
+                        'gamma': float(
                             test_sequence_results[-1].metadata.stability_gain
                         )
                     },
@@ -103,9 +103,9 @@ class BiboStabilityTest(BaseStabilityTest):
                 )
                 tracker(
                     TrackMetrics(
-                        f'incremental stability gain for sequence {idx_data}',
+                        f'stability gain for sequence {idx_data}',
                         {
-                            'incremental gamma': float(
+                            'gamma': float(
                                 test_sequence_results[-1].metadata.stability_gain
                             )
                         },
