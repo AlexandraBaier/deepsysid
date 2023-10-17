@@ -68,8 +68,7 @@ class IncrementalStabilityTest(BaseStabilityTest):
                     model=model,
                     device_name=self.device_name,
                     control_dim=self.control_dim,
-                    true_control=sim.true_control,
-                    tracker=tracker,
+                    true_control=sim.true_control
                 )
             )
             tracker(
@@ -77,7 +76,7 @@ class IncrementalStabilityTest(BaseStabilityTest):
                     f'incremental stability gain for sequence {self.evaluation_sequence}',
                     {
                         'incremental gamma': float(
-                            test_sequence_results[-1].metadata.stability_gain
+                            test_sequence_results[-1].metadata['stability_gain']
                         )
                     },
                     self.evaluation_sequence,
@@ -99,7 +98,6 @@ class IncrementalStabilityTest(BaseStabilityTest):
                         device_name=self.device_name,
                         control_dim=self.control_dim,
                         true_control=sim.true_control,
-                        tracker=tracker,
                     )
                 )
                 tracker(
@@ -107,7 +105,7 @@ class IncrementalStabilityTest(BaseStabilityTest):
                         f'incremental stability gain for sequence {idx_data}',
                         {
                             'incremental gamma': float(
-                                test_sequence_results[-1].metadata.stability_gain
+                                test_sequence_results[-1].metadata['stability_gain']
                             )
                         },
                         idx_data,

@@ -70,7 +70,6 @@ class BiboStabilityTest(BaseStabilityTest):
                     device_name=self.device_name,
                     control_dim=self.control_dim,
                     true_control=sim.true_control,
-                    tracker=tracker,
                 )
             )
             tracker(
@@ -78,7 +77,7 @@ class BiboStabilityTest(BaseStabilityTest):
                     f'stability gain for sequence {self.evaluation_sequence}',
                     {
                         'gamma': float(
-                            test_sequence_results[-1].metadata.stability_gain
+                            test_sequence_results[-1].metadata['stability_gain']
                         )
                     },
                     self.evaluation_sequence,
@@ -98,7 +97,6 @@ class BiboStabilityTest(BaseStabilityTest):
                         device_name=self.device_name,
                         control_dim=self.control_dim,
                         true_control=sim.true_control,
-                        tracker=tracker,
                     )
                 )
                 tracker(
@@ -106,7 +104,7 @@ class BiboStabilityTest(BaseStabilityTest):
                         f'stability gain for sequence {idx_data}',
                         {
                             'gamma': float(
-                                test_sequence_results[-1].metadata.stability_gain
+                                test_sequence_results[-1].metadata['stability_gain']
                             )
                         },
                         idx_data,
@@ -189,8 +187,8 @@ class BiboStabilityTest(BaseStabilityTest):
                 )
 
         return TestSequenceResult(
-            inputs=dict(a=wp_a),
-            outputs=dict(a=zp_hat_a),
+            inputs=dict(a=wp_a.cpu().detach().numpy()),
+            outputs=dict(a=zp_hat_a.cpu().detach().numpy()),
             initial_states=dict(),
             metadata=dict(stability_gain=np.array([gamma_2])),
         )
