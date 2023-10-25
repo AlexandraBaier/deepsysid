@@ -2611,15 +2611,15 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             self.lam.data = torch.tensor(Lambda.value).double().to(device)
 
         self.K.data = torch.tensor(klmn.value[:self.nx,:self.nx]).double().to(device)
-        self.L1.data = torch.tensor(klmn.value[:self.nx,self.nx:self.nx+self.nwp+self.nu]).double().to(device)
-        self.L2.data = torch.tensor(klmn.value[:self.nx,self.nx+self.nwp+self.nu:]).double().to(device)
+        self.L1.data = torch.tensor(klmn.value[:self.nx,self.nx:self.nx+self.nwp+self.ny]).double().to(device)
+        self.L2.data = torch.tensor(klmn.value[:self.nx,self.nx+self.nwp+self.ny:]).double().to(device)
         
         self.M1.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,:self.nx]).double().to(device)
-        self.N11.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx:self.nx+self.nwp+self.nu]).double().to(device)
-        self.N12.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx+self.nwp+self.nu:]).double().to(device)
+        self.N11.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx:self.nx+self.nwp+self.ny]).double().to(device)
+        self.N12.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx+self.nwp+self.ny:]).double().to(device)
 
         self.M2.data = torch.tensor(klmn.value[self.nx+self.nu:,:self.nx]).double().to(device)
-        self.N21.data = torch.tensor(klmn.value[self.nx+self.nu:,self.nx:self.nx+self.nwp+self.nu]).double().to(device)
+        self.N21.data = torch.tensor(klmn.value[self.nx+self.nu:,self.nx:self.nx+self.nwp+self.ny]).double().to(device)
 
         return np.float64(d.value)
     
