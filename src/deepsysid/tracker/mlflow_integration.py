@@ -91,17 +91,17 @@ class MlFlowTracker(BaseEventTracker):
                             event.model_directory,
                             build_tracker_config_file_name(event.model_name),
                         )
-        if run is not None and not(os.path.exists(tracker_config_file_name)):
-            for tracker_config in event.config.values():
-                if (
-                    tracker_config.tracking_class
-                    == f'{self.__module__}.{self.__class__.__name__}'
-                ):
-                    tracker_config.parameters.id = run.info.run_id
-                    with open(tracker_config_file_name,
-                        mode='w',
-                    ) as f:
-                        f.write(tracker_config.json())
+        # if run is not None and not(os.path.exists(tracker_config_file_name)):
+        for tracker_config in event.config.values():
+            if (
+                tracker_config.tracking_class
+                == f'{self.__module__}.{self.__class__.__name__}'
+            ):
+                tracker_config.parameters.id = run.info.run_id
+                with open(tracker_config_file_name,
+                    mode='w',
+                ) as f:
+                    f.write(tracker_config.json())
 
     def load_tracking_configuration(self, event: LoadTrackingConfiguration) -> None:
         config_file = os.path.join(

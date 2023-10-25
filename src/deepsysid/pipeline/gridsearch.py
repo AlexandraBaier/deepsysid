@@ -300,6 +300,7 @@ class ExperimentSessionManager(object):
                 mode=mode,
                 result_directory=self.results_directory,
                 models_directory=self.models_directory,
+                dataset_directory=self.dataset_directory
             )
         else:
             test_model(
@@ -325,6 +326,7 @@ class ExperimentSessionManager(object):
                 models_directory=os.path.join(
                     self.models_directory, f'repeat-{repeat_number}'
                 ),
+                dataset_directory=self.dataset_directory
             )
 
     def _update_from_unfinished_to_validated(

@@ -391,6 +391,7 @@ def run_generic_pipeline(
         mode=get_evaluation_mode(),
         result_directory=str(paths['result']),
         models_directory=str(paths['models']),
+        dataset_directory=str(paths['dataset'])
     )
 
 
