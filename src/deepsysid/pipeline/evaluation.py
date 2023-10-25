@@ -121,7 +121,7 @@ def evaluate_model(
         TrackMetrics(
             f'Metrics for horizon size {horizon_size}',
             {
-                f'{dataset_name}/{key}': float(np.mean(value[0]))
+                f'{dataset_name}/{mode}/{key}': float(np.mean(value[0]))
                 for key, value in results[horizon_size].items()
             },
         )

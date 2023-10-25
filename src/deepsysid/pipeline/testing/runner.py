@@ -38,6 +38,7 @@ def test_model(
             f'Load configuration from {model_directory}', model_directory, model_name
         )
     )
+    tracker(SetTags(f'Evaluation mode {mode}', {'mode': mode}))
     if configuration.tracker is not None:
         tracker(
             SaveTrackingConfiguration(

@@ -32,7 +32,7 @@ from ...pipeline.testing.base import TestSimulation
 from ...pipeline.testing.io import split_simulations
 from ...pipeline.model_io import save_model
 from ...tracker.base import BaseEventTracker
-from ...tracker.event_data import TrackArtifacts, TrackFigures, TrackMetrics
+from ...tracker.event_data import TrackArtifacts, TrackFigures, TrackMetrics, TrackParameters
 
 
 logger = logging.getLogger('deepsysid.pipeline.training')
@@ -958,6 +958,26 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
         time_total_pred = time_end_pred - time_start_pred
+
+        tracker(
+            TrackMetrics(
+                'Track training time as metric',
+                {
+                    'Training time':float(time_total_pred),
+                    'Training time initializer':float(time_total_init)
+                }
+            )
+        )
+        tracker(
+            TrackParameters(
+                'Track training time as parameter',
+                {
+                    'Training time':time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred))),
+                    'Training time initializer':time.strftime("%H:%M:%S", time.gmtime(float(time_total_init)))
+                 }
+            )
+        )
+
         logger.info(
             f'Training time for initializer {time_total_init}s '
             f'and for predictor {time_total_pred}s'
@@ -1720,6 +1740,19 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
         time_end_pred = time.time()
         time_total_pred = time_end_pred - time_start_pred
+
+        tracker(
+            TrackMetrics(
+                'Track training time as metric',
+                {'Training time':float(time_total_pred)}
+            )
+        )
+        tracker(
+            TrackParameters(
+                'Track training time as parameter',
+                {'Training time':time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred)))}
+            )
+        )        
 
         logger.info(
             f'Training time for predictor (HH:MM:SS) '

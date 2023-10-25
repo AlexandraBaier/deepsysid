@@ -15,7 +15,7 @@ from torch.utils import data as data
 from ...networks import loss, rnn
 from ...networks.rnn import HiddenStateForwardModule
 from ...tracker.base import BaseEventTracker
-from ...tracker.event_data import TrackMetrics
+from ...tracker.event_data import TrackMetrics, TrackParameters
 from .. import base, utils
 from ..base import DynamicIdentificationModelConfig, track_model_parameters
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
@@ -178,6 +178,26 @@ class SeparateInitializerRecurrentNetworkModel(
         time_end_pred = time.time()
         time_total_init = time_end_init - time_start_init
         time_total_pred = time_end_pred - time_start_pred
+
+        tracker(
+            TrackMetrics(
+                'Track training time as metric',
+                {
+                    'Training time':float(time_total_pred),
+                    'Training time initializer':float(time_total_init)
+                }
+            )
+        )
+        tracker(
+            TrackParameters(
+                'Track training time as parameter',
+                {
+                    'Training time':time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred))),
+                    'Training time initializer':time.strftime("%H:%M:%S", time.gmtime(float(time_total_init)))
+                 }
+            )
+        )
+
         logger.info(
             f'Training time for initializer {time_total_init}s '
             f'and for predictor {time_total_pred}s'
