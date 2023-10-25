@@ -35,6 +35,7 @@ class TrackFigures(EventData):
 class TrackSequencesAsMatFile(EventData):
     sequences: Tuple[List, List]
     file_name: str
+    artifact_path: Optional[str]
 
 
 @dataclasses.dataclass

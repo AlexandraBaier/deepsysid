@@ -140,8 +140,13 @@ class BiboStabilityTest(BaseStabilityTest):
             )
 
         model.predictor.train()
-
-        wp = torch.from_numpy(true_control).double().to(device_name)
+        N, nu = true_control.shape
+        t = torch.linspace(0,N-1,N)
+        # u_norm = torch.from_numpy(true_control).double().to(device_name)
+        # u_norm = torch.zeros_like(torch.tensor(true_control)).double().to(device_name)
+        # wp = torch.tensor(np.sin(t/0.02*1/1000).reshape((N,nu)))
+        # wp = torch.from_numpy(true_control).double().to(device_name)
+        wp = torch.zeros_like(torch.tensor(true_control)).double().to(device_name)
 
         # disturb input
         delta = torch.normal(
@@ -151,44 +156,70 @@ class BiboStabilityTest(BaseStabilityTest):
             requires_grad=True,
             device=device_name,
         )
+        c1 = torch.tensor(0.0, requires_grad=True)
+        c2 = torch.tensor(0.0, requires_grad=True)
+        c3 = torch.tensor(1.0, requires_grad=True)
+
+        # A = torch.tensor(1.0, requires_grad=True) # sine amplitude
+        f = torch.tensor(1.0/100, requires_grad=True) # ordinary frequency
+        phi = torch.tensor(0.0, requires_grad=True) # phase
+        b = torch.tensor(0.0, requires_grad=True) # bias
 
         # optimizer
         opt = torch.optim.Adam(  # type: ignore
             [delta], lr=self.optimization_lr, maximize=True
         )
+        logger.info(
+            f'f {f:.4f}, phi {phi:.4f}, b {b:.4f}, c1 {c1:.4f} c2 {c2:.4f}, c3 {c3:.4f} \t'
+        )
 
+        
         gamma_2: Optional[np.float64] = None
+        gamma_2s: List[np.float64] = []
+        zp_hat_as: List[NDArray[np.float64]] = []
+        wp_as: List[NDArray[np.float64]] = []
+
         for step_idx in range(self.optimization_steps):
+            opt.zero_grad()
+            # delta = ((t*c2+c3)*torch.sin(2*torch.pi*f*t+phi)+b).reshape(N,nu)
             wp_a = wp + delta
 
             # model prediction
-            zp_hat_a, _ = model.predictor(wp_a.unsqueeze(0))
-            zp_hat_a = zp_hat_a.squeeze()
+            zp_hat_a = model.predictor(wp_a.unsqueeze(0))[0].squeeze()
+            # zp_hat_a = zp_hat_a.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
-            regularization = self.regularization_scale * torch.log(
-                utils.sequence_norm(wp_a)
-            )
-            gamma_2_torch = utils.sequence_norm(zp_hat_a) / utils.sequence_norm(wp_a)
-            L = gamma_2_torch + regularization
-            L.backward()
-            torch.nn.utils.clip_grad_norm_(delta, self.clip_gradient_norm)
+            # regularization = self.regularization_scale * torch.log(
+            #     utils.sequence_norm(wp_a)
+            # )
+            gamma_2_torch = torch.sqrt(utils.sequence_norm(zp_hat_a) / utils.sequence_norm(wp_a))
+            # L = gamma_2_torch + regularization
+            L = gamma_2_torch
+            L.backward(retain_graph=True)
+            # torch.nn.utils.clip_grad_norm_(delta, self.clip_gradient_norm)
+            # torch.nn.utils.clip_grad.clip_grad_value_(f,1)
+            # torch.nn.utils.clip_grad.clip_grad_value_(c2,1)
             opt.step()
 
             gamma_2 = gamma_2_torch.cpu().detach().numpy()
 
-            if step_idx % 100 == 0:
+            if step_idx % 1 == 0:
                 logger.info(
                     f'step: {step_idx} \t '
                     f'gamma_2: {gamma_2:.3f} \t '
-                    f'gradient norm: {torch.norm(delta.grad):.3f} '
-                    f'\t -log(norm(denominator)): {regularization:.3f}'
+                    f'gradient norm: {torch.norm(delta.grad):.3f} \t'
+                    # f'f {f:.4f}, phi {phi:.4f}, b {b:.4f}, c2 {c2:.4f}, c3 {c3:.4f} \t'
+                    # f'grads: f {f.grad:.4f}, phi {phi.grad:.4f}, b {b.grad:.4f}, c2 {c2.grad:.4f}, c3 {c3.grad:.4f} \t'
+                    # f'\t -log(norm(denominator)): {regularization:.3f}'
                 )
+            gamma_2s.append(gamma_2)
+            zp_hat_as.append(zp_hat_a.detach().numpy())
+            wp_as.append(wp_a.detach().numpy())
 
         return TestSequenceResult(
-            inputs=dict(a=wp_a.cpu().detach().numpy()),
-            outputs=dict(a=zp_hat_a.cpu().detach().numpy()),
+            inputs=dict(a=wp_as[np.argmax(gamma_2s)]),
+            outputs=dict(a=zp_hat_as[np.argmax(gamma_2s)]),
             initial_states=dict(),
-            metadata=dict(stability_gain=np.array([gamma_2])),
+            metadata=dict(stability_gain=np.array([max(gamma_2s)])),
         )

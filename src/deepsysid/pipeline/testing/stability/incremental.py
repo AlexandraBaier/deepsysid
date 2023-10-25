@@ -139,7 +139,11 @@ class IncrementalStabilityTest(BaseStabilityTest):
 
         model.predictor.train()
 
-        u_norm = torch.from_numpy(true_control).double().to(device_name)
+        N, nu = true_control.shape
+        t = np.linspace(0,N-1,N)
+        # u_norm = torch.from_numpy(true_control).double().to(device_name)
+        # u_norm = torch.zeros_like(torch.tensor(true_control)).double().to(device_name)
+        u_norm = torch.tensor(np.sin(t/0.02*1/1000).reshape((N,nu)))
 
         # disturb input
         delta = torch.normal(
@@ -168,25 +172,26 @@ class IncrementalStabilityTest(BaseStabilityTest):
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
-            regularization = self.regularization_scale * torch.log(
-                utils.sequence_norm(u_a - u_b)
-            )
+            # regularization = self.regularization_scale * torch.log(
+            #     utils.sequence_norm(u_a - u_b)
+            # )
             gamma_2_torch = utils.sequence_norm(
                 y_hat_a - y_hat_b
             ) / utils.sequence_norm(u_a - u_b)
-            L = gamma_2_torch + regularization
+            # L = gamma_2_torch + regularization
+            L = gamma_2_torch
             L.backward()
             torch.nn.utils.clip_grad_norm_(delta, self.clip_gradient_norm)
             opt.step()
 
             gamma_2 = gamma_2_torch.cpu().detach().numpy()
 
-            if step_idx % 100 == 0:
+            if step_idx % 1 == 0:
                 logger.info(
                     f'step: {step_idx} \t '
                     f'gamma_2: {gamma_2:.3f} \t '
                     f'gradient norm: {torch.norm(delta.grad):.3f} '
-                    f'\t -log(norm(denominator)): {regularization:.3f}'
+                    # f'\t -log(norm(denominator)): {regularization:.3f}'
                 )
 
         # if gamma_2 is None or control is None or pred_state is None:

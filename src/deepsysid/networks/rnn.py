@@ -918,15 +918,35 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             self.lam = torch.nn.Parameter(torch.eye(self.nzu).double().to(device))
         else:
             raise ValueError(f'Multiplier type {self.multiplier_type} not supported.')
+        
+        self.K = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nx))).to(device)
+        self.L1 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwp+self.ny))).to(device)
+        self.L2 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwu))).to(device)
 
-        self.klmn = torch.nn.Parameter(
-            torch.zeros(
-                size=(
-                    self.nx + self.nu + self.nzu,
-                    self.nx + self.nwp + self.ny + self.nwu,
-                )
-            )
-        ).to(device)
+        self.M1 = torch.nn.Parameter(torch.zeros(size=(self.nu,self.nx))).to(device)
+        self.N11 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nwp+self.ny))).to(device)
+        self.N12 = torch.nn.Parameter(torch.zeros(size=(self.nu,self.nwu))).to(device)
+        
+        self.M2 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nx))).to(device)
+        self.N21 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nwp+self.ny))).to(device)
+        self.N22 = torch.zeros(size=(self.nzu, self.nwu),requires_grad=False).to(device)
+
+        # self.klmn = torch.cat(
+        #     [
+        #         torch.cat([self.K,self.L1,self.L2], dim=1),
+        #         torch.cat([self.M1,self.N11,self.N12], dim=1),
+        #         torch.cat([self.M2,self.N21,self.N22], dim=1)
+        #     ], dim=0
+        # ).to(device)
+
+        # self.klmn = torch.nn.Parameter(
+        #     torch.zeros(
+        #         size=(
+        #             self.nx + self.nu + self.nzu,
+        #             self.nx + self.nwp + self.ny + self.nwu,
+        #         )
+        #     )
+        # ).to(device)
 
         if self.normalize_rnn:
             B_lin_hat = np.hstack(
@@ -1112,7 +1132,22 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         self.lam.data = torch.tensor(np.diag(Lambda)).double()
 
-        self.klmn.data = torch.tensor(klmn_0).double()
+        # self.klmn.data = torch.tensor(klmn_0).double()
+        self.K.data = torch.tensor(klmn_0[:self.nx,:self.nx]).double()
+        self.L1.data = torch.tensor(klmn_0[:self.nx,self.nx:self.nx+self.nwp+self.nu]).double()
+        self.L2.data = torch.tensor(klmn_0[:self.nx,self.nx+self.nwp+self.nu:]).double()
+        
+        self.M1.data = torch.tensor(klmn_0[self.nx:self.nx+self.nu,:self.nx]).double()
+        self.N11.data = torch.tensor(klmn_0[self.nx:self.nx+self.nu,self.nx:self.nx+self.nwp+self.nu]).double()
+        self.N12.data = torch.tensor(klmn_0[self.nx:self.nx+self.nu,self.nx+self.nwp+self.nu:]).double()
+
+        self.M2.data = torch.tensor(klmn_0[self.nx+self.nu:,:self.nx]).double()
+        self.N21.data = torch.tensor(klmn_0[self.nx+self.nu:,self.nx:self.nx+self.nwp+self.nu]).double()
+
+
+
+
+        # self.N22.data = torch.tensor(klmn_0[self.nx+self.nu:,self.nx+self.nwp+self.nu:]).double()
 
     def construct_lower_triangular_matrix(
         self, L_flat: torch.Tensor, diag_length: int
@@ -1185,7 +1220,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     torch.concat(
                         [
                             U,
-                            torch.zeros((self.nx, self.nzp)),
+                            torch.zeros((self.nx, self.nzp)).to(self.device),
                             torch.zeros((self.nx, self.nzu)).to(self.device),
                         ],
                         dim=1,
@@ -1272,6 +1307,16 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         ).double()
 
         return (T_l, T_r, T_s)
+    
+    def get_klmn(self) -> torch.Tensor:
+        return torch.cat(
+            [
+                torch.cat([self.K,self.L1,self.L2], dim=1),
+                torch.cat([self.M1,self.N11,self.N12], dim=1),
+                torch.cat([self.M2,self.N21,self.N22], dim=1)
+            ], dim=0
+        ).to(self.device)
+
 
     def get_coupling_matrices(
         self,
@@ -1303,7 +1348,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             raise ValueError('Mean and std values of linear models are not set.')
 
         device = self.device
-        klmn_0 = self.klmn.to(device)
+        # klmn_0 = self.klmn.to(device)
+        klmn_0 = self.get_klmn()
 
         # construct X, Y, and Lambda
         X, Y, U, V = self.get_coupling_matrices()
@@ -1468,7 +1514,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         D21: torch.Tensor,
         D22: torch.Tensor,
     ) -> torch.Tensor:
-        J = torch.tensor(2 / (self.alpha - self.beta), device=self.device)
+        # J = torch.tensor(2 / (self.alpha - self.beta), device=self.device)
+        J = torch.tensor(2 / (self.beta - self.alpha), device=self.device)
         L = torch.tensor((self.alpha + self.beta) / 2, device=self.device)
         B3 = J * B3_tilde
         A = A_tilde - L * B3 @ C2
@@ -1724,7 +1771,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nwp)),
-                    Lambda,
+                    2*Lambda,
                 ],
             ]
         )
@@ -1752,7 +1799,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nzp)),
-                    Lambda,
+                    1/2*Lambda,
                 ],
             ]
         )
@@ -1824,8 +1871,12 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         n_batch, N, nu = x_pred.shape
         assert self.lure._nu == nu
-        assert hx is not None
-        x0_lin, x0_rnn = hx
+        # assert hx is not None
+        if hx is None:
+            x0_lin = torch.zeros(size=(n_batch,self.nx)).to(self.device)
+            x0_rnn = torch.zeros(size=(n_batch,self.nx)).to(self.device)
+        else:
+            x0_lin, x0_rnn = hx
         x0 = torch.concat((x0_lin, x0_rnn), dim=1).reshape(
             shape=(n_batch, self.nx * 2, 1)
         )
@@ -1859,7 +1910,9 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         elif self.multiplier_type == 'static_zf':
             Lambda = self.lam.to(self.device)
         # klmn = self.get_klmn().double().to(self.device)
-        klmn = self.klmn.double().to(self.device)
+        # klmn = self.klmn.double().to(self.device)
+
+        klmn = self.get_klmn().double()
 
         P_21_1 = (
             torch.concat(
@@ -2072,7 +2125,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nzu, self.nx)).to(self.device),
                         torch.zeros(size=(self.nzu, self.nx)).to(self.device),
                         torch.zeros(size=(self.nzu, self.nwp)).to(self.device),
-                        Lambda,
+                        2*Lambda,
                     ],
                     dim=1,
                 ).to(self.device),
@@ -2113,7 +2166,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                         torch.zeros(size=(self.nzu, self.nx)).to(self.device),
                         torch.zeros(size=(self.nzu, self.nx)).to(self.device),
                         torch.zeros(size=(self.nzu, self.nzp)).to(self.device),
-                        Lambda,
+                        1/2*Lambda,
                     ],
                     dim=1,
                 ).to(self.device),
@@ -2121,13 +2174,18 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             dim=0,
         ).double()
         P = torch.concat(
-            [torch.concat([P_11, P_21.T], dim=1), torch.concat([P_21, P_22], dim=1)],
-            dim=0,
+            [
+                torch.concat([P_11, P_21.T], dim=1), 
+                torch.concat([P_21, P_22], dim=1)
+            ],dim=0,
         ).to(self.device)
 
         # https://yalmip.github.io/faq/semidefiniteelementwise/
         # symmetrize variable
-        return 0.5 * (P + P.T)
+        if self.multiplier_type == 'diagonal':
+            return 0.5 * (P + P.T)
+        else:
+            return P
 
     def check_constraints(self) -> bool:
         with torch.no_grad():
@@ -2231,12 +2289,32 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     if not (col_idx == row_idx):
                         multiplier_constraints.append(Lambda[col_idx, row_idx] <= 0)
 
-        klmn = cp.Variable(
-            shape=(
-                self.nx + self.nu + self.nzu,
-                self.nx + self.nwp + self.ny + self.nwu,
-            )
+        # klmn = cp.Variable(
+        #     shape=(
+        #         self.nx + self.nu + self.nzu,
+        #         self.nx + self.nwp + self.ny + self.nwu,
+        #     )
+        # )
+        K = cp.Variable(shape=(self.nx,self.nx))
+        L1 = cp.Variable(shape=(self.nx, self.nwp+self.ny))
+        L2 = cp.Variable(shape=(self.nx, self.nwu))
+
+        M1 = cp.Variable(shape=(self.nu,self.nx))
+        N11 = cp.Variable(shape=(self.nu, self.nwp+self.ny))
+        N12 = cp.Variable(shape=(self.nu,self.nwu))
+        
+        M2 = cp.Variable(shape=(self.nzu, self.nx))
+        N21 = cp.Variable(shape=(self.nzu, self.nwp+self.ny))
+        N22 = np.zeros(shape=(self.nzu, self.nwu))
+
+        klmn = cp.bmat(
+            [
+                [K, L1, L2],
+                [M1,N11,N12],
+                [M2,N21,N22]
+            ]
         )
+
 
         P_21_1 = cp.bmat(
             [
@@ -2370,7 +2448,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nwp)),
-                    Lambda,
+                    2*Lambda,
                 ],
             ]
         )
@@ -2398,14 +2476,14 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nx)),
                     np.zeros(shape=(self.nzu, self.nzp)),
-                    Lambda,
+                    1/2*Lambda,
                 ],
             ]
         )
         P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
         nP = P.shape[0]
 
-        device = self.klmn.device
+        device = self.K.device
 
         if self.multiplier_type == 'diagonal':
             Lambda_0_torch = torch.diag(self.lam)
@@ -2446,7 +2524,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         )
 
         # klmn_0 = T_l @ abcd_0 @ T_r + T_s
-        klmn_0 = self.klmn.cpu().detach().numpy()
+        # klmn_0 = self.klmn.cpu().detach().numpy()
+        klmn_0 = self.get_klmn().cpu().detach().numpy()
 
         feasibility_constraint = [
             P << -1e-3 * np.eye(nP),
@@ -2531,9 +2610,20 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         elif self.multiplier_type == 'static_zf':
             self.lam.data = torch.tensor(Lambda.value).double().to(device)
 
-        self.klmn.data = torch.tensor(klmn.value).double().to(device)
+        self.K.data = torch.tensor(klmn.value[:self.nx,:self.nx]).double().to(device)
+        self.L1.data = torch.tensor(klmn.value[:self.nx,self.nx:self.nx+self.nwp+self.nu]).double().to(device)
+        self.L2.data = torch.tensor(klmn.value[:self.nx,self.nx+self.nwp+self.nu:]).double().to(device)
+        
+        self.M1.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,:self.nx]).double().to(device)
+        self.N11.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx:self.nx+self.nwp+self.nu]).double().to(device)
+        self.N12.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx+self.nwp+self.nu:]).double().to(device)
+
+        self.M2.data = torch.tensor(klmn.value[self.nx+self.nu:,:self.nx]).double().to(device)
+        self.N21.data = torch.tensor(klmn.value[self.nx+self.nu:,self.nx:self.nx+self.nwp+self.nu]).double().to(device)
 
         return np.float64(d.value)
+    
+
 
     def write_parameters(self, params: List[torch.Tensor]) -> None:
         for old_par, new_par in zip(params, self.parameters()):
@@ -2541,7 +2631,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
     def get_regularization(self, decay_param: torch.Tensor) -> torch.Tensor:
         device = self.device
-        klmn_0 = self.klmn.to(device)
+        # klmn_0 = self.klmn.to(device)
+        klmn_0 = self.get_klmn()
         # klmn_0 = self.get_klmn().to(device)
 
         # construct X, Y, and Lambda

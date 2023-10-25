@@ -12,7 +12,7 @@ from .base import BaseTestConfig, retrieve_test_class
 from .inference import InferenceTest
 from .io import load_test_simulations, save_model_tests
 
-from ...tracker.event_data import LoadTrackingConfiguration, SetTags, StopRun
+from ...tracker.event_data import LoadTrackingConfiguration, SetTags, StopRun, TrackParameters, SaveTrackingConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,15 @@ def test_model(
             f'Load configuration from {model_directory}', model_directory, model_name
         )
     )
-    tracker(SetTags(f'Evaluation mode {mode}', {'mode': mode}))
+    if configuration.tracker is not None:
+        tracker(
+            SaveTrackingConfiguration(
+                'Write tracking config to json file',
+                configuration.tracker,
+                model_name,
+                model_directory,
+            )
+        )
 
     simulations = load_test_simulations(
         configuration=configuration,

@@ -1,5 +1,6 @@
 import os
 from typing import Dict, List, Literal, Tuple
+import pathlib
 
 import h5py
 import numpy as np
@@ -29,6 +30,7 @@ def evaluate_model(
     config: ExperimentConfiguration,
     model_name: str,
     mode: Literal['train', 'validation', 'test'],
+    dataset_directory: str,
     result_directory: str,
     models_directory: str,
 ) -> None:
@@ -43,6 +45,8 @@ def evaluate_model(
             extension='hdf5',
         ),
     )
+    dataset_name = os.path.split(
+                pathlib.Path(dataset_directory))[1]
     model_directory = os.path.expanduser(
         os.path.normpath(os.path.join(models_directory, model_name))
     )
@@ -75,7 +79,7 @@ def evaluate_model(
         TrackFigures(
             'Track evaluation figure',
             TrainingPrediction(zp=true[-1], zp_hat=pred[-1], u=np.zeros_like(true[-1])),
-            f'{mode}-output.png',
+            f'{dataset_name}-{mode}-output.png',
         )
     )
     tracker(
@@ -92,6 +96,7 @@ def evaluate_model(
                     extension='mat',
                 ),
             ),
+            artifact_path=dataset_name
         )
     )
 
@@ -116,7 +121,7 @@ def evaluate_model(
         TrackMetrics(
             f'Metrics for horizon size {horizon_size}',
             {
-                key: float(np.mean(value[0]))
+                f'{dataset_name}/{key}': float(np.mean(value[0]))
                 for key, value in results[horizon_size].items()
             },
         )

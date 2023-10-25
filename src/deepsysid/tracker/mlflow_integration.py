@@ -83,22 +83,22 @@ class MlFlowTracker(BaseEventTracker):
             event.file_name,
             {'y': np.array(event.sequences[0]), 'y_hat': np.array(event.sequences[1])},
         )
-        mlflow.log_artifact(event.file_name)
+        mlflow.log_artifact(event.file_name, event.artifact_path)
 
     def save_tracking_configuration(self, event: SaveTrackingConfiguration) -> None:
         run = mlflow.active_run()
-        if run is not None:
+        tracker_config_file_name = os.path.join(
+                            event.model_directory,
+                            build_tracker_config_file_name(event.model_name),
+                        )
+        if run is not None and not(os.path.exists(tracker_config_file_name)):
             for tracker_config in event.config.values():
                 if (
                     tracker_config.tracking_class
                     == f'{self.__module__}.{self.__class__.__name__}'
                 ):
                     tracker_config.parameters.id = run.info.run_id
-                    with open(
-                        os.path.join(
-                            event.model_directory,
-                            build_tracker_config_file_name(event.model_name),
-                        ),
+                    with open(tracker_config_file_name,
                         mode='w',
                     ) as f:
                         f.write(tracker_config.json())
