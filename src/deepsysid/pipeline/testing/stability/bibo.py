@@ -76,7 +76,7 @@ class BiboStabilityTest(BaseStabilityTest):
                 TrackMetrics(
                     f'stability gain for sequence {self.evaluation_sequence}',
                     {
-                        'gamma': float(
+                        'max gamma': float(
                             test_sequence_results[-1].metadata['stability_gain']
                         )
                     },
@@ -103,7 +103,7 @@ class BiboStabilityTest(BaseStabilityTest):
                     TrackMetrics(
                         f'stability gain for sequence {idx_data}',
                         {
-                            'gamma': float(
+                            'max gamma': float(
                                 test_sequence_results[-1].metadata['stability_gain']
                             )
                         },
@@ -169,9 +169,9 @@ class BiboStabilityTest(BaseStabilityTest):
         opt = torch.optim.Adam(  # type: ignore
             [delta], lr=self.optimization_lr, maximize=True
         )
-        logger.info(
-            f'f {f:.4f}, phi {phi:.4f}, b {b:.4f}, c1 {c1:.4f} c2 {c2:.4f}, c3 {c3:.4f} \t'
-        )
+        # logger.info(
+        #     f'f {f:.4f}, phi {phi:.4f}, b {b:.4f}, c1 {c1:.4f} c2 {c2:.4f}, c3 {c3:.4f} \t'
+        # )
 
         
         gamma_2: Optional[np.float64] = None
