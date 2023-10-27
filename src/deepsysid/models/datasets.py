@@ -142,10 +142,11 @@ class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
         y_seq = list()
 
         for control, state in zip(control_seqs, state_seqs):
-            n_samples = int(
-                (control.shape[0] - (self.window_size + self.sequence_length + 1))
-                / self.sequence_length
-            )
+            # n_samples = int(
+            #     (control.shape[0] - (self.window_size + self.sequence_length + 1))
+            #     / self.sequence_length
+            # )
+            n_samples = int(control.shape[0]/(self.window_size+self.sequence_length+1))
 
             x0 = np.zeros(
                 (n_samples, self.window_size, self.control_dim + self.state_dim),
@@ -271,10 +272,11 @@ class RecurrentPredictorInitializerInitialDataset(
         for control, state, initial_state in zip(
             control_seqs, state_seqs, initial_state_seqs
         ):
-            n_samples = int(
-                (control.shape[0] - (self.window_size + self.sequence_length + 1))
-                / self.sequence_length
-            )
+            # n_samples = int(
+            #     (control.shape[0] - (self.window_size + self.sequence_length + 1))
+            #     / self.sequence_length
+            # )
+            n_samples = int(control.shape[0]/(self.window_size+self.sequence_length+1))
 
             wp_init = np.zeros(
                 (n_samples, self.window_size, self.control_dim_pred),

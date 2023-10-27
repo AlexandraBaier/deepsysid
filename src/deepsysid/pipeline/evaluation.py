@@ -16,6 +16,7 @@ from ..tracker.event_data import (
     TrackFigures,
     TrackMetrics,
     TrackSequencesAsMatFile,
+    TrackArtifacts
 )
 from .configuration import ExperimentConfiguration, initialize_tracker
 from .data_io import build_result_file_name, build_score_file_name
@@ -175,5 +176,13 @@ def evaluate_model(
 
     with open(readable_scores_file_path, mode='w') as f:
         f.write(readable_evaluation_result.json())
+    tracker(
+        TrackArtifacts(
+            'save human readable score file',
+            {
+                readable_scores_file_path: 'scores'
+            }
+        )
+    )
     tracker(SetTags('Validated', {'validated': True}))
     tracker(StopRun('Stop validation run', None))

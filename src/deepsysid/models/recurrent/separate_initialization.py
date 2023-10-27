@@ -119,7 +119,7 @@ class SeparateInitializerRecurrentNetworkModel(
         ]
 
         initializer_dataset = RecurrentInitializerDataset(
-            control_seqs, state_seqs, self.sequence_length
+            control_seqs, state_seqs, self.sequence_length, 100
         )
 
         time_start_init = time.time()
@@ -144,7 +144,7 @@ class SeparateInitializerRecurrentNetworkModel(
 
         time_end_init = time.time()
         predictor_dataset = RecurrentPredictorDataset(
-            control_seqs, state_seqs, self.sequence_length
+            control_seqs, state_seqs, self.sequence_length, 100
         )
 
         time_start_pred = time.time()

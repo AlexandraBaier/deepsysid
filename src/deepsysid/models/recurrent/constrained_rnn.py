@@ -760,7 +760,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             )
             initializer_loss.append(total_loss)
         time_end_init = time.time()
-        predictor_dataset = RecurrentPredictorDataset(us, ys, self.sequence_length)
+        predictor_dataset = RecurrentPredictorDataset(us, ys, self.sequence_length, self.initial_window_size)
 
         time_start_pred = time.time()
         t = self.initial_decay_parameter
