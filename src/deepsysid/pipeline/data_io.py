@@ -60,11 +60,12 @@ def load_file_names(directory: str) -> List[str]:
 
 def build_score_file_name(
     mode: Literal['train', 'validation', 'test'],
+    dataset_name: str,
     window_size: int,
     horizon_size: int,
     extension: str,
 ) -> str:
-    return f'scores-{mode}-w_{window_size}-h_{horizon_size}.{extension}'
+    return f'scores-{mode}-d_{dataset_name}-w_{window_size}-h_{horizon_size}.{extension}'
 
 
 def build_result_file_name(

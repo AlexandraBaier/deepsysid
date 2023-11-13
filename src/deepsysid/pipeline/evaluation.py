@@ -133,6 +133,7 @@ def evaluate_model(
         model_name,
         build_score_file_name(
             mode=mode,
+            dataset_name = dataset_name,
             window_size=config.window_size,
             horizon_size=config.horizon_size,
             extension='hdf5',
@@ -156,6 +157,7 @@ def evaluate_model(
         model_name,
         build_score_file_name(
             mode=mode,
+            dataset_name=dataset_name,
             window_size=config.window_size,
             horizon_size=config.horizon_size,
             extension='json',
@@ -180,7 +182,7 @@ def evaluate_model(
         TrackArtifacts(
             'save human readable score file',
             {
-                readable_scores_file_path: 'scores'
+                'scores': readable_scores_file_path 
             }
         )
     )

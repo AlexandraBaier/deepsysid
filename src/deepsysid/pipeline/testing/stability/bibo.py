@@ -190,12 +190,12 @@ class BiboStabilityTest(BaseStabilityTest):
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
-            # regularization = self.regularization_scale * torch.log(
-            #     utils.sequence_norm(wp_a)
-            # )
+            regularization = self.regularization_scale * torch.log(
+                utils.sequence_norm(wp_a)
+            )
             gamma_2_torch = torch.sqrt(utils.sequence_norm(zp_hat_a) / utils.sequence_norm(wp_a))
-            # L = gamma_2_torch + regularization
-            L = gamma_2_torch
+            L = gamma_2_torch + regularization
+            # L = gamma_2_torch
             L.backward(retain_graph=True)
             # torch.nn.utils.clip_grad_norm_(delta, self.clip_gradient_norm)
             # torch.nn.utils.clip_grad.clip_grad_value_(f,1)
@@ -211,7 +211,7 @@ class BiboStabilityTest(BaseStabilityTest):
                     f'gradient norm: {torch.norm(delta.grad):.3f} \t'
                     # f'f {f:.4f}, phi {phi:.4f}, b {b:.4f}, c2 {c2:.4f}, c3 {c3:.4f} \t'
                     # f'grads: f {f.grad:.4f}, phi {phi.grad:.4f}, b {b.grad:.4f}, c2 {c2.grad:.4f}, c3 {c3.grad:.4f} \t'
-                    # f'\t -log(norm(denominator)): {regularization:.3f}'
+                    f'\t -log(norm(denominator)): {regularization:.3f}'
                 )
             gamma_2s.append(gamma_2)
             zp_hat_as.append(zp_hat_a.detach().numpy())

@@ -141,9 +141,9 @@ class IncrementalStabilityTest(BaseStabilityTest):
 
         N, nu = true_control.shape
         t = np.linspace(0,N-1,N)
-        # u_norm = torch.from_numpy(true_control).double().to(device_name)
+        u_norm = torch.from_numpy(true_control).double().to(device_name)
         # u_norm = torch.zeros_like(torch.tensor(true_control)).double().to(device_name)
-        u_norm = torch.tensor(np.sin(t/0.02*1/1000).reshape((N,nu)))
+        # u_norm = torch.tensor(np.sin(t/0.02*1/500).reshape((N,nu)))
 
         # disturb input
         delta = torch.normal(
@@ -180,7 +180,7 @@ class IncrementalStabilityTest(BaseStabilityTest):
             ) / utils.sequence_norm(u_a - u_b)
             # L = gamma_2_torch + regularization
             L = gamma_2_torch
-            L.backward()
+            L.backward(retain_graph=True)
             torch.nn.utils.clip_grad_norm_(delta, self.clip_gradient_norm)
             opt.step()
 

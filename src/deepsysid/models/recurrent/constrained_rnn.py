@@ -658,6 +658,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
 
         self.clip_gradient_norm = config.clip_gradient_norm
         self.gamma = config.gamma
+        self.bias = config.bias
 
         self.nl = retrieve_nonlinearity_class(config.nonlinearity)
         self.nonlinearity = config.nonlinearity
@@ -1183,7 +1184,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     initial_window_size: Optional[int] = None
     normalize_rnn: Optional[bool] = False
     optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
-    controller_feedback: Optional[bool] = True
+    controller_feedback: Optional[Literal['cf', 'nf', 'signal']] = 'cf'
     regularization: Optional[bool] = False
     multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
 

@@ -1,7 +1,7 @@
 import abc
 import logging
 import warnings
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union, Literal
 
 import cvxpy as cp
 import numpy as np
@@ -851,7 +851,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         normalize_rnn: Optional[bool] = False,
         optimizer: str = cp.SCS,
         enforce_constraints_method: Optional[str] = 'barrier',
-        controller_feedback: Optional[bool] = True,
+        controller_feedback: Optional[Literal['cf', 'nf', 'signal']] = 'cf',
         multiplier_type: Optional[str] = 'diag',
     ) -> None:
         super().__init__()
@@ -859,10 +859,12 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         self.ny = self.nx  # output size of linearization
         self.nwp = B_lin.shape[1]  # input size of performance channel
         self.nzp = C_lin.shape[0]  # output size of performance channel
-        if controller_feedback:
+        if controller_feedback == 'cf':
             self.nu = self.nx  # input size of linearization
-        else:
+        elif controller_feedback == 'nf':
             self.nu = self.nzp  # rnn should only predict the output
+        elif controller_feedback == 'signal':
+            self.nu = self.nx + self.nzp
 
         assert nzu == nwu
         self.nzu = nzu  # output size of uncertainty channel
@@ -991,7 +993,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 dtype=np.float64,
             )
         ).to(device)
-        if controller_feedback:
+        if controller_feedback == 'cf':
             self.S_l = torch.from_numpy(
                 np.concatenate(
                     [
@@ -1032,7 +1034,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     dtype=np.float64,
                 )
             ).to(device)
-        else:
+        elif controller_feedback=='nf':
             self.S_l = torch.from_numpy(
                 np.concatenate(
                     [
@@ -1073,6 +1075,51 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     dtype=np.float64,
                 )
             ).to(device)
+        elif controller_feedback=='signal':
+            self.S_l = torch.from_numpy(
+                np.concatenate(
+                    [
+                        np.concatenate(
+                            [
+                                np.zeros(shape=(self.nx, self.nx)),
+                                np.eye(self.nx),
+                                np.zeros(shape=(self.nx, self.nzp)),
+                                np.zeros(shape=(self.nx, self.nzu)),
+                            ],
+                            axis=1,
+                        ),
+                        np.concatenate(
+                            [
+                                np.eye(self.nx),
+                                np.zeros(shape=(self.nx, self.nx)),
+                                np.zeros(shape=(self.nx, self.nzp)),
+                                np.zeros(shape=(self.nx, self.nzu)),
+                            ],
+                            axis=1,
+                        ),
+                        np.concatenate(
+                            [
+                                np.zeros(shape=(self.nzp, self.nx)),
+                                np.zeros(shape=(self.nzp, self.nx)),
+                                np.eye(self.nzp),
+                                np.zeros(shape=(self.nzp, self.nzu)),
+                            ],
+                            axis=1,
+                        ),
+                        np.concatenate(
+                            [
+                                np.zeros(shape=(self.nzu, self.nx)),
+                                np.zeros(shape=(self.nzu, self.nx)),
+                                np.zeros(shape=(self.nzu, self.nzp)),
+                                np.eye(self.nzu),
+                            ],
+                            axis=1,
+                        ),
+                    ],
+                    axis=0,
+                    dtype=np.float64,
+                )
+            )
         self.S_r = torch.from_numpy(
             np.concatenate(
                 [
@@ -1184,7 +1231,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         Lambda: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
-        if self.controller_feedback:
+        if self.controller_feedback == 'cf':
             T_l = torch.concat(
                 [
                     torch.concat(
@@ -1214,7 +1261,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
                 dim=0,
             ).double()
-        else:
+        elif self.controller_feedback == 'nf':
             T_l = torch.concat(
                 [
                     torch.concat(
@@ -1244,6 +1291,39 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
                 dim=0,
             ).double()
+        elif self.controller_feedback == 'signal':
+            T_l = torch.concat(
+                [
+                    torch.concat(
+                        [
+                            U,
+                            X,
+                            torch.zeros((self.nx, self.nzp)).to(self.device),
+                            torch.zeros((self.nx, self.nzu)).to(self.device),
+                        ],
+                        dim=1,
+                    ),
+                    torch.concat(
+                        [
+                            torch.zeros((self.nu, self.nx)),
+                            torch.eye(self.nu),
+                            torch.zeros((self.nu, self.nwu)),
+                        ],
+                        dim=1,
+                    ).to(self.device),
+                    torch.concat(
+                        [
+                            torch.zeros((self.nzu, self.nx)).to(self.device),
+                            torch.zeros((self.nzu, self.nx)).to(self.device),
+                            torch.zeros((self.nzu, self.nzp)).to(self.device),
+                            Lambda,
+                        ],
+                        dim=1,
+                    ),
+                ],
+                dim=0,
+            ).double()
+
 
         T_r = torch.concat(
             [
@@ -1959,7 +2039,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             .double()
             .to(self.device)
         )
-        if self.controller_feedback:
+        if self.controller_feedback == 'cf':
             P_21_2 = (
                 torch.concat(
                     [
@@ -2001,7 +2081,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 .double()
                 .to(self.device)
             )
-        else:
+        elif self.controller_feedback == 'nf':
             P_21_2 = (
                 torch.concat(
                     [
@@ -2033,6 +2113,52 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                             [
                                 torch.zeros(size=(self.nzu, self.nx)),
                                 torch.zeros(size=(self.nzu, self.nu)),
+                                torch.eye(self.nzu),
+                            ],
+                            dim=1,
+                        ).to(self.device),
+                    ],
+                    dim=0,
+                )
+                .double()
+                .to(self.device)
+            )
+        elif self.controller_feedback =='signal':
+            P_21_2 = (
+                torch.concat(
+                    [
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nx, self.nx)).to(self.device),
+                                torch.eye(self.nx).to(self.device),
+                                torch.zeros(size=(self.nx, self.nzp)).to(self.device),
+                                torch.zeros(size=(self.nx, self.nzu)).to(self.device),
+                            ],
+                            dim=1,
+                        ),
+                        torch.concat(
+                            [
+                                torch.eye(self.nx),
+                                torch.zeros(size=(self.nx, self.nx)),
+                                torch.zeros(size=(self.nx, self.nzp)),
+                                torch.zeros(size=(self.nx, self.nzu)),
+                            ],
+                            dim=1,
+                        ).to(self.device),
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nzp, self.nx)).to(self.device),
+                                torch.zeros(size=(self.nzp, self.nx)).to(self.device),
+                                torch.eye(self.nzp).to(self.device),
+                                torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
+                            ],
+                            dim=1,
+                        ),
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nzu, self.nx)),
+                                torch.zeros(size=(self.nzu, self.nx)),
+                                torch.zeros(size=(self.nzu, self.nzp)),
                                 torch.eye(self.nzu),
                             ],
                             dim=1,
@@ -2344,7 +2470,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 ],
             ]
         )
-        if self.controller_feedback:
+        if self.controller_feedback == 'cf':
             P_21_2 = cp.bmat(
                 [
                     [
@@ -2369,7 +2495,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     ],
                 ]
             )
-        else:
+        elif self.controller_feedback == 'nf':
             P_21_2 = cp.bmat(
                 [
                     [
@@ -2390,6 +2516,35 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                     [
                         np.zeros(shape=(self.nzu, self.nx)),
                         np.zeros(shape=(self.nzu, self.nu)),
+                        np.eye(self.nzu),
+                    ],
+                ]
+            )
+        elif self.controller_feedback == 'signal':
+            P_21_2 = cp.bmat(
+                [
+                    [
+                        np.zeros(shape=(self.nx, self.nx)),
+                        np.eye(self.nx),
+                        np.zeros(shape=(self.nx, self.nzp)),
+                        np.zeros(shape=(self.nx, self.nzu)),
+                    ],
+                    [
+                        np.eye(self.nx),
+                        np.zeros(shape=(self.nx, self.nx)),
+                        np.zeros(shape=(self.nx, self.nzp)),
+                        np.zeros(shape=(self.nx, self.nzu)),
+                    ],
+                    [
+                        np.zeros(shape=(self.nzp, self.nx)),
+                        np.zeros(shape=(self.nzp, self.nx)),
+                        np.eye(self.nzp),
+                        np.zeros(shape=(self.nzp, self.nzu)),
+                    ],
+                    [
+                        np.zeros(shape=(self.nzu, self.nx)),
+                        np.zeros(shape=(self.nzu, self.nx)),
+                        np.zeros(shape=(self.nzu, self.nzp)),
                         np.eye(self.nzu),
                     ],
                 ]
@@ -2491,13 +2646,13 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             Lambda_0_torch = self.lam
 
         X_0_torch, Y_0_torch, U_0_torch, V_0_torch = self.get_coupling_matrices()
-        Ts = (
-            T.cpu().detach().numpy()
-            for T in self.get_T(
-                X_0_torch, Y_0_torch, U_0_torch, V_0_torch, Lambda_0_torch
-            )
-        )
-        T_l, T_r, T_s = Ts
+        # Ts = (
+        #     T.cpu().detach().numpy()
+        #     for T in self.get_T(
+        #         X_0_torch, Y_0_torch, U_0_torch, V_0_torch, Lambda_0_torch
+        #     )
+        # )
+        # T_l, T_r, T_s = Ts
 
         A_0 = np.zeros(shape=(self.nx, self.nx))
         B1_0 = np.zeros(shape=(self.nx, self.nwp))
