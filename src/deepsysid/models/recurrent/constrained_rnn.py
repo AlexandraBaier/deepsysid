@@ -1187,6 +1187,8 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     controller_feedback: Optional[Literal['cf', 'nf', 'signal']] = 'cf'
     regularization: Optional[bool] = False
     multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
+    loop_trafo: Optional[bool] = False
+    warmstart: Optional[bool] = False
 
 
 class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
@@ -1201,6 +1203,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.device = torch.device(self.device_name)
         self.normalize_rnn = config.normalize_rnn
         self.optimizer = config.optimizer
+        self.loop_trafo = config.loop_trafo
 
         self.control_dim = len(config.control_names)  # external input
         self.state_dim = len(config.state_names)  # output
@@ -1210,6 +1213,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.initial_state_names = config.initial_state_names
         self.regularization = config.regularization
         self.multiplier_type = config.multiplier_type
+        self.warmstart = config.warmstart
 
         self.controller_feedback = config.controller_feedback
 
@@ -1308,6 +1312,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             enforce_constraints_method=config.enforce_constraints_method,
             controller_feedback=self.controller_feedback,
             multiplier_type=self.multiplier_type,
+            loop_trafo=self.loop_trafo,
         ).to(self.device)
 
         self.linear = rnn.Linear(
@@ -1449,19 +1454,28 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                             x0 = batch['x0'].double().to(self.device)
 
                         # warmstart
-                        _, (_, x_rnns) = self._predictor.forward(
-                            x_pred=batch['wp_init'].double().to(self.device),
-                            hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
-                        )
+                        if self.warmstart:
+                            _, (_, x_rnns) = self._predictor.forward(
+                                x_pred=batch['wp_init'].double().to(self.device),
+                                hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
+                            )
+                            zp_hat, _ = self._predictor.forward(
+                                x_pred=batch['wp'].double().to(self.device),
+                                hx=(
+                                    x0,
+                                    x_rnns,
+                                ),
+                            )
 
+                        else:
                         # Predict and optimize
-                        zp_hat, _ = self._predictor.forward(
-                            x_pred=batch['wp'].double().to(self.device),
-                            hx=(
-                                x0,
-                                x_rnns,
-                            ),
-                        )
+                            zp_hat, _ = self._predictor.forward(
+                                x_pred=batch['wp'].double().to(self.device),
+                                hx=(
+                                    x0,
+                                    torch.zeros_like(x0).to(self.device),
+                                ),
+                            )
 
                         zp_hat = zp_hat.to(self.device)
                         batch_loss = self.loss.forward(
@@ -1753,7 +1767,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 'Track training time as parameter',
                 {'Training time':time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred)))}
             )
-        )        
+        )      
 
         logger.info(
             f'Training time for predictor (HH:MM:SS) '
@@ -1867,12 +1881,15 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                     initial_x0_1_torch.reshape(shape=(1, -1)).double().to(self.device)
                 )
 
-            # warmstart fo hidden rnn state
-            _, (_, x_rnns) = self._predictor.forward(
-                torch.from_numpy(u_init).unsqueeze(0).double().to(self.device),
-                (initial_x0_torch, torch.zeros_like(initial_x0_torch)),
-            )
-            y, _ = self._predictor.forward(pred_x, hx=(x0_torch, x_rnns[:, :]))
+            if self.warmstart:
+                # warmstart fo hidden rnn state
+                _, (_, x_rnns) = self._predictor.forward(
+                    torch.from_numpy(u_init).unsqueeze(0).double().to(self.device),
+                    (initial_x0_torch, torch.zeros_like(initial_x0_torch)),
+                )
+                y, _ = self._predictor.forward(pred_x, hx=(x0_torch, x_rnns[:, :]))
+            else:
+                y, _ = self._predictor.forward(pred_x, hx=(x0_torch, torch.zeros_like(x0_torch).to(self.device)))
             y_np: NDArray[np.float64] = (
                 y.cpu().detach().numpy().reshape((N, self.ny)).astype(np.float64)
             )
@@ -2041,18 +2058,27 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         x0_init_torch = torch.from_numpy(np.stack(x0_list)).to(self.device).double()
 
         with torch.no_grad():
+            if self.warmstart:
             # warmstart
-            _, (_, x_rnns) = self.predictor(
-                us_init_torch, hx=(x0_init_torch, torch.zeros_like(x0_init_torch))
-            )
+                _, (_, x_rnns) = self.predictor(
+                    us_init_torch, hx=(x0_init_torch, torch.zeros_like(x0_init_torch))
+                )
 
-            ys_hat_torch, _ = self.predictor(
-                us_torch,
-                hx=(
-                    x0_torch,
-                    x_rnns[:, :],
-                ),
-            )
+                ys_hat_torch, _ = self.predictor(
+                    us_torch,
+                    hx=(
+                        x0_torch,
+                        x_rnns[:, :],
+                    ),
+                )
+            else:
+                ys_hat_torch, _ = self.predictor(
+                    us_torch,
+                    hx=(
+                        x0_torch,
+                        torch.zeros_like(x0_torch).to(self.device),
+                    ),
+                )
         # return validation error normalized over all states
         return np.float64(
             self.loss.forward(ys_torch, ys_hat_torch).cpu().detach().numpy()

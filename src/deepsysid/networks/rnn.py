@@ -853,6 +853,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         enforce_constraints_method: Optional[str] = 'barrier',
         controller_feedback: Optional[Literal['cf', 'nf', 'signal']] = 'cf',
         multiplier_type: Optional[str] = 'diag',
+        loop_trafo: Optional[bool] = False
     ) -> None:
         super().__init__()
         self.nx = A_lin.shape[0]  # state size
@@ -872,6 +873,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         self.optimizer = optimizer
         self.multiplier_type = multiplier_type
+        self.loop_trafo = loop_trafo
 
         self._x_mean: Optional[torch.Tensor] = None
         self._x_std: Optional[torch.Tensor] = None
@@ -922,16 +924,24 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             raise ValueError(f'Multiplier type {self.multiplier_type} not supported.')
         
         self.K = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nx))).to(device)
-        self.L1 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwp+self.ny))).to(device)
-        self.L2 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwu))).to(device)
+        self.L1 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwp))).to(device)
+        self.L2 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.ny))).to(device)
+        self.L3 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwu))).to(device)
 
-        self.M1 = torch.nn.Parameter(torch.zeros(size=(self.nu,self.nx))).to(device)
-        self.N11 = torch.nn.Parameter(torch.zeros(size=(self.nu, self.nwp+self.ny))).to(device)
-        self.N12 = torch.nn.Parameter(torch.zeros(size=(self.nu,self.nwu))).to(device)
+        self.M1 = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nx))).to(device)
+        self.N11 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.nwp))).to(device)
+        self.N12 = torch.nn.Parameter(torch.zeros(size=(self.nx, self.ny))).to(device)
+        self.N13 = torch.nn.Parameter(torch.zeros(size=(self.nx,self.nwu))).to(device)
         
-        self.M2 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nx))).to(device)
-        self.N21 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nwp+self.ny))).to(device)
-        self.N22 = torch.zeros(size=(self.nzu, self.nwu),requires_grad=False).to(device)
+        self.M2 = torch.nn.Parameter(torch.zeros(size=(self.nzp,self.nx))).to(device)
+        self.N21 = torch.nn.Parameter(torch.zeros(size=(self.nzp, self.nwp))).to(device)
+        self.N22 = torch.nn.Parameter(torch.zeros(size=(self.nzp, self.ny))).to(device)
+        self.N23 = torch.nn.Parameter(torch.zeros(size=(self.nzp,self.nwu))).to(device)
+
+        self.M3 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nx))).to(device)
+        self.N31 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.nwp))).to(device)
+        self.N32 = torch.nn.Parameter(torch.zeros(size=(self.nzu, self.ny))).to(device)
+        self.N33 = torch.zeros(size=(self.nzu, self.nwu),requires_grad=False).to(device)
 
         # self.klmn = torch.cat(
         #     [
@@ -1391,9 +1401,10 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
     def get_klmn(self) -> torch.Tensor:
         return torch.cat(
             [
-                torch.cat([self.K,self.L1,self.L2], dim=1),
-                torch.cat([self.M1,self.N11,self.N12], dim=1),
-                torch.cat([self.M2,self.N21,self.N22], dim=1)
+                torch.cat([self.K,self.L1,self.L2, self.L3], dim=1),
+                torch.cat([self.M1,self.N11,self.N12, self.N13], dim=1),
+                torch.cat([self.M2,self.N21,self.N22, self.N23], dim=1),
+                torch.cat([self.M3,self.N31,self.N32, self.N33], dim=1)
             ], dim=0
         ).to(self.device)
 
@@ -1429,15 +1440,23 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         device = self.device
         # klmn_0 = self.klmn.to(device)
-        klmn_0 = self.get_klmn()
-
-        # construct X, Y, and Lambda
-        X, Y, U, V = self.get_coupling_matrices()
 
         if self.multiplier_type == 'diagonal':
             Lambda = torch.diag(input=self.lam).to(device)
         elif self.multiplier_type == 'static_zf':
             Lambda = self.lam.to(device)
+
+        if not self.loop_trafo:
+            Lambda_inv = torch.linalg.inv(Lambda)
+            self.M3.value = Lambda_inv @ self.M3
+            self.N31.value = Lambda_inv @ self.N31
+            self.N32.value = Lambda_inv @ self.N32
+
+        klmn_0 = self.get_klmn()
+
+        # construct X, Y, and Lambda
+        X, Y, U, V = self.get_coupling_matrices()
+
 
         # transform to original parameters
         T_l, T_r, T_s = self.get_T(X, Y, U, V, Lambda)
@@ -1447,47 +1466,48 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             @ torch.linalg.inv(T_r).double().to(device)
         )
 
-        (
-            A_tilde,
-            B1_tilde,
-            B2_tilde,
-            B3_tilde,
-            C1_tilde,
-            D11_tilde,
-            D12_tilde,
-            D13_tilde,
-            C2,
-            D21,
-            D22,
-        ) = self.get_controller_matrices(abcd_0)
-
-        if self.normalize_rnn:
-            B1_hat = B1_tilde @ torch.diag(1 / self._wp_std)
-            B2_hat = B2_tilde @ torch.diag(1 / self._x_std)
-            C1_hat = torch.diag(self._x_std) @ C1_tilde
-            D11_hat = torch.diag(self._x_std) @ D11_tilde @ torch.diag(1 / self._wp_std)
-            D12_hat = torch.diag(self._x_std) @ D12_tilde @ torch.diag(1 / self._x_std)
-            D13_hat = torch.diag(self._x_std) @ D13_tilde
-            D21_hat = D21 @ torch.diag(1 / self._wp_std)
-            D22_hat = D22 @ torch.diag(1 / self._x_std)
-
-            abcd = self.get_abcd(
+        if self.loop_trafo:
+            (
                 A_tilde,
-                torch.hstack((B1_hat, -B1_hat, -B2_hat)),
-                B2_hat,
+                B1_tilde,
+                B2_tilde,
                 B3_tilde,
-                C1_hat,
-                torch.hstack(
-                    (D11_hat, -D11_hat, torch.eye(self.nx).to(self.device) - D12_hat)
-                ),
-                D12_hat,
-                D13_hat,
+                C1_tilde,
+                D11_tilde,
+                D12_tilde,
+                D13_tilde,
                 C2,
-                torch.hstack((D21_hat, -D21_hat, -D22_hat)),
-                D22_hat,
-            )
-        else:
-            abcd = self.get_abcd(
+                D21,
+                D22,
+            ) = self.get_controller_matrices(abcd_0)
+
+            if self.normalize_rnn:
+                B1_hat = B1_tilde @ torch.diag(1 / self._wp_std)
+                B2_hat = B2_tilde @ torch.diag(1 / self._x_std)
+                C1_hat = torch.diag(self._x_std) @ C1_tilde
+                D11_hat = torch.diag(self._x_std) @ D11_tilde @ torch.diag(1 / self._wp_std)
+                D12_hat = torch.diag(self._x_std) @ D12_tilde @ torch.diag(1 / self._x_std)
+                D13_hat = torch.diag(self._x_std) @ D13_tilde
+                D21_hat = D21 @ torch.diag(1 / self._wp_std)
+                D22_hat = D22 @ torch.diag(1 / self._x_std)
+
+                abcd = self.get_abcd(
+                    A_tilde,
+                    torch.hstack((B1_hat, -B1_hat, -B2_hat)),
+                    B2_hat,
+                    B3_tilde,
+                    C1_hat,
+                    torch.hstack(
+                        (D11_hat, -D11_hat, torch.eye(self.nx).to(self.device) - D12_hat)
+                    ),
+                    D12_hat,
+                    D13_hat,
+                    C2,
+                    torch.hstack((D21_hat, -D21_hat, -D22_hat)),
+                    D22_hat,
+                )
+            else:
+                abcd = self.get_abcd(
                 A_tilde,
                 B1_tilde,
                 B2_tilde,
@@ -1500,6 +1520,8 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
                 D21,
                 D22,
             )
+        else:
+            abcd = abcd_0
 
         sys_block_matrix = self.S_s + self.S_l @ abcd @ self.S_r
 
@@ -1515,7 +1537,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             D22_cal,
         ) = self.get_interconnected_matrices(sys_block_matrix)
         # assert torch.linalg.norm(D22_cal) - 0 < 1e-2
-        D22_cal = torch.zeros_like(D22_cal)
+        # D22_cal = torch.zeros_like(D22_cal)
 
         self.lure = LureSystem(
             A=A_cal,
@@ -1992,323 +2014,352 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         # klmn = self.get_klmn().double().to(self.device)
         # klmn = self.klmn.double().to(self.device)
 
-        klmn = self.get_klmn().double()
+        
 
-        P_21_1 = (
-            torch.concat(
+        if self.loop_trafo:
+            klmn = self.get_klmn().double()
+            P_21_1 = (
+                torch.concat(
+                    [
+                        torch.concat(
+                            [
+                                A_lin @ Y,
+                                A_lin,
+                                B_lin,
+                                torch.zeros(size=(self.nx, self.nwu)).to(self.device),
+                            ],
+                            dim=1,
+                        ),
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nx, self.nx)).to(self.device),
+                                X @ A_lin,
+                                X @ B_lin,
+                                torch.zeros(size=(self.nx, self.nwu)).to(self.device),
+                            ],
+                            dim=1,
+                        ),
+                        torch.concat(
+                            [
+                                C_lin @ Y,
+                                C_lin,
+                                torch.zeros(size=(self.nzp, self.nwp)).to(self.device),
+                                torch.zeros(size=(self.nzp, self.nwu)).to(self.device),
+                            ],
+                            dim=1,
+                        ),
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                                torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                                torch.zeros(size=(self.nzu, self.nwp)).to(self.device),
+                                torch.zeros(size=(self.nzu, self.nwu)).to(self.device),
+                            ],
+                            dim=1,
+                        ),
+                    ],
+                    dim=0,
+                )
+                .double()
+                .to(self.device)
+            )
+            if self.controller_feedback == 'cf':
+                P_21_2 = (
+                    torch.concat(
+                        [
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nx, self.nx)).to(self.device),
+                                    A_lin,
+                                    torch.zeros(size=(self.nx, self.nzu)).to(self.device),
+                                ],
+                                dim=1,
+                            ),
+                            torch.concat(
+                                [
+                                    torch.eye(self.nx),
+                                    torch.zeros(size=(self.nx, self.nu)),
+                                    torch.zeros(size=(self.nx, self.nzu)),
+                                ],
+                                dim=1,
+                            ).to(self.device),
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nzp, self.nx)).to(self.device),
+                                    C_lin,
+                                    torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
+                                ],
+                                dim=1,
+                            ),
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nzu, self.nx)),
+                                    torch.zeros(size=(self.nzu, self.nu)),
+                                    torch.eye(self.nzu),
+                                ],
+                                dim=1,
+                            ).to(self.device),
+                        ],
+                        dim=0,
+                    )
+                    .double()
+                    .to(self.device)
+                )
+            elif self.controller_feedback == 'nf':
+                P_21_2 = (
+                    torch.concat(
+                        [
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nx, self.nx)).to(self.device),
+                                    torch.zeros(size=(self.nx, self.nu)).to(self.device),
+                                    torch.zeros(size=(self.nx, self.nzu)).to(self.device),
+                                ],
+                                dim=1,
+                            ),
+                            torch.concat(
+                                [
+                                    torch.eye(self.nx),
+                                    torch.zeros(size=(self.nx, self.nu)),
+                                    torch.zeros(size=(self.nx, self.nzu)),
+                                ],
+                                dim=1,
+                            ).to(self.device),
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nzp, self.nx)).to(self.device),
+                                    -torch.eye(self.nzp).to(self.device),
+                                    torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
+                                ],
+                                dim=1,
+                            ),
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nzu, self.nx)),
+                                    torch.zeros(size=(self.nzu, self.nu)),
+                                    torch.eye(self.nzu),
+                                ],
+                                dim=1,
+                            ).to(self.device),
+                        ],
+                        dim=0,
+                    )
+                    .double()
+                    .to(self.device)
+                )
+            elif self.controller_feedback =='signal':
+                P_21_2 = (
+                    torch.concat(
+                        [
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nx, self.nx)).to(self.device),
+                                    torch.eye(self.nx).to(self.device),
+                                    torch.zeros(size=(self.nx, self.nzp)).to(self.device),
+                                    torch.zeros(size=(self.nx, self.nzu)).to(self.device),
+                                ],
+                                dim=1,
+                            ),
+                            torch.concat(
+                                [
+                                    torch.eye(self.nx),
+                                    torch.zeros(size=(self.nx, self.nx)),
+                                    torch.zeros(size=(self.nx, self.nzp)),
+                                    torch.zeros(size=(self.nx, self.nzu)),
+                                ],
+                                dim=1,
+                            ).to(self.device),
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nzp, self.nx)).to(self.device),
+                                    torch.zeros(size=(self.nzp, self.nx)).to(self.device),
+                                    torch.eye(self.nzp).to(self.device),
+                                    torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
+                                ],
+                                dim=1,
+                            ),
+                            torch.concat(
+                                [
+                                    torch.zeros(size=(self.nzu, self.nx)),
+                                    torch.zeros(size=(self.nzu, self.nx)),
+                                    torch.zeros(size=(self.nzu, self.nzp)),
+                                    torch.eye(self.nzu),
+                                ],
+                                dim=1,
+                            ).to(self.device),
+                        ],
+                        dim=0,
+                    )
+                    .double()
+                    .to(self.device)
+                )
+
+            P_21_4 = (
+                torch.concat(
+                    [
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nx, self.nx)),
+                                torch.eye(self.nx),
+                                torch.zeros(size=(self.nx, self.nwp)),
+                                torch.zeros(size=(self.nx, self.nwu)),
+                            ],
+                            dim=1,
+                        ).to(self.device),
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nwp, self.nx)),
+                                torch.zeros(size=(self.nwp, self.nx)),
+                                torch.eye(self.nwp),
+                                torch.zeros(size=(self.nwp, self.nwu)),
+                            ],
+                            dim=1,
+                        ).to(self.device),
+                        torch.concat(
+                            [
+                                torch.eye(self.ny),
+                                torch.zeros(size=(self.ny, self.nx)),
+                                torch.zeros(size=(self.ny, self.nwp)),
+                                torch.zeros(size=(self.ny, self.nwu)),
+                            ],
+                            dim=1,
+                        ).to(self.device),
+                        torch.concat(
+                            [
+                                torch.zeros(size=(self.nwu, self.nx)),
+                                torch.zeros(size=(self.nwu, self.nx)),
+                                torch.zeros(size=(self.nwu, self.nwp)),
+                                torch.eye(self.nwu),
+                            ],
+                            dim=1,
+                        ).to(self.device),
+                    ],
+                    dim=0,
+                )
+                .double()
+                .to(self.device)
+            )
+
+            P_21 = P_21_1 + P_21_2 @ klmn @ P_21_4
+            P_11 = -torch.concat(
                 [
                     torch.concat(
                         [
-                            A_lin @ Y,
-                            A_lin,
-                            B_lin,
+                            Y,
+                            torch.eye(self.nx).to(self.device),
+                            torch.zeros(size=(self.nx, self.nwp)).to(self.device),
                             torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                         ],
                         dim=1,
-                    ),
+                    ).to(self.device),
                     torch.concat(
                         [
-                            torch.zeros(size=(self.nx, self.nx)).to(self.device),
-                            X @ A_lin,
-                            X @ B_lin,
+                            torch.eye(self.nx).to(self.device),
+                            X,
+                            torch.zeros(size=(self.nx, self.nwp)).to(self.device),
                             torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                         ],
                         dim=1,
-                    ),
+                    ).to(self.device),
                     torch.concat(
                         [
-                            C_lin @ Y,
-                            C_lin,
-                            torch.zeros(size=(self.nzp, self.nwp)).to(self.device),
-                            torch.zeros(size=(self.nzp, self.nwu)).to(self.device),
+                            torch.zeros(size=(self.nwp, self.nx)).to(self.device),
+                            torch.zeros(size=(self.nwp, self.nx)).to(self.device),
+                            self.gamma**2 * torch.eye(self.nwp).to(self.device),
+                            torch.zeros(size=(self.nwp, self.nwu)).to(self.device),
                         ],
                         dim=1,
-                    ),
+                    ).to(self.device),
                     torch.concat(
                         [
                             torch.zeros(size=(self.nzu, self.nx)).to(self.device),
                             torch.zeros(size=(self.nzu, self.nx)).to(self.device),
                             torch.zeros(size=(self.nzu, self.nwp)).to(self.device),
-                            torch.zeros(size=(self.nzu, self.nwu)).to(self.device),
+                            2*Lambda,
                         ],
                         dim=1,
-                    ),
+                    ).to(self.device),
                 ],
                 dim=0,
-            )
-            .double()
-            .to(self.device)
-        )
-        if self.controller_feedback == 'cf':
-            P_21_2 = (
-                torch.concat(
-                    [
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nx, self.nx)).to(self.device),
-                                A_lin,
-                                torch.zeros(size=(self.nx, self.nzu)).to(self.device),
-                            ],
-                            dim=1,
-                        ),
-                        torch.concat(
-                            [
-                                torch.eye(self.nx),
-                                torch.zeros(size=(self.nx, self.nu)),
-                                torch.zeros(size=(self.nx, self.nzu)),
-                            ],
-                            dim=1,
-                        ).to(self.device),
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nzp, self.nx)).to(self.device),
-                                C_lin,
-                                torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
-                            ],
-                            dim=1,
-                        ),
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nzu, self.nx)),
-                                torch.zeros(size=(self.nzu, self.nu)),
-                                torch.eye(self.nzu),
-                            ],
-                            dim=1,
-                        ).to(self.device),
-                    ],
-                    dim=0,
-                )
-                .double()
-                .to(self.device)
-            )
-        elif self.controller_feedback == 'nf':
-            P_21_2 = (
-                torch.concat(
-                    [
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nx, self.nx)).to(self.device),
-                                torch.zeros(size=(self.nx, self.nu)).to(self.device),
-                                torch.zeros(size=(self.nx, self.nzu)).to(self.device),
-                            ],
-                            dim=1,
-                        ),
-                        torch.concat(
-                            [
-                                torch.eye(self.nx),
-                                torch.zeros(size=(self.nx, self.nu)),
-                                torch.zeros(size=(self.nx, self.nzu)),
-                            ],
-                            dim=1,
-                        ).to(self.device),
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nzp, self.nx)).to(self.device),
-                                -torch.eye(self.nzp).to(self.device),
-                                torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
-                            ],
-                            dim=1,
-                        ),
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nzu, self.nx)),
-                                torch.zeros(size=(self.nzu, self.nu)),
-                                torch.eye(self.nzu),
-                            ],
-                            dim=1,
-                        ).to(self.device),
-                    ],
-                    dim=0,
-                )
-                .double()
-                .to(self.device)
-            )
-        elif self.controller_feedback =='signal':
-            P_21_2 = (
-                torch.concat(
-                    [
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nx, self.nx)).to(self.device),
-                                torch.eye(self.nx).to(self.device),
-                                torch.zeros(size=(self.nx, self.nzp)).to(self.device),
-                                torch.zeros(size=(self.nx, self.nzu)).to(self.device),
-                            ],
-                            dim=1,
-                        ),
-                        torch.concat(
-                            [
-                                torch.eye(self.nx),
-                                torch.zeros(size=(self.nx, self.nx)),
-                                torch.zeros(size=(self.nx, self.nzp)),
-                                torch.zeros(size=(self.nx, self.nzu)),
-                            ],
-                            dim=1,
-                        ).to(self.device),
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nzp, self.nx)).to(self.device),
-                                torch.zeros(size=(self.nzp, self.nx)).to(self.device),
-                                torch.eye(self.nzp).to(self.device),
-                                torch.zeros(size=(self.nzp, self.nzu)).to(self.device),
-                            ],
-                            dim=1,
-                        ),
-                        torch.concat(
-                            [
-                                torch.zeros(size=(self.nzu, self.nx)),
-                                torch.zeros(size=(self.nzu, self.nx)),
-                                torch.zeros(size=(self.nzu, self.nzp)),
-                                torch.eye(self.nzu),
-                            ],
-                            dim=1,
-                        ).to(self.device),
-                    ],
-                    dim=0,
-                )
-                .double()
-                .to(self.device)
-            )
-
-        P_21_4 = (
-            torch.concat(
+            ).double()
+            P_22 = -torch.concat(
                 [
                     torch.concat(
                         [
-                            torch.zeros(size=(self.nx, self.nx)),
-                            torch.eye(self.nx),
-                            torch.zeros(size=(self.nx, self.nwp)),
-                            torch.zeros(size=(self.nx, self.nwu)),
+                            Y,
+                            torch.eye(self.nx).to(self.device),
+                            torch.zeros(size=(self.nx, self.nzp)).to(self.device),
+                            torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                         ],
                         dim=1,
                     ).to(self.device),
                     torch.concat(
                         [
-                            torch.zeros(size=(self.nwp, self.nx)),
-                            torch.zeros(size=(self.nwp, self.nx)),
-                            torch.eye(self.nwp),
-                            torch.zeros(size=(self.nwp, self.nwu)),
+                            torch.eye(self.nx).to(self.device),
+                            X,
+                            torch.zeros(size=(self.nx, self.nzp)).to(self.device),
+                            torch.zeros(size=(self.nx, self.nwu)).to(self.device),
                         ],
                         dim=1,
                     ).to(self.device),
                     torch.concat(
                         [
-                            torch.eye(self.ny),
-                            torch.zeros(size=(self.ny, self.nx)),
-                            torch.zeros(size=(self.ny, self.nwp)),
-                            torch.zeros(size=(self.ny, self.nwu)),
+                            torch.zeros(size=(self.nzp, self.nx)),
+                            torch.zeros(size=(self.nzp, self.nx)),
+                            torch.eye(self.nzp),
+                            torch.zeros(size=(self.nzp, self.nwu)),
                         ],
                         dim=1,
                     ).to(self.device),
                     torch.concat(
                         [
-                            torch.zeros(size=(self.nwu, self.nx)),
-                            torch.zeros(size=(self.nwu, self.nx)),
-                            torch.zeros(size=(self.nwu, self.nwp)),
-                            torch.eye(self.nwu),
+                            torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                            torch.zeros(size=(self.nzu, self.nx)).to(self.device),
+                            torch.zeros(size=(self.nzu, self.nzp)).to(self.device),
+                            1/2*Lambda,
                         ],
                         dim=1,
                     ).to(self.device),
                 ],
                 dim=0,
-            )
-            .double()
-            .to(self.device)
-        )
+            ).double()
+            P = torch.concat(
+                [
+                    torch.concat([P_11, P_21.T], dim=1), 
+                    torch.concat([P_21, P_22], dim=1)
+                ],dim=0,
+            ).to(self.device)
 
-        P_21 = P_21_1 + P_21_2 @ klmn @ P_21_4
-        P_11 = -torch.concat(
-            [
-                torch.concat(
-                    [
-                        Y,
-                        torch.eye(self.nx).to(self.device),
-                        torch.zeros(size=(self.nx, self.nwp)).to(self.device),
-                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
-                    ],
-                    dim=1,
-                ).to(self.device),
-                torch.concat(
-                    [
-                        torch.eye(self.nx).to(self.device),
-                        X,
-                        torch.zeros(size=(self.nx, self.nwp)).to(self.device),
-                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
-                    ],
-                    dim=1,
-                ).to(self.device),
-                torch.concat(
-                    [
-                        torch.zeros(size=(self.nwp, self.nx)).to(self.device),
-                        torch.zeros(size=(self.nwp, self.nx)).to(self.device),
-                        self.gamma**2 * torch.eye(self.nwp).to(self.device),
-                        torch.zeros(size=(self.nwp, self.nwu)).to(self.device),
-                    ],
-                    dim=1,
-                ).to(self.device),
-                torch.concat(
-                    [
-                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
-                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
-                        torch.zeros(size=(self.nzu, self.nwp)).to(self.device),
-                        2*Lambda,
-                    ],
-                    dim=1,
-                ).to(self.device),
-            ],
-            dim=0,
-        ).double()
-        P_22 = -torch.concat(
-            [
-                torch.concat(
-                    [
-                        Y,
-                        torch.eye(self.nx).to(self.device),
-                        torch.zeros(size=(self.nx, self.nzp)).to(self.device),
-                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
-                    ],
-                    dim=1,
-                ).to(self.device),
-                torch.concat(
-                    [
-                        torch.eye(self.nx).to(self.device),
-                        X,
-                        torch.zeros(size=(self.nx, self.nzp)).to(self.device),
-                        torch.zeros(size=(self.nx, self.nwu)).to(self.device),
-                    ],
-                    dim=1,
-                ).to(self.device),
-                torch.concat(
-                    [
-                        torch.zeros(size=(self.nzp, self.nx)),
-                        torch.zeros(size=(self.nzp, self.nx)),
-                        torch.eye(self.nzp),
-                        torch.zeros(size=(self.nzp, self.nwu)),
-                    ],
-                    dim=1,
-                ).to(self.device),
-                torch.concat(
-                    [
-                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
-                        torch.zeros(size=(self.nzu, self.nx)).to(self.device),
-                        torch.zeros(size=(self.nzu, self.nzp)).to(self.device),
-                        1/2*Lambda,
-                    ],
-                    dim=1,
-                ).to(self.device),
-            ],
-            dim=0,
-        ).double()
-        P = torch.concat(
-            [
-                torch.concat([P_11, P_21.T], dim=1), 
+        else:
+            M3_tilde = self.M3
+            N31_tilde = self.N31
+            N32_tilde = self.N32
+
+            P_11 = torch.concat([
+                torch.concat([-Y, -torch.eye(self.nx), torch.zeros(size=(self.nx,self.nwp)), self.beta * N32_tilde.T], dim=1),
+                torch.concat([-torch.eye(self.nx), -X, torch.zeros(size=(self.nx,self.nwp)), self.beta * M3_tilde.T], dim=1),
+                torch.concat([torch.zeros(size=(self.nwp, self.nx)), torch.zeros(size=(self.nwp, self.nx)),-self.gamma**2*torch.eye(self.nwp), self.beta * N31_tilde.T ],dim=1 ),
+                torch.concat([self.beta *N32_tilde, self.beta*M3_tilde, self.beta*N31_tilde, -(Lambda.T + Lambda)], dim=1)
+            ], dim =0).to(self.device)
+
+            P_21 = torch.concat([
+                torch.concat([A_lin @ Y + self.N12, A_lin + self.M1, B_lin + self.N11, self.N13], dim=1),
+                torch.concat([self.L2, X@A_lin+self.K, X@B_lin+self.L1, self.L3],dim=1),
+                torch.concat([C_lin@Y+self.N22, C_lin + self.M2, self.N21, self.N23], dim=1)
+            ], dim=0).to(self.device)
+            P_22 = torch.concat([
+                torch.concat([-Y, -torch.eye(self.nx), torch.zeros(size=(self.nx,self.nzp))], dim =1),
+                torch.concat([-torch.eye(self.nx), -X, torch.zeros(size=(self.nx,self.nzp))], dim = 1),
+                torch.concat([torch.zeros(size=(self.nzp, self.nx)), torch.zeros(size=(self.nzp,self.nx)), -torch.eye(self.nzp)], dim=1)
+            ], dim=0).to(self.device)
+            P = torch.concat([
+                torch.concat([P_11, P_21.T], dim=1),
                 torch.concat([P_21, P_22], dim=1)
-            ],dim=0,
-        ).to(self.device)
+            ], dim=0).to(self.device)
 
-        # https://yalmip.github.io/faq/semidefiniteelementwise/
-        # symmetrize variable
         if self.multiplier_type == 'diagonal':
+            # https://yalmip.github.io/faq/semidefiniteelementwise/
+            # symmetrize variable
             return 0.5 * (P + P.T)
         else:
             return P
@@ -2422,220 +2473,257 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
         #     )
         # )
         K = cp.Variable(shape=(self.nx,self.nx))
-        L1 = cp.Variable(shape=(self.nx, self.nwp+self.ny))
-        L2 = cp.Variable(shape=(self.nx, self.nwu))
+        L1 = cp.Variable(shape=(self.nx, self.nwp))
+        L2 = cp.Variable(shape=(self.nx, self.ny))
+        L3 = cp.Variable(shape=(self.nx, self.nwu))
 
-        M1 = cp.Variable(shape=(self.nu,self.nx))
-        N11 = cp.Variable(shape=(self.nu, self.nwp+self.ny))
-        N12 = cp.Variable(shape=(self.nu,self.nwu))
+        M1 = cp.Variable(shape=(self.nx,self.nx))
+        N11 = cp.Variable(shape=(self.nx, self.nwp))
+        N12 = cp.Variable(shape=(self.nx, self.ny))
+        N13 = cp.Variable(shape=(self.nx,self.nwu))
         
-        M2 = cp.Variable(shape=(self.nzu, self.nx))
-        N21 = cp.Variable(shape=(self.nzu, self.nwp+self.ny))
-        N22 = np.zeros(shape=(self.nzu, self.nwu))
+        M2 = cp.Variable(shape=(self.nzp,self.nx))
+        N21 = cp.Variable(shape=(self.nzp, self.nwp))
+        N22 = cp.Variable(shape=(self.nzp, self.ny))
+        N23 = cp.Variable(shape=(self.nzp,self.nwu))
+        
+        M3 = cp.Variable(shape=(self.nzu, self.nx))
+        N31 = cp.Variable(shape=(self.nzu, self.nwp))
+        N32 = cp.Variable(shape=(self.nzu, self.ny))
+        N33 = np.zeros(shape=(self.nzu, self.nwu))
 
         klmn = cp.bmat(
             [
-                [K, L1, L2],
-                [M1,N11,N12],
-                [M2,N21,N22]
+                [K, L1, L2, L3],
+                [M1,N11,N12, N13],
+                [M2,N21,N22, N23],
+                [M3, N31, N32, N33]
             ]
         )
 
 
-        P_21_1 = cp.bmat(
-            [
-                [
-                    self.A_lin.cpu() @ Y,
-                    self.A_lin.cpu(),
-                    self.B_lin.cpu(),
-                    np.zeros(shape=(self.nx, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nx, self.nx)),
-                    X @ self.A_lin.cpu(),
-                    X @ self.B_lin.cpu(),
-                    np.zeros(shape=(self.nx, self.nwu)),
-                ],
-                [
-                    self.C_lin.cpu() @ Y,
-                    self.C_lin.cpu(),
-                    np.zeros(shape=(self.nzp, self.nwp)),
-                    np.zeros(shape=(self.nzp, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nzu, self.nx)),
-                    np.zeros(shape=(self.nzu, self.nx)),
-                    np.zeros(shape=(self.nzu, self.nwp)),
-                    np.zeros(shape=(self.nzu, self.nwu)),
-                ],
-            ]
-        )
-        if self.controller_feedback == 'cf':
-            P_21_2 = cp.bmat(
+        if self.loop_trafo:
+            P_21_1 = cp.bmat(
                 [
                     [
-                        np.zeros(shape=(self.nx, self.nx)),
+                        self.A_lin.cpu() @ Y,
                         self.A_lin.cpu(),
-                        np.zeros(shape=(self.nx, self.nzu)),
+                        self.B_lin.cpu(),
+                        np.zeros(shape=(self.nx, self.nwu)),
                     ],
                     [
-                        np.eye(self.nx),
-                        np.zeros(shape=(self.nx, self.nu)),
-                        np.zeros(shape=(self.nx, self.nzu)),
+                        np.zeros(shape=(self.nx, self.nx)),
+                        X @ self.A_lin.cpu(),
+                        X @ self.B_lin.cpu(),
+                        np.zeros(shape=(self.nx, self.nwu)),
                     ],
                     [
-                        np.zeros(shape=(self.nzp, self.nx)),
+                        self.C_lin.cpu() @ Y,
                         self.C_lin.cpu(),
-                        np.zeros(shape=(self.nzp, self.nzu)),
+                        np.zeros(shape=(self.nzp, self.nwp)),
+                        np.zeros(shape=(self.nzp, self.nwu)),
                     ],
                     [
                         np.zeros(shape=(self.nzu, self.nx)),
-                        np.zeros(shape=(self.nzu, self.nu)),
-                        np.eye(self.nzu),
+                        np.zeros(shape=(self.nzu, self.nx)),
+                        np.zeros(shape=(self.nzu, self.nwp)),
+                        np.zeros(shape=(self.nzu, self.nwu)),
                     ],
                 ]
             )
-        elif self.controller_feedback == 'nf':
-            P_21_2 = cp.bmat(
+            if self.controller_feedback == 'cf':
+                P_21_2 = cp.bmat(
+                    [
+                        [
+                            np.zeros(shape=(self.nx, self.nx)),
+                            self.A_lin.cpu(),
+                            np.zeros(shape=(self.nx, self.nzu)),
+                        ],
+                        [
+                            np.eye(self.nx),
+                            np.zeros(shape=(self.nx, self.nu)),
+                            np.zeros(shape=(self.nx, self.nzu)),
+                        ],
+                        [
+                            np.zeros(shape=(self.nzp, self.nx)),
+                            self.C_lin.cpu(),
+                            np.zeros(shape=(self.nzp, self.nzu)),
+                        ],
+                        [
+                            np.zeros(shape=(self.nzu, self.nx)),
+                            np.zeros(shape=(self.nzu, self.nu)),
+                            np.eye(self.nzu),
+                        ],
+                    ]
+                )
+            elif self.controller_feedback == 'nf':
+                P_21_2 = cp.bmat(
+                    [
+                        [
+                            np.zeros(shape=(self.nx, self.nx)),
+                            np.zeros(shape=(self.nx, self.nu)),
+                            np.zeros(shape=(self.nx, self.nzu)),
+                        ],
+                        [
+                            np.eye(self.nx),
+                            np.zeros(shape=(self.nx, self.nu)),
+                            np.zeros(shape=(self.nx, self.nzu)),
+                        ],
+                        [
+                            np.zeros(shape=(self.nzp, self.nx)),
+                            -np.eye(self.nu),
+                            np.zeros(shape=(self.nzp, self.nzu)),
+                        ],
+                        [
+                            np.zeros(shape=(self.nzu, self.nx)),
+                            np.zeros(shape=(self.nzu, self.nu)),
+                            np.eye(self.nzu),
+                        ],
+                    ]
+                )
+            elif self.controller_feedback == 'signal':
+                P_21_2 = cp.bmat(
+                    [
+                        [
+                            np.zeros(shape=(self.nx, self.nx)),
+                            np.eye(self.nx),
+                            np.zeros(shape=(self.nx, self.nzp)),
+                            np.zeros(shape=(self.nx, self.nzu)),
+                        ],
+                        [
+                            np.eye(self.nx),
+                            np.zeros(shape=(self.nx, self.nx)),
+                            np.zeros(shape=(self.nx, self.nzp)),
+                            np.zeros(shape=(self.nx, self.nzu)),
+                        ],
+                        [
+                            np.zeros(shape=(self.nzp, self.nx)),
+                            np.zeros(shape=(self.nzp, self.nx)),
+                            np.eye(self.nzp),
+                            np.zeros(shape=(self.nzp, self.nzu)),
+                        ],
+                        [
+                            np.zeros(shape=(self.nzu, self.nx)),
+                            np.zeros(shape=(self.nzu, self.nx)),
+                            np.zeros(shape=(self.nzu, self.nzp)),
+                            np.eye(self.nzu),
+                        ],
+                    ]
+                )
+            P_21_4 = cp.bmat(
                 [
                     [
                         np.zeros(shape=(self.nx, self.nx)),
-                        np.zeros(shape=(self.nx, self.nu)),
-                        np.zeros(shape=(self.nx, self.nzu)),
+                        np.eye(self.nx),
+                        np.zeros(shape=(self.nx, self.nwp)),
+                        np.zeros(shape=(self.nx, self.nwu)),
+                    ],
+                    [
+                        np.zeros(shape=(self.nwp, self.nx)),
+                        np.zeros(shape=(self.nwp, self.nx)),
+                        np.eye(self.nwp),
+                        np.zeros(shape=(self.nwp, self.nwu)),
+                    ],
+                    [
+                        np.eye(self.ny),
+                        np.zeros(shape=(self.ny, self.nx)),
+                        np.zeros(shape=(self.ny, self.nwp)),
+                        np.zeros(shape=(self.ny, self.nwu)),
+                    ],
+                    [
+                        np.zeros(shape=(self.nwu, self.nx)),
+                        np.zeros(shape=(self.nwu, self.nx)),
+                        np.zeros(shape=(self.nwu, self.nwp)),
+                        np.eye(self.nwu),
+                    ],
+                ]
+            )
+
+            P_21 = P_21_1 + P_21_2 @ klmn @ P_21_4
+            P_11 = -cp.bmat(
+                [
+                    [
+                        Y,
+                        np.eye(self.nx),
+                        np.zeros(shape=(self.nx, self.nwp)),
+                        np.zeros(shape=(self.nx, self.nwu)),
                     ],
                     [
                         np.eye(self.nx),
-                        np.zeros(shape=(self.nx, self.nu)),
-                        np.zeros(shape=(self.nx, self.nzu)),
+                        X,
+                        np.zeros(shape=(self.nx, self.nwp)),
+                        np.zeros(shape=(self.nx, self.nwu)),
                     ],
                     [
-                        np.zeros(shape=(self.nzp, self.nx)),
-                        -np.eye(self.nu),
-                        np.zeros(shape=(self.nzp, self.nzu)),
+                        np.zeros(shape=(self.nwp, self.nx)),
+                        np.zeros(shape=(self.nwp, self.nx)),
+                        self.gamma**2 * np.eye(self.nwp),
+                        np.zeros(shape=(self.nwp, self.nwu)),
                     ],
                     [
                         np.zeros(shape=(self.nzu, self.nx)),
-                        np.zeros(shape=(self.nzu, self.nu)),
-                        np.eye(self.nzu),
+                        np.zeros(shape=(self.nzu, self.nx)),
+                        np.zeros(shape=(self.nzu, self.nwp)),
+                        2*Lambda,
                     ],
                 ]
             )
-        elif self.controller_feedback == 'signal':
-            P_21_2 = cp.bmat(
+            P_22 = -cp.bmat(
                 [
                     [
-                        np.zeros(shape=(self.nx, self.nx)),
+                        Y,
                         np.eye(self.nx),
                         np.zeros(shape=(self.nx, self.nzp)),
-                        np.zeros(shape=(self.nx, self.nzu)),
+                        np.zeros(shape=(self.nx, self.nwu)),
                     ],
                     [
                         np.eye(self.nx),
-                        np.zeros(shape=(self.nx, self.nx)),
+                        X,
                         np.zeros(shape=(self.nx, self.nzp)),
-                        np.zeros(shape=(self.nx, self.nzu)),
+                        np.zeros(shape=(self.nx, self.nwu)),
                     ],
                     [
                         np.zeros(shape=(self.nzp, self.nx)),
                         np.zeros(shape=(self.nzp, self.nx)),
                         np.eye(self.nzp),
-                        np.zeros(shape=(self.nzp, self.nzu)),
+                        np.zeros(shape=(self.nzp, self.nwu)),
                     ],
                     [
                         np.zeros(shape=(self.nzu, self.nx)),
                         np.zeros(shape=(self.nzu, self.nx)),
                         np.zeros(shape=(self.nzu, self.nzp)),
-                        np.eye(self.nzu),
+                        1/2*Lambda,
                     ],
                 ]
             )
-        P_21_4 = cp.bmat(
-            [
-                [
-                    np.zeros(shape=(self.nx, self.nx)),
-                    np.eye(self.nx),
-                    np.zeros(shape=(self.nx, self.nwp)),
-                    np.zeros(shape=(self.nx, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nwp, self.nx)),
-                    np.zeros(shape=(self.nwp, self.nx)),
-                    np.eye(self.nwp),
-                    np.zeros(shape=(self.nwp, self.nwu)),
-                ],
-                [
-                    np.eye(self.ny),
-                    np.zeros(shape=(self.ny, self.nx)),
-                    np.zeros(shape=(self.ny, self.nwp)),
-                    np.zeros(shape=(self.ny, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nwu, self.nx)),
-                    np.zeros(shape=(self.nwu, self.nx)),
-                    np.zeros(shape=(self.nwu, self.nwp)),
-                    np.eye(self.nwu),
-                ],
-            ]
-        )
+            P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
 
-        P_21 = P_21_1 + P_21_2 @ klmn @ P_21_4
-        P_11 = -cp.bmat(
-            [
-                [
-                    Y,
-                    np.eye(self.nx),
-                    np.zeros(shape=(self.nx, self.nwp)),
-                    np.zeros(shape=(self.nx, self.nwu)),
-                ],
-                [
-                    np.eye(self.nx),
-                    X,
-                    np.zeros(shape=(self.nx, self.nwp)),
-                    np.zeros(shape=(self.nx, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nwp, self.nx)),
-                    np.zeros(shape=(self.nwp, self.nx)),
-                    self.gamma**2 * np.eye(self.nwp),
-                    np.zeros(shape=(self.nwp, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nzu, self.nx)),
-                    np.zeros(shape=(self.nzu, self.nx)),
-                    np.zeros(shape=(self.nzu, self.nwp)),
-                    2*Lambda,
-                ],
-            ]
-        )
-        P_22 = -cp.bmat(
-            [
-                [
-                    Y,
-                    np.eye(self.nx),
-                    np.zeros(shape=(self.nx, self.nzp)),
-                    np.zeros(shape=(self.nx, self.nwu)),
-                ],
-                [
-                    np.eye(self.nx),
-                    X,
-                    np.zeros(shape=(self.nx, self.nzp)),
-                    np.zeros(shape=(self.nx, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nzp, self.nx)),
-                    np.zeros(shape=(self.nzp, self.nx)),
-                    np.eye(self.nzp),
-                    np.zeros(shape=(self.nzp, self.nwu)),
-                ],
-                [
-                    np.zeros(shape=(self.nzu, self.nx)),
-                    np.zeros(shape=(self.nzu, self.nx)),
-                    np.zeros(shape=(self.nzu, self.nzp)),
-                    1/2*Lambda,
-                ],
-            ]
-        )
-        P = cp.bmat([[P_11, P_21.T], [P_21, P_22]])
+        else:
+            M3_tilde = M3
+            N31_tilde = N31
+            N32_tilde = N32
+
+            P_11 = cp.bmat([
+                [-Y, -np.eye(self.nx), np.zeros(shape=(self.nx,self.nwp)), self.beta * N32_tilde.T],
+                [-np.eye(self.nx), -X, np.zeros(shape=(self.nx,self.nwp)), self.beta * M3_tilde.T],
+                [np.zeros(shape=(self.nwp, self.nx)), np.zeros(shape=(self.nwp, self.nx)),-self.gamma**2*np.eye(self.nwp), self.beta * N31_tilde.T ],
+                [self.beta *N32_tilde, self.beta*M3_tilde, self.beta*N31_tilde, -(Lambda.T + Lambda)]
+            ])
+
+            P_21 = cp.bmat([
+                [self.A_lin.cpu() @ Y + N12, self.A_lin.cpu() + M1, self.B_lin + N11, N13],
+                [L2, X@self.A_lin.cpu()+K, X@self.B_lin.cpu()+L1, L3],
+                [self.C_lin.cpu()@Y+N22, self.C_lin + M2, N21, N23]
+            ])
+            P_22 = cp.bmat([
+                [-Y, -np.eye(self.nx), np.zeros(shape=(self.nx,self.nzp))],
+                [-np.eye(self.nx), -X, np.zeros(shape=(self.nx,self.nzp))],
+                [np.zeros(shape=(self.nzp, self.nx)), np.zeros(shape=(self.nzp,self.nx)), -np.eye(self.nzp)]
+            ])
+            P = cp.bmat([
+                [P_11, P_21.T],
+                [P_21, P_22]
+            ])
         nP = P.shape[0]
 
         device = self.K.device
@@ -2766,15 +2854,23 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             self.lam.data = torch.tensor(Lambda.value).double().to(device)
 
         self.K.data = torch.tensor(klmn.value[:self.nx,:self.nx]).double().to(device)
-        self.L1.data = torch.tensor(klmn.value[:self.nx,self.nx:self.nx+self.nwp+self.ny]).double().to(device)
-        self.L2.data = torch.tensor(klmn.value[:self.nx,self.nx+self.nwp+self.ny:]).double().to(device)
-        
-        self.M1.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,:self.nx]).double().to(device)
-        self.N11.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx:self.nx+self.nwp+self.ny]).double().to(device)
-        self.N12.data = torch.tensor(klmn.value[self.nx:self.nx+self.nu,self.nx+self.nwp+self.ny:]).double().to(device)
+        self.L1.data = torch.tensor(klmn.value[:self.nx,self.nx:self.nx+self.nwp]).double().to(device)
+        self.L2.data = torch.tensor(klmn.value[:self.nx,self.nx+self.nwp:self.nx+self.nwp+self.ny]).double().to(device)
+        self.L3.data = torch.tensor(klmn.value[:self.nx,self.nx+self.nwp+self.ny:]).double().to(device)
 
-        self.M2.data = torch.tensor(klmn.value[self.nx+self.nu:,:self.nx]).double().to(device)
-        self.N21.data = torch.tensor(klmn.value[self.nx+self.nu:,self.nx:self.nx+self.nwp+self.ny]).double().to(device)
+        self.M1.data = torch.tensor(klmn.value[self.nx:self.nx+self.nx,:self.nx]).double().to(device)
+        self.N11.data = torch.tensor(klmn.value[self.nx:self.nx+self.nx, self.nx:self.nx+self.nwp]).double().to(device)
+        self.N12.data = torch.tensor(klmn.value[self.nx:self.nx+self.nx, self.nx+self.nwp:self.nx+self.nwp+self.ny]).double().to(device)
+        self.N13.data = torch.tensor(klmn.value[self.nx:self.nx+self.nx,self.nx+self.nwp+self.ny:]).double().to(device)
+
+        self.M2.data = torch.tensor(klmn.value[self.nx+self.nx:self.nx+self.nx+self.nzp,:self.nx]).double().to(device)
+        self.N21.data = torch.tensor(klmn.value[self.nx+self.nx:self.nx+self.nx+self.nzp, self.nx:self.nx+self.nwp]).double().to(device)
+        self.N22.data = torch.tensor(klmn.value[self.nx+self.nx:self.nx+self.nx+self.nzp, self.nx+self.nwp:self.nx+self.nwp+self.ny]).double().to(device)
+        self.N23.data = torch.tensor(klmn.value[self.nx+self.nx:self.nx+self.nx+self.nzp,self.nx+self.nwp+self.ny:]).double().to(device)
+
+        self.M3.data = torch.tensor(klmn.value[self.nx+self.nu:,:self.nx]).double().to(device)
+        self.N31.data = torch.tensor(klmn.value[self.nx+self.nu:,self.nx:self.nx+self.nwp]).double().to(device)
+        self.N32.data = torch.tensor(klmn.value[self.nx+self.nu:,self.nx+self.nwp:self.nx+self.nwp+self.ny]).double().to(device)
 
         return np.float64(d.value)
     
