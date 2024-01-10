@@ -118,6 +118,7 @@ def evaluate_model(
                 y_pred=[p[:horizon_size] for p in pred],
             )
             results[horizon_size][name] = (score, meta)
+
     tracker(
         TrackMetrics(
             f'Metrics for horizon size {horizon_size}',

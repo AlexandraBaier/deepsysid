@@ -1,6 +1,7 @@
 import os
 import pathlib
 from typing import Optional
+from numpy.typing import NDArray
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -64,10 +65,16 @@ class MlFlowTracker(BaseEventTracker):
                 mlflow.log_metric(key, value, event.step)
         elif isinstance(event, TrackFigures):
             if isinstance(event.results, TrainingPrediction):
-                fig = plot_outputs(event.results)
+                seq_len, ny = event.results.zp.shape
+                if event.results.y_lin is None:
+                    event.results.y_lin = np.zeros(shape=(seq_len, ny))
+                t = np.linspace(0, seq_len - 1, seq_len)
+                for element in range(ny):
+                    fig = plot_outputs(t, element, event.results)
+                    mlflow.log_figure(fig, f'{FIGURE_DIRECTORY_NAME}/e{element+1}_{event.name}')
             elif isinstance(event.results, XYdata):
                 fig = plot_xydata(event.results)
-            mlflow.log_figure(fig, f'{FIGURE_DIRECTORY_NAME}/{event.name}')
+                mlflow.log_figure(fig, f'{FIGURE_DIRECTORY_NAME}/{event.name}')
             plt.close()
         elif isinstance(event, TrackSequencesAsMatFile):
             self.save_mat_file(event)
@@ -113,21 +120,15 @@ class MlFlowTracker(BaseEventTracker):
             mlflow.start_run(run_id=tracker_config.id)
 
 
-def plot_outputs(result: TrainingPrediction) -> plt.Figure:
-    seq_len, ny = result.zp.shape
-    fig, axs = plt.subplots(nrows=ny, ncols=1, tight_layout=True, squeeze=False)
-    if result.y_lin is None:
-        result.y_lin = np.zeros(shape=(seq_len, ny))
-    fig.suptitle('Output plots')
-    t = np.linspace(0, seq_len - 1, seq_len)
-    for element, ax in zip(range(ny), axs[:, 0]):
-        ax.plot(t, result.zp[:, element], '--', label=r'$z_p$')
-        ax.plot(t, result.zp_hat[:, element], label=r'$\hat{z}_p$')
-        ax.plot(t, result.y_lin[:, element], '--', label=r'$y_{lin}$')
-        ax.set_title(f'$z_{element+1}$')
-        ax.set_xlabel('time step')
-        ax.grid()
-        ax.legend()
+def plot_outputs(t: NDArray[np.float64], element:int, result: TrainingPrediction) -> plt.Figure:
+    fig, ax = plt.subplots(nrows=1, ncols=1, tight_layout=True)
+    ax.plot(t, result.zp[:, element], '--', label=r'$z_p$')
+    ax.plot(t, result.zp_hat[:, element], label=r'$\hat{z}_p$')
+    ax.plot(t, result.y_lin[:, element], '--', label=r'$y_{lin}$')
+    ax.set_title(f'$e_{element+1}$')
+    ax.set_xlabel('time step')
+    ax.grid()
+    ax.legend()
     return fig
 
 
