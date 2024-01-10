@@ -2257,6 +2257,9 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
         gradient_norm: List[np.float64] = []
         t = self.initial_decay_parameter
 
+
+        no_decrease_count: int = 0
+        old_validation_loss = np.float64(0.0)
         for i in range(self.epochs_predictor):
             predictor_dataset = RecurrentPredictorInitializerInitialDataset(
                 us,
@@ -2267,8 +2270,7 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
                 np.zeros(shape=(self.nd,1)),
                 self.initial_window_size,
             )
-            no_decrease_count: int = 0
-            old_validation_loss = np.float64(0.0)
+            
 
             # for debugging
             # torch.autograd.set_detect_anomaly(True)
