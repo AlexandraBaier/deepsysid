@@ -22,6 +22,12 @@ class XYdata:
     y: NDArray[np.float64]
     title: str
 
+@dataclasses.dataclass
+class SimAbcdParameter:
+    theta: NDArray[np.float64]
+    X_cal: NDArray[np.float64]
+    Lambda: NDArray[np.float64]
+
 
 def mean_stddev(
     array_seq: List[NDArray[np.float64]],

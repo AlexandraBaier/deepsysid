@@ -2089,7 +2089,6 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         # which the parameters of the lure system are.
         return self._predictor
 
-
 class InputConstrainedRnnConfig(DynamicIdentificationModelConfig):
     nwu: int
     gamma: float
@@ -2113,12 +2112,14 @@ class InputConstrainedRnnConfig(DynamicIdentificationModelConfig):
     epochs_with_const_decay: Optional[int] = 10
     initial_window_size: Optional[int] = 100
     optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
+    init_omega: Literal['zero','rand'] = 'zero'
+    constraint_type: Literal['convex', 'non-convex'] = 'convex'
     multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
 
 class InputConstrainedRnn(base.DynamicIdentificationModel):
     CONFIG = InputConstrainedRnnConfig
 
-    def __init__(self, config: HybridConstrainedRnnConfig):
+    def __init__(self, config: InputConstrainedRnnConfig):
         super().__init__(config)
 
         torch.set_default_dtype(torch.float64)
@@ -2135,9 +2136,10 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
         self.state_names = config.state_names
         self.initial_state_names = config.initial_state_names
         self.initial_window_size = config.initial_window_size
-
+        self.constraint_type = config.constraint_type
+        self.init_omega = config.init_omega
         self.multiplier_type = config.multiplier_type
-
+        
         self.nwu = config.nwu
         self.nzu = self.nwu
 
@@ -2207,6 +2209,8 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
         else:
             raise ValueError('loss can only be "mse"')
         
+        self._predictor = rnn
+
         self._predictor = rnn.InputLinearizationRnn(
             A_lin=A_lin_tilde,
             B_lin=B_lin_tilde,
@@ -2221,8 +2225,27 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
             device=self.device,
             optimizer=self.optimizer,
             multiplier_type=self.multiplier_type,
-
         ).to(self.device)
+
+        if self.constraint_type == 'non-convex':
+            self._predictor.project_parameters()
+            init_sim_parameter, _ = self._predictor.set_lure_system()
+            self._predictor = rnn.InputLinearizationNonConvexRnn(
+                A_lin=A_lin_tilde,
+                B_lin=B_lin_tilde,
+                C_lin=C_lin_tilde,
+                nd = self.nd,
+                alpha=config.alpha,
+                beta=config.beta,
+                nwu=self.nwu,
+                nzu=self.nzu,
+                gamma=config.gamma,
+                nonlinearity=self.nl,
+                device=self.device,
+                multiplier_type=self.multiplier_type,
+                init_pars=init_sim_parameter
+            )
+            assert self._predictor.check_constraints()
 
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
@@ -2247,16 +2270,15 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
         track_model_parameters(self, tracker)
 
         # if self.enforce_constraints_method is not None:
-        self._predictor.project_parameters()
-
+        if self.constraint_type == 'convex':
+            self._predictor.project_parameters()
         self._predictor.set_lure_system()
-
+        
         time_start_pred = time.time()
         predictor_loss: List[np.float64] = []
         barrier_value: List[np.float64] = []
         gradient_norm: List[np.float64] = []
         t = self.initial_decay_parameter
-
 
         no_decrease_count: int = 0
         old_validation_loss = np.float64(0.0)
@@ -2634,7 +2656,7 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
     ) -> None:
 
         torch.save(self._predictor.state_dict(), file_path[1])
-        omega, sys_block_matrix = self._predictor.set_lure_system()
+        sim_parameter, sys_block_matrix = self._predictor.set_lure_system()
         np_pars = {
             key: np.float64(value.cpu().detach().numpy())
             for key, value in self._predictor.state_dict().items()
@@ -2642,7 +2664,7 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
         savemat(
             file_path[3],
             {
-                'omega': np.float64(omega),
+                'omega': np.float64(sim_parameter.theta),
                 'P_cal': np.float64(sys_block_matrix),
                 'predictor_parameter': np_pars,
             },
