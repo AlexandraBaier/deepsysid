@@ -19,6 +19,7 @@ from ...networks.switching import (
     UnconstrainedSwitchingLSTM,
 )
 from ...tracker.base import BaseEventTracker
+from ...tracker import event_data
 from .. import base, utils
 from ..datasets import RecurrentInitializerDataset, RecurrentPredictorDataset
 from ..recurrent.separate_initialization import (
@@ -95,6 +96,8 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         epoch_losses_initializer = []
         epoch_losses_predictor = []
 
+        base.track_model_parameters(self, tracker)
+
         self.predictor.train()
         self.initializer.train()
 
@@ -132,6 +135,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
                 f'Epoch {i + 1}/{self.epochs_initializer} '
                 f'- Epoch Loss (Initializer): {total_loss}'
             )
+            tracker(event_data.TrackMetrics(f'Track predictor loss step {i+1}', {'epoch loss initializer': float(total_loss)}))
             epoch_losses_initializer.append([i, total_loss])
         time_end_init = time.time()
 
@@ -165,6 +169,8 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
                 f'Epoch {i + 1}/{self.epochs_predictor} '
                 f'- Epoch Loss (Predictor): {total_loss}'
             )
+            
+            tracker(event_data.TrackMetrics(f'Track predictor loss step {i+1}', {'epoch loss predictor': float(total_loss)}))
             epoch_losses_predictor.append([i, total_loss])
         time_end_pred = time.time()
 
@@ -173,6 +179,15 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
         logger.info(
             f'Training time for initializer {time_total_init}s '
             f'and for predictor {time_total_pred}s'
+        )
+        tracker(
+            event_data.TrackParameters(
+                'Track training time as parameter',
+                {
+                    'Training time':time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred))),
+                    'Training time initializer':time.strftime("%H:%M:%S", time.gmtime(float(time_total_init)))
+                 }
+            )
         )
 
         return dict(

@@ -2664,7 +2664,7 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
         savemat(
             file_path[3],
             {
-                'omega': np.float64(sim_parameter.theta),
+                'theta': np.float64(sim_parameter.theta),
                 'P_cal': np.float64(sys_block_matrix),
                 'predictor_parameter': np_pars,
             },

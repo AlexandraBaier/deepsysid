@@ -124,20 +124,21 @@ class BiboStabilityTest(BaseStabilityTest):
         model: Union[
             NormalizedHiddenStateInitializerPredictorModel,
             NormalizedHiddenStatePredictorModel,
+            DynamicIdentificationModel
         ],
         device_name: str,
         control_dim: int,
         true_control: NDArray[np.float64],
     ) -> TestSequenceResult:
-        if (
-            model.state_mean is None
-            or model.state_std is None
-            or model.control_mean is None
-            or model.control_std is None
-        ):
-            raise ValueError(
-                'Mean and standard deviation is not initialized in the model'
-            )
+        # if (
+        #     model.state_mean is None
+        #     or model.state_std is None
+        #     or model.control_mean is None
+        #     or model.control_std is None
+        # ):
+        #     raise ValueError(
+        #         'Mean and standard deviation is not initialized in the model'
+        #     )
 
         model.predictor.train()
         N, nu = true_control.shape
