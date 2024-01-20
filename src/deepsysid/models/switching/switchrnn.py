@@ -252,7 +252,7 @@ class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):
 
         y_np = utils.denormalize(y_np, self.output_mean, self.output_std)
 
-        return y_np.astype(np.float64), dict(
+        return y_np.astype(np.float64).reshape(-1,self.output_dim), dict(
             system_matrices=np.array(system_matrices, dtype=np.float64),
             control_matrices=np.array(control_matrices, dtype=np.float64),
         )

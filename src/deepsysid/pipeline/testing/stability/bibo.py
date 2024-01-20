@@ -11,7 +11,9 @@ from ....models.base import (
     DynamicIdentificationModel,
     NormalizedHiddenStateInitializerPredictorModel,
     NormalizedHiddenStatePredictorModel,
+    NormalizedControlStateModel
 )
+from ....models.switching.switchrnn import SwitchingLSTMBaseModel
 from ..base import TestResult, TestSequenceResult, TestSimulation
 from ..io import split_simulations
 from .base import BaseStabilityTest, StabilityTestConfig
@@ -70,6 +72,7 @@ class BiboStabilityTest(BaseStabilityTest):
                     device_name=self.device_name,
                     control_dim=self.control_dim,
                     true_control=sim.true_control,
+                    true_output = sim.true_state
                 )
             )
             tracker(
@@ -129,6 +132,7 @@ class BiboStabilityTest(BaseStabilityTest):
         device_name: str,
         control_dim: int,
         true_control: NDArray[np.float64],
+        true_output: NDArray[np.float64],
     ) -> TestSequenceResult:
         # if (
         #     model.state_mean is None
@@ -145,9 +149,9 @@ class BiboStabilityTest(BaseStabilityTest):
         t = torch.linspace(0,N-1,N)
         # u_norm = torch.from_numpy(true_control).double().to(device_name)
         # u_norm = torch.zeros_like(torch.tensor(true_control)).double().to(device_name)
-        # wp = torch.tensor(np.sin(t/0.02*1/1000).reshape((N,nu)))
-        # wp = torch.from_numpy(true_control).double().to(device_name)
-        wp = torch.zeros_like(torch.tensor(true_control)).double().to(device_name)
+        # d = torch.tensor(np.sin(t/0.02*1/1000).reshape((N,nu)))
+        # d = torch.from_numpy(true_control).double().to(device_name)
+        d = torch.zeros_like(torch.tensor(true_control)).double().to(device_name)
 
         # disturb input
         delta = torch.normal(
@@ -177,24 +181,36 @@ class BiboStabilityTest(BaseStabilityTest):
         
         gamma_2: Optional[np.float64] = None
         gamma_2s: List[np.float64] = []
-        zp_hat_as: List[NDArray[np.float64]] = []
-        wp_as: List[NDArray[np.float64]] = []
+        e_hat_as: List[NDArray[np.float64]] = []
+        d_as: List[NDArray[np.float64]] = []
 
         for step_idx in range(self.optimization_steps):
             opt.zero_grad()
             # delta = ((t*c2+c3)*torch.sin(2*torch.pi*f*t+phi)+b).reshape(N,nu)
-            wp_a = wp + delta
+            d_a_norm = d + delta
+
+            # normalize input
+            # if isinstance(model, NormalizedControlStateModel):
+            #     d_a_norm = utils.normalize(d_a, model.control_mean, model.control_std)
+            # else:
+            #     d_a_norm = d_a
 
             # model prediction
-            zp_hat_a = model.predictor(wp_a.unsqueeze(0))[0].squeeze()
-            # zp_hat_a = zp_hat_a.squeeze()
+            if isinstance(model, SwitchingLSTMBaseModel):
+                # d_a_norm = utils.normalize(d_a, model.control_mean, model.control_std)
+                ne = model.output_dim
+                e_hat_a_norm = model.predictor(d_a_norm.float().unsqueeze(0), previous_output=torch.zeros(1,ne)).outputs.squeeze()
+            else:
+                e_hat_a_norm = model.predictor(d_a_norm.unsqueeze(0))[0].squeeze()
+            
+            # e_hat_a = e_hat_a.squeeze()
 
             # use log to avoid zero in the denominator (goes to -inf)
             # since we maximize this results in a punishment
             regularization = self.regularization_scale * torch.log(
-                utils.sequence_norm(wp_a)
+                utils.sequence_norm(d_a_norm)
             )
-            gamma_2_torch = torch.sqrt(utils.sequence_norm(zp_hat_a) / utils.sequence_norm(wp_a))
+            gamma_2_torch = torch.sqrt(utils.sequence_norm(e_hat_a_norm) / utils.sequence_norm(d_a_norm))
             L = gamma_2_torch + regularization
             # L = gamma_2_torch
             L.backward(retain_graph=True)
@@ -215,12 +231,21 @@ class BiboStabilityTest(BaseStabilityTest):
                     f'\t -log(norm(denominator)): {regularization:.3f}'
                 )
             gamma_2s.append(gamma_2)
-            zp_hat_as.append(zp_hat_a.detach().numpy())
-            wp_as.append(wp_a.detach().numpy())
+            if isinstance(model, NormalizedControlStateModel):
+                e_hat_a = utils.denormalize(e_hat_a_norm.detach().numpy(), model.state_mean, model.state_mean)
+                d_a = utils.denormalize(d_a_norm.detach().numpy(), model.control_mean, model.control_std)
+            elif isinstance(model, SwitchingLSTMBaseModel):
+                e_hat_a = utils.denormalize(e_hat_a_norm.detach().numpy(), model.output_mean, model.output_std)
+                d_a = utils.denormalize(d_a_norm.detach().numpy(), model.control_mean, model.control_std)
+            else:
+                e_hat_a = e_hat_a_norm
+                d_a = d_a_norm
+            e_hat_as.append(e_hat_a)
+            d_as.append(d_a)
 
         return TestSequenceResult(
-            inputs=dict(a=wp_as[np.argmax(gamma_2s)]),
-            outputs=dict(a=zp_hat_as[np.argmax(gamma_2s)]),
+            inputs=dict(a=d_as[np.argmax(gamma_2s)]),
+            outputs=dict(a=e_hat_as[np.argmax(gamma_2s)]),
             initial_states=dict(),
-            metadata=dict(stability_gain=np.array([max(gamma_2s)])),
+            metadata=dict(stability_gain=np.array([max(gamma_2s)]))
         )

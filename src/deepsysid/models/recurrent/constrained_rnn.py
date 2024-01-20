@@ -1189,7 +1189,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     warmstart: Optional[bool] = False
 
 
-class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
+class HybridConstrainedRnn(base.DynamicIdentificationModel):
     CONFIG = HybridConstrainedRnnConfig
 
     def __init__(self, config: HybridConstrainedRnnConfig):
