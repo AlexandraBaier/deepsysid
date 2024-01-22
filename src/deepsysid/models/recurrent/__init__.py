@@ -5,6 +5,8 @@ from .constrained_rnn import (
     HybridConstrainedRnnConfig,
     LtiRnnInit,
     LtiRnnInitConfig,
+    InputConstrainedRnnConfig2,
+    InputConstrainedRnn2,
     RnnInitFlexibleNonlinearity,
     RnnInitFlexibleNonlinearityConfig,
 )
@@ -32,6 +34,8 @@ __all__ = [
     'RnnInitFlexibleNonlinearity',
     'LtiRnnInitConfig',
     'LtiRnnInit',
+    'InputConstrainedRnnConfig2',
+    'InputConstrainedRnn2',
     'ConstrainedRnnConfig',
     'ConstrainedRnn',
     'HybridConstrainedRnnConfig',

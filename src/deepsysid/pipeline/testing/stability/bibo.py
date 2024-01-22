@@ -238,8 +238,8 @@ class BiboStabilityTest(BaseStabilityTest):
                 e_hat_a = utils.denormalize(e_hat_a_norm.detach().numpy(), model.output_mean, model.output_std)
                 d_a = utils.denormalize(d_a_norm.detach().numpy(), model.control_mean, model.control_std)
             else:
-                e_hat_a = e_hat_a_norm
-                d_a = d_a_norm
+                e_hat_a = e_hat_a_norm.detach().numpy()
+                d_a = d_a_norm.detach().numpy()
             e_hat_as.append(e_hat_a)
             d_as.append(d_a)
 

@@ -2784,9 +2784,757 @@ class InputConstrainedRnn(base.DynamicIdentificationModel):
         # which the parameters of the lure system are.
         return self._predictor
 
+class InputConstrainedRnnConfig2(DynamicIdentificationModelConfig):
+    nwu: int
+    gamma: float
+    A_lin: List
+    B_lin: List
+    B_tilde_lin_2: List
+    B_tilde_lin_3: List
+    C_lin: List
+    D_lin: List
+    D_tilde_lin_2:List
+    D_tilde_lin_3:List
+    alpha: float
+    beta: float
+    loss: Literal['mse']
+    decay_rate: float
+    sequence_length: int
+    learning_rate: float
+    batch_size: int
+    epochs_predictor: int
+    clip_gradient_norm: Optional[float]
+    initial_decay_parameter: float
+    extend_state: bool
+    nonlinearity: str
+    decay_rate_lr: Optional[int] = 4
+    epochs_with_const_decay: Optional[int] = 10
+    initial_window_size: Optional[int] = 100
+    optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
+    init_omega: Literal['zero','rand'] = 'zero'
+    constraint_type: Literal['convex', 'non-convex'] = 'convex'
+    multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
 
+
+class InputConstrainedRnn2(base.DynamicIdentificationModel):
+    CONFIG = InputConstrainedRnnConfig2
+
+    def __init__(self, config: InputConstrainedRnnConfig2):
+        super().__init__(config)
+
+        torch.set_default_dtype(torch.float64)
+
+        self.device_name = config.device_name
+        self.device = torch.device(self.device_name)
+        self.optimizer = config.optimizer
+
+        self.nd = len(config.control_names) # size of performance input
+        self.ne = len(config.state_names) # size of performance output
+
+        self.control_names = config.control_names
+        self.state_names = config.state_names
+        self.initial_state_names = config.initial_state_names
+        self.initial_window_size = config.initial_window_size
+        self.constraint_type = config.constraint_type
+        self.init_omega = config.init_omega
+        self.multiplier_type = config.multiplier_type
+        
+        self.nwu = config.nwu
+        self.nzu = self.nwu
+
+        self.nNf = len(config.B_tilde_lin_3[0])
+        self.nNh = len(config.D_tilde_lin_3[0])
+
+        nx = len(config.A_lin)
+        self.extend_state = nx < self.nwu and config.extend_state
+        if self.extend_state:
+            self.e = self.nwu - nx
+            A_lin = np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            np.array(config.A_lin, dtype=np.float64),
+                            np.zeros(shape=(nx, self.e)),
+                        ],
+                        axis=1,
+                    ),
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.e, nx)),
+                            np.zeros(shape=(self.e, self.e)),
+                        ],
+                        axis=1,
+                    ),
+                ],
+                axis=0,
+            )
+            B_lin = np.concatenate(
+                [
+                    np.array(config.B_lin, dtype=np.float64),
+                    np.zeros(shape=(self.e, self.nd)),
+                ],
+                axis=0,
+            )
+            C_lin = np.concatenate(
+                [
+                    np.array(config.C_lin, dtype=np.float64),
+                    np.zeros(shape=(self.ne, self.e)),
+                ],
+                axis=1,
+            )
+            D_lin = np.array(config.D_lin, dtype=np.float64)
+            B_tilde_lin_2 = np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            np.array(config.B_tilde_lin_2, dtype=np.float64),
+                            np.zeros(shape=(nx, self.e)),
+                        ],
+                        axis=1,
+                    ),
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.e, nx)),
+                            np.zeros(shape=(self.e, self.e)),
+                        ],
+                        axis=1,
+                    ),
+                ],
+                axis=0,
+            )
+            B_tilde_lin_3 = np.concatenate(
+                [
+                    np.array(config.B_tilde_lin_3, dtype=np.float64),
+                    np.zeros(shape=(self.e, self.nNf)),
+                ],
+                axis=0,
+            )
+            D_tilde_lin_2 = np.concatenate(
+                [
+                    np.array(config.D_tilde_lin_2, dtype=np.float64),
+                    np.zeros(shape=(self.ne, self.e)),
+                ],
+                axis=1,
+            )
+            D_tilde_lin_3 = np.array(config.D_tilde_lin_3, dtype=np.float64)
+        else:
+            self.e = 0
+            A_lin = np.array(config.A_lin, dtype=np.float64)
+            B_lin = np.array(config.B_lin, dtype=np.float64)
+            C_lin = np.array(config.C_lin, dtype=np.float64)
+            D_lin = np.array(config.D_lin, dtype=np.float64)
+            B_tilde_lin_2 = np.array(config.B_tilde_lin_2, dtype=np.float64)
+            B_tilde_lin_3 = np.array(config.B_tilde_lin_3, dtype=np.float64)
+            D_tilde_lin_2 = np.array(config.D_tilde_lin_2, dtype=np.float64)
+            D_tilde_lin_3 = np.array(config.D_tilde_lin_3, dtype=np.float64)
+
+        self.nx = A_lin.shape[0]
+        self.nx_rnn = self.nx # controller size equals size of linear system
+
+        self.ny = self.nx + self.nd # signals to the controller
+        # self.ny = C_lin_tilde.shape[0]
+        self.nu = self.nx_rnn + self.nNf + self.nNh # signals from the controller
+
+        B_lin_2 = np.hstack((B_tilde_lin_2, B_tilde_lin_3, np.zeros((self.nx, self.nNh))))
+        D_lin_2 = np.hstack((D_tilde_lin_2, np.zeros((self.ne, self.nNf)), D_tilde_lin_3)) 
+
+        self.initial_decay_parameter = config.initial_decay_parameter
+        self.decay_rate = config.decay_rate
+        self.epochs_with_const_decay = config.epochs_with_const_decay
+        self.clip_gradient_norm = config.clip_gradient_norm
+
+        self.sequence_length = config.sequence_length
+        self.learning_rate = config.learning_rate
+        self.batch_size = config.batch_size
+        self.epochs_predictor = config.epochs_predictor
+        self.gamma = config.gamma
+        self.decay_rate_lr = config.decay_rate_lr
+
+        self.nl = retrieve_nonlinearity_class(config.nonlinearity)
+        self.nonlinearity = config.nonlinearity
+
+        if config.loss == 'mse':
+            self.loss: nn.Module = nn.MSELoss().to(self.device)
+        else:
+            raise ValueError('loss can only be "mse"')
+
+        self._predictor = rnn.InputLinearizationRnn2(
+            A_lin=A_lin,
+            B_lin=B_lin,
+            C_lin=C_lin,
+            D_lin = D_lin,
+            B_lin_2 = B_lin_2,
+            D_lin_2 = D_lin_2,
+            alpha=config.alpha,
+            beta=config.beta,
+            nwu=self.nwu,
+            gamma=config.gamma,
+            nonlinearity=self.nl,
+            device=self.device,
+            optimizer=self.optimizer,
+            multiplier_type=self.multiplier_type,
+        ).to(self.device)
+
+        if self.constraint_type == 'non-convex':
+            self._predictor.project_parameters()
+            init_sim_parameter, _ = self._predictor.set_lure_system()
+            self._predictor = rnn.InputLinearizationNonConvexRnn(
+                A_lin=A_lin,
+                B_lin=B_lin,
+                C_lin=C_lin,
+                nd = self.nd,
+                alpha=config.alpha,
+                beta=config.beta,
+                nwu=self.nwu,
+                nzu=self.nzu,
+                gamma=config.gamma,
+                nonlinearity=self.nl,
+                device=self.device,
+                multiplier_type=self.multiplier_type,
+                init_pars=init_sim_parameter
+            )
+            assert self._predictor.check_constraints()
+
+        self.optimizer_pred = optim.Adam(
+            self._predictor.parameters(), lr=self.learning_rate
+        )
+
+    def train(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        initial_seqs: Optional[List[NDArray[np.float64]]] = None,
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> Dict[str, NDArray[np.float64]]:
+        us = control_seqs
+        ys = state_seqs
+        self._predictor.train()
+        self._predictor.to(self.device)
+        step = 0
+
+        if isinstance(initial_seqs, List):
+            x0s: List[NDArray[np.float64]] = initial_seqs
+
+        track_model_parameters(self, tracker)
+
+        # if self.enforce_constraints_method is not None:
+        if self.constraint_type == 'convex':
+            self._predictor.project_parameters()
+        self._predictor.set_lure_system()
+        
+        time_start_pred = time.time()
+        predictor_loss: List[np.float64] = []
+        barrier_value: List[np.float64] = []
+        gradient_norm: List[np.float64] = []
+        t = self.initial_decay_parameter
+
+        no_decrease_count: int = 0
+        old_validation_loss = np.float64(0.0)
+        for i in range(self.epochs_predictor):
+            predictor_dataset = RecurrentPredictorInitializerInitialDataset(
+                us,
+                ys,
+                x0s,
+                self.sequence_length,
+                np.zeros(shape=(self.nx,1)),
+                np.zeros(shape=(self.nd,1)),
+                self.initial_window_size,
+            )
+            
+
+            # for debugging
+            # torch.autograd.set_detect_anomaly(True)
+            data_loader = data.DataLoader(
+                predictor_dataset, self.batch_size, shuffle=True, drop_last=True
+            )
+            total_loss: torch.Tensor = torch.tensor(0.0).to(self.device)
+            max_grad: List[np.float64] = list()
+            backtracking_iter: List[int] = list()
+            for batch_idx, batch in enumerate(data_loader):
+
+                def closure():
+                    self._predictor.zero_grad(set_to_none=True)
+                    if self.extend_state:
+                        x0 = torch.concat(
+                            [
+                                batch['x0'].double(),
+                                torch.zeros(size=(self.batch_size, self.e)),
+                            ],
+                            dim=1,
+                        ).to(self.device)
+                        x0_init = torch.concat(
+                            [
+                                batch['x0_init'][:, 0, :].double(),
+                                torch.zeros(size=(self.batch_size, self.e)),
+                            ],
+                            dim=1,
+                        ).to(self.device)
+                    else:
+                        x0_init = batch['x0_init'][:, 0, :].double().to(self.device)
+                        x0 = batch['x0'].double().to(self.device)
+
+                    # warmstart
+                    _, (_, x_rnns) = self._predictor.forward(
+                        x_pred=batch['wp_init'].double().to(self.device),
+                        hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
+                    )
+                    zp_hat, _ = self._predictor.forward(
+                        x_pred=batch['wp'].double().to(self.device),
+                        hx=(
+                            x0,
+                            x_rnns,
+                        ),
+                    )
+
+                    zp_hat = zp_hat.to(self.device)
+                    batch_loss = self.loss.forward(
+                        zp_hat, batch['zp'].double().to(self.device)
+                    )
+
+                    barrier = self._predictor.get_barriers(
+                            torch.tensor(t, device=self.device)
+                        )
+                    (batch_loss + barrier).backward()
+
+                    if self.clip_gradient_norm is not None:
+                        torch.nn.utils.clip_grad_norm_(
+                            parameters=self._predictor.parameters(),
+                            max_norm=self.clip_gradient_norm,
+                        )
+
+                    # gradient infos
+                    grads_norm = [
+                        torch.linalg.norm(p.grad)
+                        for p in filter(
+                            lambda p: p.grad is not None,
+                            self._predictor.parameters(),
+                        )
+                    ]
+
+                    max_grad.append(max(grads_norm).cpu().detach().numpy())
+
+                    tracker(
+                        TrackMetrics(
+                            'track loss, validation loss and barrier',
+                            {
+                                'batch loss predictor': float(
+                                    batch_loss.cpu().detach().numpy()
+                                ),
+                                'batch barrier predictor': float(
+                                    barrier.cpu().detach().numpy()
+                                )
+                            },
+                        )
+                    )
+
+                    return batch_loss, barrier, zp_hat
+
+                # save old parameter set
+                old_pars = [
+                    par.clone().detach() for par in self._predictor.parameters()
+                ]
+
+                (
+                    batch_loss,
+                    barrier,
+                    zp_hat,
+                ) = self.optimizer_pred.step(closure)
+
+                # early stopping if prediction is NaN
+                if torch.isnan(batch_loss):
+                    logger.info('Stop training. Batch loss is None.')
+                    time_end_pred = time.time()
+                    time_total_pred = time_end_pred - time_start_pred
+                    return dict(
+                        index=np.asarray(i),
+                        epoch_loss_predictor=np.asarray(predictor_loss),
+                        barrier_value=np.asarray(barrier_value),
+                        gradient_norm=np.asarray(gradient_norm),
+                        training_time_predictor=np.asarray(time_total_pred),
+                    )
+
+                total_loss += batch_loss
+
+                new_pars = [
+                    par.clone().detach() for par in self._predictor.parameters()
+                ]
+
+                try:
+                    self._predictor.set_lure_system()
+                except AssertionError as msg:
+                    logger.warning(msg)
+
+                bls_iter = int(0)
+                max_iter = 100
+                alpha = 0.5
+                while not self._predictor.check_constraints():
+                    new_pars = [
+                        alpha * old_par.clone() + (1 - alpha) * new_par
+                        for old_par, new_par in zip(old_pars, new_pars)
+                    ]
+
+                    self._predictor.write_parameters(new_pars)
+
+                    self._predictor.set_lure_system()
+
+                    # no feasible parameter set
+                    if bls_iter > max_iter - 1:
+                        logger.info(
+                            f'BLS did not find feasible parameter set'
+                            f'after {bls_iter} iterations.'
+                            f'Training is stopped.'
+                        )
+                        time_end_pred = time.time()
+                        time_total_pred = time_end_pred - time_start_pred
+                        return dict(
+                            index=np.asarray(i),
+                            epoch_loss_predictor=np.asarray(predictor_loss),
+                            barrier_value=np.asarray(barrier_value),
+                            gradient_norm=np.asarray(gradient_norm),
+                            training_time_predictor=np.asarray(time_total_pred),
+                        )
+                    bls_iter += 1
+                backtracking_iter.append(bls_iter)
+
+            validation_loss = np.float64(0.0)
+            # skip validation for testing
+            # since it loads validation data from file system.
+            # This should be improved in the future.
+            if "PYTEST_CURRENT_TEST" not in os.environ:
+                validation_loss = self.validate(
+                    self.sequence_length,
+                )
+                e = old_validation_loss - validation_loss
+                if e < -1e-5 and i > 0:
+                    no_decrease_count += 1
+
+                # update old validation loss
+                old_validation_loss = validation_loss.copy()
+                if no_decrease_count >= self.epochs_with_const_decay:
+                    # decay learning rate
+                    for p_group in self.optimizer_pred.param_groups:
+                        p_group['lr'] = p_group['lr'] * 1 / self.decay_rate_lr
+                    # decay regularization
+                    t = t * 1 / self.decay_rate
+                    logger.info(
+                        f'Decay t by {self.decay_rate} \t t: {t:1f} \n'
+                        f'Decay learning rate by {self.decay_rate_lr} \t lr: {self.optimizer_pred.param_groups[0]["lr"]:1f} '
+                    )
+                    tracker(
+                        TrackMetrics(
+                            'track decay and learning rate',
+                            {
+                                'learning rate': float(
+                                    self.optimizer_pred.param_groups[0]['lr']
+                                ),
+                                'decay rate': float(t),
+                            },
+                            i,
+                        )
+                    )
+                    # stop training if decay rate is too small
+                    if t <= 1e-7:
+                        time_end_pred = time.time()
+                        time_total_pred = time_end_pred - time_start_pred
+                        logger.info(
+                            f'Minimum decay rate {t:1f} is reached. Stop training.'
+                        )
+                        return dict(
+                            index=np.asarray(i),
+                            epoch_loss_predictor=np.asarray(predictor_loss),
+                            barrier_value=np.asarray(barrier_value),
+                            backtracking_iter=np.asarray(backtracking_iter),
+                            gradient_norm=np.asarray(gradient_norm),
+                            training_time_predictor=np.asarray(time_total_pred),
+                        )
+                    # reset counter
+                    no_decrease_count = 0
+
+            tracker(
+                TrackMetrics(
+                    'track total loss, validation loss and barrier',
+                    {
+                        'epoch barrier predictor': float(barrier),
+                        'epoch loss predictor': float(
+                            total_loss / len(data_loader)
+                        ),
+                        'epoch validation loss': float(validation_loss),
+                    },
+                    i,
+                )
+            )
+
+            # plot training trajectories
+            if (
+                step == 0
+                or step == int(self.epochs_predictor / 2)
+                or step == self.epochs_predictor - 1
+            ):
+                with torch.no_grad():
+                    result = utils.TrainingPrediction(
+                        u=batch['wp'][0, :, : self._predictor.nd],
+                        zp=batch['zp'][0, :, :],
+                        zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                        # y_lin=y_lin[:, :, 0],
+                    )
+                    tracker(
+                        TrackFigures(
+                            f'Save output plot at step: {step}',
+                            result,
+                            f'training_trajectory_{step}.png',
+                        )
+                    )
+
+            logger.info(
+                f'Epoch {i + 1}/{self.epochs_predictor}\t'
+                f'Total Loss (Predictor): {total_loss:1f} \t'
+                f'Validation Loss: {validation_loss:1f} \t'
+                f'Barrier: {barrier:1f}\t'
+                f'Backtracking Line Search iteration: {max(backtracking_iter)}\t'
+                f'Max accumulated gradient norm: {np.max(max_grad):1f}'
+            )
+            predictor_loss.append(np.float64(total_loss))
+            barrier_value.append(barrier.cpu().detach().numpy())
+            gradient_norm.append(np.float64(np.mean(max_grad)))
+
+            
+            step += 1
+
+        time_end_pred = time.time()
+        time_total_pred = time_end_pred - time_start_pred
+
+        tracker(
+            TrackMetrics(
+                'Track training time as metric',
+                {'Training time':float(time_total_pred)}
+            )
+        )
+        tracker(
+            TrackParameters(
+                'Track training time as parameter',
+                {'Training time':time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred)))}
+            )
+        )      
+
+        logger.info(
+            f'Training time for predictor (HH:MM:SS) '
+            f'{time.strftime("%H:%M:%S", time.gmtime(float(time_total_pred)))}'
+        )
+
+        return dict(
+            index=np.asarray(i),
+            epoch_loss_predictor=np.asarray(predictor_loss),
+            barrier_value=np.asarray(barrier_value),
+            gradient_norm=np.asarray(gradient_norm),
+            training_time_predictor=np.asarray(time_total_pred),
+        )
 
     
+    def simulate(
+        self,
+        initial_control: NDArray[np.float64],
+        initial_state: NDArray[np.float64],
+        control: NDArray[np.float64],
+        x0: Optional[NDArray[np.float64]] = None,
+        initial_x0: Optional[NDArray[np.float64]] = None,
+    ) -> NDArray[np.float64]:
+
+        self._predictor.eval()
+        self._predictor.set_lure_system()
+
+        N, nu = control.shape
+        N_init, _ = initial_control.shape
+
+        u = control
+        u_init = initial_control[:, : self.nd].reshape(N_init, -1)
+        with torch.no_grad():
+            u_init_torch = torch.from_numpy(u_init).unsqueeze(0).double().to(self.device)
+            pred_x = torch.from_numpy(u).unsqueeze(0).double().to(self.device)
+            
+            x0_1_torch = torch.from_numpy(x0)
+            initial_x0_1_torch = torch.from_numpy(initial_x0)
+
+            if self.extend_state:
+                x0_torch = (
+                    torch.concat([x0_1_torch, torch.zeros(size=(self.e,))], dim=0)
+                    .reshape(shape=(1, self.nx))
+                    .double()
+                    .to(self.device)
+                )
+                initial_x0_torch = (
+                    torch.concat(
+                        [initial_x0_1_torch, torch.zeros(size=(self.e,))], dim=0
+                    )
+                    .reshape(shape=(1, self.nx))
+                    .double()
+                    .to(self.device)
+                )
+            else:
+                x0_torch = x0_1_torch.reshape(shape=(1, -1)).double().to(self.device)
+                initial_x0_torch = (
+                    initial_x0_1_torch.reshape(shape=(1, -1)).double().to(self.device)
+                )
+
+            # warmstart
+            _, (_, x_rnns) = self._predictor.forward(
+                u_init_torch,
+                hx=(
+                    initial_x0_torch, 
+                    torch.zeros_like(initial_x0_torch).to(self.device)
+                ),
+            )
+
+            y, _ = self._predictor.forward(
+                pred_x, 
+                hx=(
+                    x0_torch, 
+                    x_rnns
+                )
+            )
+            y_np: NDArray[np.float64] = (
+                y.cpu().detach().numpy().reshape((N, self.ne)).astype(np.float64)
+            )
+
+        return y_np
+
+    def save(
+        self,
+        file_path: Tuple[str, ...],
+        tracker: BaseEventTracker = BaseEventTracker(),
+    ) -> None:
+
+        torch.save(self._predictor.state_dict(), file_path[1])
+        sim_parameter, sys_block_matrix = self._predictor.set_lure_system()
+        np_pars = {
+            key: np.float64(value.cpu().detach().numpy())
+            for key, value in self._predictor.state_dict().items()
+        }
+        savemat(
+            file_path[3],
+            {
+                'theta': np.float64(sim_parameter.theta),
+                'P_cal': np.float64(sys_block_matrix),
+                'predictor_parameter': np_pars,
+            },
+        )
+
+        tracker(
+            TrackArtifacts(
+                'Save omega and system matrices',
+                {
+                    'system parameters': file_path[3],
+                    'torch parameter': file_path[1],
+                },
+            )
+        )
+
+    def load(self, file_path: Tuple[str, ...]) -> None:
+        self._predictor.load_state_dict(
+            torch.load(file_path[1], map_location=self.device_name)
+        )
+        # with open(file_path[2], mode='r') as f:
+        #     norm = json.load(f)
+        # self._state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        # self._state_std = np.array(norm['state_std'], dtype=np.float64)
+        # self._control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        # self._control_std = np.array(norm['control_std'], dtype=np.float64)
+
+    def get_file_extension(self) -> Tuple[str, ...]:
+        return (
+            'initializer.pth',
+            'predictor.pth',
+            'json',
+            'mat',
+        )
+
+    def get_parameter_count(self) -> int:
+        # technically parameter counts of both networks are equal
+        # init_count = sum(
+        #     p.numel() for p in self._initializer.parameters() if p.requires_grad
+        # )
+        predictor_count = sum(
+            p.numel() for p in self._predictor.parameters() if p.requires_grad
+        )
+        # return init_count + predictor_count
+        return predictor_count
+
+    def validate(
+        self,
+        sequence_length: int,
+        horizon_size: Optional[int] = None,
+    ) -> np.float64:
+        if isinstance(self.initial_state_names, List):
+            initial_state_names = self.initial_state_names
+
+        self._predictor.eval()
+        if horizon_size is None:
+            horizon_size = sequence_length * 5
+
+        (
+            u_init_list,
+            y_init_list,
+            x0_init_list,
+            x0_list,
+            u_list,
+            y_list,
+        ) = get_split_validation_data(
+            self.control_names,
+            self.state_names,
+            initial_state_names,
+            self.initial_window_size,
+            horizon_size,
+        )
+
+        us_init = np.stack(u_init_list)
+        us = np.stack(u_list)
+        ys = np.stack(y_list)
+
+        us_init_torch = torch.from_numpy(us_init).to(self.device).double()
+        ys_torch = torch.from_numpy(ys).to(self.device).double()
+        us_torch = torch.from_numpy(us).to(self.device).double()
+
+
+        e = self.nx - x0_list[0].shape[0]
+        if e > 0:
+            x0_list = [np.concatenate((x0, np.zeros(shape=(e,)))) for x0 in x0_list]
+            x0_init_list = [
+                np.concatenate((x0_init, np.zeros(shape=(e,))))
+                for x0_init in x0_init_list
+            ]
+        x0_torch = torch.from_numpy(np.stack(x0_list)).to(self.device).double()
+        x0_init_torch = torch.from_numpy(np.stack(x0_init_list)).to(self.device).double()
+
+        with torch.no_grad():
+
+            _, (_, x_rnns) = self._predictor.forward(
+                us_init_torch,
+                hx=(
+                    x0_init_torch, 
+                    torch.zeros_like(x0_init_torch).to(self.device)
+                ),
+            )
+            ys_hat_torch, _ = self.predictor(
+                us_torch,
+                hx=(
+                    x0_torch,
+                    x_rnns,
+                ),
+            )
+        # return validation error normalized over all states
+        return np.float64(
+            self.loss.forward(ys_torch, ys_hat_torch).cpu().detach().numpy()
+        )
+
+    @property
+    def predictor(self) -> HiddenStateForwardModule:
+        # this should only return a copy of the model,
+        # however deepcopy does not support non leaf nodes,
+        # which the parameters of the lure system are.
+        return self._predictor
+
+
+
+   
 
 def get_split_validation_data(
     control_names: List[str],
