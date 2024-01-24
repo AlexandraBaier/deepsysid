@@ -4524,7 +4524,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         X_cal = torch.concat(
             [
                 torch.concat([X,U],dim=1),
-                torch.concat([U,-V@torch.linalg.inv(Y)@U],dim=1)
+                torch.concat([U,-torch.linalg.inv(V)@Y@U],dim=1)
             ]
         )
 
@@ -4728,6 +4728,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         A_lin = self.A_lin
         B_lin = self.B_lin
         C_lin = self.C_lin
+        D_lin = self.D_lin
 
         if self.multiplier_type == 'diagonal':
             Lambda = torch.diag(self.lam).to(self.device)
@@ -4740,7 +4741,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
                     [
                         A_lin @ Y,
                         A_lin,
-                        torch.zeros(size=(self.nx, self.nd)).to(self.device),
+                        B_lin,
                         torch.zeros(size=(self.nx, self.nw)).to(self.device),
                     ],
                     dim=1,
@@ -4749,7 +4750,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
                     [
                         torch.zeros(size=(self.nx, self.nx)).to(self.device),
                         X @ A_lin,
-                        torch.zeros(size=(self.nx, self.nd)).to(self.device),
+                        X @ B_lin,
                         torch.zeros(size=(self.nx, self.nw)).to(self.device),
                     ],
                     dim=1,
@@ -4758,7 +4759,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
                     [
                         C_lin @ Y,
                         C_lin,
-                        torch.zeros(size=(self.ne, self.nd)).to(self.device),
+                        D_lin,
                         torch.zeros(size=(self.ne, self.nw)).to(self.device),
                     ],
                     dim=1,
@@ -4807,7 +4808,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
                 torch.concat([torch.eye(self.nx), X], dim=1),
         ], dim=0)
 
-        P_11 = torch.concat(
+        M_11 = torch.concat(
             [
                 torch.concat(
                     [
@@ -4827,32 +4828,32 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             ], dim=0
         )
 
-        P_21 = torch.concat(
+        M_21 = torch.concat(
             [
                 torch.concat([A_bf, B1_bf, B2_bf], dim=1),
                 torch.concat([C1_bf, D11_bf, D12_bf], dim=1),
             ], dim=0
         )
 
-        P_22 = torch.concat(
+        M_22 = torch.concat(
             [
                 torch.concat([-X_bf, torch.zeros(size=(nxi, self.ne))],dim=1),
                 torch.concat([torch.zeros(size=(self.ne, nxi)), -torch.eye(self.ne)],dim=1)
             ], dim=0
         )
-        P = torch.concat(
+        M = torch.concat(
             [
-                torch.concat([P_11, P_21.T], dim=1), 
-                torch.concat([P_21, P_22], dim=1)
+                torch.concat([M_11, M_21.T], dim=1), 
+                torch.concat([M_21, M_22], dim=1)
             ],dim=0,
         ).to(self.device)
 
         if self.multiplier_type == 'diagonal':
             # https://yalmip.github.io/faq/semidefiniteelementwise/
             # symmetrize variable
-            return 0.5 * (P + P.T)
+            return 0.5 * (M + M.T)
         else:
-            return P
+            return M
 
     def project_parameters(self, write_parameter: bool = True) -> np.float64:
         if self.check_constraints():
