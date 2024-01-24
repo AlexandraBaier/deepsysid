@@ -4306,7 +4306,15 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
 
         self.gamma = gamma
 
-        self.Lam = torch.nn.Parameter(torch.eye(self.nz).double().to(device))
+        if self.multiplier_type == 'diagonal':
+            self.lam = torch.nn.Parameter(
+                torch.ones(size=(self.nz,)).double().to(device)
+            )
+        elif self.multiplier_type == 'static_zf':
+            self.lam = torch.nn.Parameter(torch.eye(self.nz).double().to(device))
+        else:
+            raise ValueError(f'Multiplier type {self.multiplier_type} not supported.')
+
             
         if self.init_omega == 'zero':
             self.Omega_tilde = torch.nn.Parameter(
@@ -4434,7 +4442,10 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
 
     def set_lure_system(self) -> Tuple[SimAbcdParameter, NDArray[np.float64]]:
         device = self.device
-        Lambda = self.Lam
+        if self.multiplier_type == 'diagonal':
+            Lambda = torch.diag(self.lam).to(self.device)
+        elif self.multiplier_type == 'static_zf':
+            Lambda = self.lam.to(self.device)
 
         L = torch.concat(
             [
@@ -4662,20 +4673,20 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
 
         multiplier_constraints = []
         if self.multiplier_type == 'diagonal':
-            multiplier_constraints.append(self.Lam)
+            multiplier_constraints.append(torch.diag(torch.squeeze(self.lam)))
         elif self.multiplier_type == 'static_zf':
             multiplier_constraints.extend(
                 list(
                     torch.squeeze(
                         torch.ones(size=(self.nw, 1)).double().to(self.device).T
-                        @ self.Lam
+                        @ self.lam
                     )
                 )
             ),
             multiplier_constraints.extend(
                 list(
                     torch.squeeze(
-                        self.Lam
+                        self.lam
                         @ torch.ones(size=(self.nw, 1)).double().to(self.device)
                     )
                 )
@@ -4683,7 +4694,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             for col_idx in range(self.nw):
                 for row_idx in range(self.nw):
                     if not (row_idx == col_idx):
-                        multiplier_constraints.append(-self.Lam[col_idx, row_idx])
+                        multiplier_constraints.append(-self.lam[col_idx, row_idx])
 
         constraints = [
             -self.get_constraints(),
@@ -4718,7 +4729,10 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         B_lin = self.B_lin
         C_lin = self.C_lin
 
-        Lambda = self.Lam
+        if self.multiplier_type == 'diagonal':
+            Lambda = torch.diag(self.lam).to(self.device)
+        elif self.multiplier_type == 'static_zf':
+            Lambda = self.lam.to(self.device)
 
         P_21_1 = torch.concat(
             [
@@ -5086,7 +5100,12 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             .to(device)
         )
 
-        self.Lam.data = torch.tensor(Lambda.value).double().to(device)
+        if self.multiplier_type == 'diagonal':
+            self.lam.data = (
+                torch.tensor(np.diag(np.array(Lambda.value))).double().to(device)
+            )
+        elif self.multiplier_type == 'static_zf':
+            self.lam.data = torch.tensor(Lambda.value).double().to(device)
         self.Omega_tilde.data = torch.tensor(Omega_tilde.value).double().to(device)
 
         return np.float64(d.value)
