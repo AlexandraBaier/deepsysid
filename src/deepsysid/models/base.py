@@ -291,6 +291,10 @@ def track_model_parameters(
     tracker(
         TrackParameters(
             'track model parameters',
-            {**model_parameters, 'model name': model.__class__.__name__},
+            {
+                **model_parameters,
+                'model name': model.__class__.__name__,
+                'number_of_parameters': model.get_parameter_count()
+            },
         )
     )
