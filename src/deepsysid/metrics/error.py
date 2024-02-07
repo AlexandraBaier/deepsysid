@@ -71,6 +71,6 @@ class NormalizedRootMeanSquaredErrorMetric(BaseMetric):
         std = np.std(y_true_np, axis=0)
 
         mse_per_var = np.mean((y_true_np - y_pred_np) ** 2, axis=0)
-        nrmse_per_var = np.sqrt(1.0 / std * mse_per_var)
+        nrmse_per_var = 1.0 / std * np.sqrt(mse_per_var)
         nrmse = np.mean(nrmse_per_var)
         return nrmse_per_var, dict(nrmse=nrmse, mse_per_var=mse_per_var, std=std)
