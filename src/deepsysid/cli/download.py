@@ -50,6 +50,13 @@ INDUSTRIAL_ROBOT_DOWNLOAD_URL = (
 )
 INDUSTRIAL_ROBOT_SAMPLING_TIME = 0.1
 
+F16_BENCHMARK_DOWNLOAD_URL = (
+    'https://data.4tu.nl/file/b6dc643b-ecc6-437c-8a8a-1681650ec3fe/'
+    '5414dfdc-6e8d-4208-be6e-fa553de9866f'
+)
+F16_INPUTS = ['Force']
+F16_OUTPUTS = ['Acceleration1', 'Acceleration2', 'Acceleration3']
+
 logger = logging.getLogger(__name__)
 
 
@@ -319,3 +326,92 @@ def download_dataset_industrial_robot(
         )
         df.to_csv(processed_path, index=False)
     logger.info('Finished Industrial Robot dataset download and preparation.')
+
+def download_dataset_f16_aircraft(target_directory: str, validation_fraction:float) -> None:
+    if validation_fraction < 0.0:
+        raise ValueError('Validation fraction cannot be smaller than 0.')
+    if validation_fraction > 1.0:
+        raise ValueError('Validation fraction cannot be larger than 1.')
+
+    logger.info(
+        f'Downloading F16 GVT Benchmark dataset from "{F16_BENCHMARK_DOWNLOAD_URL}". '
+        'This will take some time.'
+    )
+
+    target_directory = os.path.expanduser(target_directory)
+    raw_directory = os.path.join(target_directory, 'raw')
+    processed_directory = os.path.join(target_directory, 'processed')
+    os.makedirs(raw_directory, exist_ok=True)
+    os.makedirs(processed_directory, exist_ok=True)
+    os.makedirs(os.path.join(processed_directory, 'train'), exist_ok=True)
+    os.makedirs(os.path.join(processed_directory, 'validation'), exist_ok=True)
+    os.makedirs(os.path.join(processed_directory, 'test'), exist_ok=True)
+
+    # https://stackoverflow.com/a/53101953
+    zip_path = os.path.join(raw_directory, 'F16-Ground-Vibration-Test.zip')
+    response = requests.get(F16_BENCHMARK_DOWNLOAD_URL, stream=True) 
+    with open(zip_path, mode='wb') as f:
+        for chunk in response.iter_content(chunk_size=1024):
+            if chunk:
+                f.write(chunk)
+
+    base_path = os.path.join('F16GVT_Files', 'BenchmarkData')
+    base_name = 'F16Data'
+    excitation_type = 'FullMSine'
+    training_levels = ['1','3','5','7']
+    test_levels = ['2','4','6']
+    training_file_names = [f'{base_name}_{excitation_type}_Level{level}.csv' for level in training_levels]
+    test_file_names = [f'{base_name}_{excitation_type}_Level{level}_Validation.csv' for level in test_levels]
+    with zipfile.ZipFile(zip_path) as f:
+        for file_name in training_file_names + test_file_names:
+            with f.open(os.path.join(base_path, file_name), mode='r') as csv_from_zip:
+                with open(os.path.join(raw_directory, file_name), mode='wb') as target_csv:
+                    target_csv.write(csv_from_zip.read())
+
+    logger.info('Successfully finished download.')
+    test_file_paths = [os.path.join(raw_directory, file_name) for file_name in test_file_names]
+
+    input_dim = len(F16_INPUTS)
+    output_dim = len(F16_OUTPUTS)
+    for idx, test_file in enumerate(test_file_paths):
+        processed_path = os.path.join(processed_directory, 'test',f'F16-Ground-Vibration-Test_test-{idx}.csv')
+        df = pd.read_csv(test_file)
+        N = df.shape[0]
+        time_test = np.linspace(0,(N-1)*1/df['Fs'][0], N).reshape(N,1)
+        u_test = np.array(df[F16_INPUTS]).reshape(N,input_dim)
+        y_test = np.array(df[F16_OUTPUTS]).reshape(N,output_dim)
+        tuy_test = np.hstack((time_test, u_test, y_test))
+        df_out = pd.DataFrame(
+            data=tuy_test,
+            columns=['time']+['F'] + [f'a{i}' for i in range(output_dim)]
+        )
+        df_out.to_csv(processed_path, index=False)
+
+    for idx, train_file in enumerate([os.path.join(raw_directory, file_name) for file_name in training_file_names]):
+        df = pd.read_csv(train_file)
+
+        N_train_val = df.shape[0]
+        u_train_val = np.array(df[F16_INPUTS]).reshape(N_train_val, input_dim)
+        y_train_val = np.array(df[F16_OUTPUTS]).reshape(N_train_val, output_dim)
+
+        N_train = int(N_train_val * (1.0 - validation_fraction))
+        t_train = np.linspace(0,(N_train-1)*1/df['Fs'][0], N_train).reshape(N_train,1)
+        u_train = u_train_val[:N_train, :]
+        y_train = y_train_val[:N_train, :]
+        tuy_train = np.hstack((t_train, u_train, y_train))
+
+        N_val = N_train_val - N_train
+        t_val = np.linspace(0,(N_val-1)*1/df['Fs'][0], N_val).reshape(N_val,1)
+        u_val = u_train_val[N_train:, :]
+        y_val = y_train_val[N_train:, :]
+        tuy_val = np.hstack((t_val, u_val, y_val))
+
+        for dataset, mode in ((tuy_train, 'train'), (tuy_val,'validation')):
+            processed_path = os.path.join(processed_directory, mode,f'F16-Ground-Vibration-Test_{mode}-{idx}.csv')
+
+            df_out = pd.DataFrame(
+                data=dataset,
+                columns=['time']+['F'] + [f'a{i}' for i in range(output_dim)]
+            )
+            df_out.to_csv(processed_path, index=False)
+    logger.info('Finished F16 Ground Vibration Test dataset download and preparation.')

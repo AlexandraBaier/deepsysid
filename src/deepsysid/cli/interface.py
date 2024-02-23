@@ -24,6 +24,7 @@ from .download import (
     download_dataset_industrial_robot,
     download_dataset_pelican_quadcopter,
     download_dataset_toy,
+    download_dataset_f16_aircraft
 )
 
 CONFIGURATION_ENV_VAR = 'CONFIGURATION'
@@ -201,6 +202,24 @@ class DeepSysIdCommandLineInterface:
         )
         self.download_industrial_robot_parser.set_defaults(
             func=download_industrial_robot
+        )
+
+        self.download_f16gvt_parser = self.download_subparsers.add_parser(
+            'f16-gvt',
+            help='Downloads https://data.4tu.nl/articles/_/12954911.',
+        )
+        self.download_f16gvt_parser.add_argument(
+            'target', help='Target directory for dataset.'
+        )
+        self.download_f16gvt_parser.add_argument(
+            '--validation_fraction',
+            required=True,
+            action='store',
+            type=float,
+            help='Fraction of dataset used for validation.',
+        )
+        self.download_f16gvt_parser.set_defaults(
+            func=download_f16_aircraft
         )
 
     def run(self) -> None:
@@ -431,6 +450,14 @@ def download_industrial_robot(args: argparse.Namespace) -> None:
     setup_root_logger()
 
     download_dataset_industrial_robot(directory, validation_fraction)
+
+def download_f16_aircraft(args: argparse.Namespace) -> None:
+    directory = args.target
+    validation_fraction = args.validation_fraction
+
+    setup_root_logger()
+
+    download_dataset_f16_aircraft(directory, validation_fraction)
 
 
 def add_parser_arguments(

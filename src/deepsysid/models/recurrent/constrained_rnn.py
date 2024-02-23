@@ -2810,6 +2810,7 @@ class InputConstrainedRnnConfig2(DynamicIdentificationModelConfig):
     decay_rate_lr: Optional[int] = 4
     epochs_with_const_decay: Optional[int] = 10
     initial_window_size: Optional[int] = 100
+    normalization: Optional[bool] = False
     optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
     init_omega: Literal['zero','rand'] = 'zero'
     constraint_type: Literal['convex', 'non-convex'] = 'convex'
@@ -2838,6 +2839,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         self.constraint_type = config.constraint_type
         self.init_omega = config.init_omega
         self.multiplier_type = config.multiplier_type
+        self.normalization = config.normalization
         
         self.nwu = config.nwu
         self.nzu = self.nwu
@@ -3006,11 +3008,35 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         initial_seqs: Optional[List[NDArray[np.float64]]] = None,
         tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
-        us = control_seqs
-        ys = state_seqs
+        N, nx0 = initial_seqs[0].shape
+        if not nx0 == self.nx:
+            initial_seqs = [np.zeros((N,self.nx-self.e))]
+
         self._predictor.train()
         self._predictor.to(self.device)
         step = 0
+
+        if self.normalization:
+            self._control_mean, self._control_std = utils.mean_stddev(control_seqs)
+            self._state_mean, self._state_std = utils.mean_stddev(state_seqs)
+
+            us = [
+                utils.normalize(control, self._control_mean, self._control_std)
+                for control in control_seqs
+            ]
+            ys = [
+                utils.normalize(state, self._state_mean, self._state_std)
+                for state in state_seqs
+            ]
+            # initial_seqs = [
+            #     utils.normalize(x0, self._state_mean, self._state_std)
+            #     for x0 in initial_seqs
+            # ]
+        else:
+            us = control_seqs
+            ys = state_seqs
+            self._control_mean = np.zeros(shape=(self.nd,1))
+            self._state_mean = np.zeros(shape=(self.nx,1))
 
         if isinstance(initial_seqs, List):
             x0s: List[NDArray[np.float64]] = initial_seqs
@@ -3030,23 +3056,20 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         no_decrease_count: int = 0
         old_validation_loss = np.float64(0.0)
+        predictor_dataset = RecurrentPredictorInitializerInitialDataset(
+            us,
+            ys,
+            x0s,
+            self.sequence_length,
+            self._state_mean,
+            self._control_mean,
+            self.initial_window_size,
+        )
+        data_loader = data.DataLoader(
+            predictor_dataset, self.batch_size, shuffle=True, drop_last=True
+        )
         for i in range(self.epochs_predictor):
-            predictor_dataset = RecurrentPredictorInitializerInitialDataset(
-                us,
-                ys,
-                x0s,
-                self.sequence_length,
-                np.zeros(shape=(self.nx,1)),
-                np.zeros(shape=(self.nd,1)),
-                self.initial_window_size,
-            )
-            
 
-            # for debugging
-            # torch.autograd.set_detect_anomaly(True)
-            data_loader = data.DataLoader(
-                predictor_dataset, self.batch_size, shuffle=True, drop_last=True
-            )
             total_loss: torch.Tensor = torch.tensor(0.0).to(self.device)
             max_grad: List[np.float64] = list()
             backtracking_iter: List[int] = list()
@@ -3083,6 +3106,8 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                         hx=(
                             x0,
                             x_rnns,
+                            # torch.zeros_like(x0),
+                            # torch.zeros_like(x0)
                         ),
                     )
 
@@ -3095,6 +3120,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                             torch.tensor(t, device=self.device)
                         )
                     (batch_loss + barrier).backward()
+                    # batch_loss.backward()
 
                     if self.clip_gradient_norm is not None:
                         torch.nn.utils.clip_grad_norm_(
@@ -3195,6 +3221,9 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                         )
                     bls_iter += 1
                 backtracking_iter.append(bls_iter)
+
+            # if step % 5 == 0:
+            #     self._predictor.project_parameters()
 
             validation_loss = np.float64(0.0)
             # skip validation for testing
@@ -3338,6 +3367,10 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         x0: Optional[NDArray[np.float64]] = None,
         initial_x0: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
+        nx0 = initial_x0.shape
+        if not nx0 == self.nx:
+            initial_x0 = np.zeros((self.nx-self.e,))
+            x0 = np.zeros((self.nx-self.e,))
 
         self._predictor.eval()
         self._predictor.set_lure_system()
@@ -3345,7 +3378,13 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         N, nu = control.shape
         N_init, _ = initial_control.shape
 
-        u = control
+        if self.normalization:
+            initial_control = utils.normalize(initial_control, self._control_mean, self._control_std)
+            u = utils.normalize(control, self._control_mean, self._control_std)
+            x0 = utils.normalize(x0, self._state_mean, self._state_std)
+        else:
+            u = control
+
         u_init = initial_control[:, : self.nd].reshape(N_init, -1)
         with torch.no_grad():
             u_init_torch = torch.from_numpy(u_init).unsqueeze(0).double().to(self.device)
@@ -3395,6 +3434,10 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                 y.cpu().detach().numpy().reshape((N, self.ne)).astype(np.float64)
             )
 
+        if self.normalization:
+            y_np = utils.denormalize(y_np, self._state_mean, self._state_std).reshape(
+                (N, self.ne)
+            )
         return y_np
 
     def save(
@@ -3427,17 +3470,29 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                 },
             )
         )
+        if self.normalization:
+            with open(file_path[2], mode='w') as f:
+                json.dump(
+                    {
+                        'state_mean': self._state_mean.tolist(),
+                        'state_std': self._state_std.tolist(),
+                        'control_mean': self._control_mean.tolist(),
+                        'control_std': self._control_std.tolist(),
+                    },
+                    f,
+                )
 
     def load(self, file_path: Tuple[str, ...]) -> None:
         self._predictor.load_state_dict(
             torch.load(file_path[1], map_location=self.device_name)
         )
-        # with open(file_path[2], mode='r') as f:
-        #     norm = json.load(f)
-        # self._state_mean = np.array(norm['state_mean'], dtype=np.float64)
-        # self._state_std = np.array(norm['state_std'], dtype=np.float64)
-        # self._control_mean = np.array(norm['control_mean'], dtype=np.float64)
-        # self._control_std = np.array(norm['control_std'], dtype=np.float64)
+        if self.normalization:
+            with open(file_path[2], mode='r') as f:
+                norm = json.load(f)
+            self._state_mean = np.array(norm['state_mean'], dtype=np.float64)
+            self._state_std = np.array(norm['state_std'], dtype=np.float64)
+            self._control_mean = np.array(norm['control_mean'], dtype=np.float64)
+            self._control_std = np.array(norm['control_std'], dtype=np.float64)
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return (
@@ -3485,9 +3540,18 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             horizon_size,
         )
 
-        us_init = np.stack(u_init_list)
-        us = np.stack(u_list)
-        ys = np.stack(y_list)
+        if self.normalization:
+            us = utils.normalize(np.stack(u_list), self._control_mean, self._control_std)
+            ys = utils.normalize(np.stack(y_list), self._state_mean, self._state_std)
+            us_init = utils.normalize(
+                np.stack(u_init_list), self._control_mean, self._control_std
+            )
+            x0_init_list = utils.normalize(np.stack(x0_init_list), self._state_mean, self._state_std)
+            x0_list = utils.normalize(np.stack(x0_list), self._state_mean, self._state_std)
+        else:
+            us_init = np.stack(u_init_list)
+            us = np.stack(u_list)
+            ys = np.stack(y_list)
 
         us_init_torch = torch.from_numpy(us_init).to(self.device).double()
         ys_torch = torch.from_numpy(ys).to(self.device).double()

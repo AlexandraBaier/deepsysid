@@ -5023,28 +5023,34 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         device = self.Omega_tilde.device
 
         Omega_tilde_0 = self.Omega_tilde.cpu().detach().numpy()
+        # X_0, Y_0, U_0, V_0 = utils.get_coupling_matrices(self.L_x_flat,self.L_y_flat, self.nx)
+        # Omega_tilde_0[:self.nx, self.nx : self.nx+self.nx] = X_0.detach().numpy()@self.A_lin.detach().numpy()@Y_0.detach().numpy()
+        eps = 1e-3
 
         feasibility_constraint = [
-            P << -1e-3 * np.eye(nP),
+            P << -eps * np.eye(nP),
             cp.bmat([[Y, np.eye(self.nx)], [np.eye(self.nx), X]])
-            >> 1e-3 * np.eye(self.nx * 2),
+            >> eps * np.eye(self.nx * 2),
             *multiplier_constraints,
         ]
 
         d = cp.Variable(shape=(1,))
-
         problem = cp.Problem(
             cp.Minimize(d),
-            feasibility_constraint + utils.get_distance_constraints(Omega_tilde_0, Omega_tilde, d),
+            feasibility_constraint + utils.get_distance_constraints(Omega_tilde_0, Omega_tilde, d)
         )
-        problem.solve(solver=self.optimizer)
-        d_fixed = np.float64(d.value + 1)
+        # problem = cp.Problem(
+        #     cp.Minimize(None),
+        #     feasibility_constraint
+        # )
+        problem.solve(solver=self.optimizer, verbose=False)
 
         logger.info(
             f'1. run: projection. '
             f'problem status {problem.status},'
             f'||Omega - Omega_0|| = {d.value}'
         )
+        d_fixed = np.float64(d.value + 100)
 
         alpha = cp.Variable(shape=(1,))
         problem = cp.Problem(
@@ -5060,7 +5066,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             f'alpha_star = {alpha.value}'
         )
 
-        alpha_fixed = np.float64(alpha.value + 1)
+        alpha_fixed = np.float64(alpha.value + 10)
 
         beta = cp.Variable(shape=(1,))
         problem = cp.Problem(
