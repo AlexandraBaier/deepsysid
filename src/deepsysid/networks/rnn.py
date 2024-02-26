@@ -5050,7 +5050,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             f'problem status {problem.status},'
             f'||Omega - Omega_0|| = {d.value}'
         )
-        d_fixed = np.float64(d.value + 100)
+        d_fixed = np.float64(d.value + 1000)
 
         alpha = cp.Variable(shape=(1,))
         problem = cp.Problem(

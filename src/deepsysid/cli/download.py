@@ -340,12 +340,17 @@ def download_dataset_f16_aircraft(target_directory: str, validation_fraction:flo
 
     target_directory = os.path.expanduser(target_directory)
     raw_directory = os.path.join(target_directory, 'raw')
-    processed_directory = os.path.join(target_directory, 'processed')
+    routine_directory = os.path.join(target_directory, 'f16-gvt-routine')
+    ood_directory = os.path.join(target_directory, 'f16-gvt-ood')
+    processed_id_directory = os.path.join(routine_directory, 'processed')
+    processed_ood_directory = os.path.join(ood_directory, 'processed')
     os.makedirs(raw_directory, exist_ok=True)
-    os.makedirs(processed_directory, exist_ok=True)
-    os.makedirs(os.path.join(processed_directory, 'train'), exist_ok=True)
-    os.makedirs(os.path.join(processed_directory, 'validation'), exist_ok=True)
-    os.makedirs(os.path.join(processed_directory, 'test'), exist_ok=True)
+    os.makedirs(processed_id_directory, exist_ok=True)
+    os.makedirs(processed_ood_directory, exist_ok=True)
+    os.makedirs(os.path.join(processed_id_directory, 'train'), exist_ok=True)
+    os.makedirs(os.path.join(processed_id_directory, 'validation'), exist_ok=True)
+    os.makedirs(os.path.join(processed_id_directory, 'test'), exist_ok=True)
+    os.makedirs(os.path.join(processed_ood_directory, 'test'), exist_ok=True)
 
     # https://stackoverflow.com/a/53101953
     zip_path = os.path.join(raw_directory, 'F16-Ground-Vibration-Test.zip')
@@ -358,12 +363,15 @@ def download_dataset_f16_aircraft(target_directory: str, validation_fraction:flo
     base_path = os.path.join('F16GVT_Files', 'BenchmarkData')
     base_name = 'F16Data'
     excitation_type = 'FullMSine'
-    training_levels = ['1','3','5','7']
+    training_levels = ['1','3','5']
+    ood_levels = ['7']
     test_levels = ['2','4','6']
     training_file_names = [f'{base_name}_{excitation_type}_Level{level}.csv' for level in training_levels]
+    ood_file_names = [f'{base_name}_{excitation_type}_Level{level}.csv' for level in ood_levels]
     test_file_names = [f'{base_name}_{excitation_type}_Level{level}_Validation.csv' for level in test_levels]
+    # Extract compressed files individually
     with zipfile.ZipFile(zip_path) as f:
-        for file_name in training_file_names + test_file_names:
+        for file_name in training_file_names + test_file_names + ood_file_names:
             with f.open(os.path.join(base_path, file_name), mode='r') as csv_from_zip:
                 with open(os.path.join(raw_directory, file_name), mode='wb') as target_csv:
                     target_csv.write(csv_from_zip.read())
@@ -373,8 +381,9 @@ def download_dataset_f16_aircraft(target_directory: str, validation_fraction:flo
 
     input_dim = len(F16_INPUTS)
     output_dim = len(F16_OUTPUTS)
+    # Test data
     for idx, test_file in enumerate(test_file_paths):
-        processed_path = os.path.join(processed_directory, 'test',f'F16-Ground-Vibration-Test_test-{idx}.csv')
+        processed_path = os.path.join(processed_id_directory, 'test',f'F16-Ground-Vibration-Test_test-{idx}.csv')
         df = pd.read_csv(test_file)
         N = df.shape[0]
         time_test = np.linspace(0,(N-1)*1/df['Fs'][0], N).reshape(N,1)
@@ -386,7 +395,23 @@ def download_dataset_f16_aircraft(target_directory: str, validation_fraction:flo
             columns=['time']+['F'] + [f'a{i}' for i in range(output_dim)]
         )
         df_out.to_csv(processed_path, index=False)
+    
+    # Out-of-distribution data
+    for idx, ood_file in enumerate([os.path.join(raw_directory, file_name) for file_name in ood_file_names]):
+        processed_path = os.path.join(processed_ood_directory, 'test',f'F16-Ground-Vibration-Test_test-{idx}.csv')
+        df = pd.read_csv(ood_file)
+        N = df.shape[0]
+        time_test = np.linspace(0,(N-1)*1/df['Fs'][0], N).reshape(N,1)
+        u_test = np.array(df[F16_INPUTS]).reshape(N,input_dim)
+        y_test = np.array(df[F16_OUTPUTS]).reshape(N,output_dim)
+        tuy_test = np.hstack((time_test, u_test, y_test))
+        df_out = pd.DataFrame(
+            data=tuy_test,
+            columns=['time']+['F'] + [f'a{i}' for i in range(output_dim)]
+        )
+        df_out.to_csv(processed_path, index=False)
 
+    # Validation and Training data
     for idx, train_file in enumerate([os.path.join(raw_directory, file_name) for file_name in training_file_names]):
         df = pd.read_csv(train_file)
 
@@ -407,7 +432,7 @@ def download_dataset_f16_aircraft(target_directory: str, validation_fraction:flo
         tuy_val = np.hstack((t_val, u_val, y_val))
 
         for dataset, mode in ((tuy_train, 'train'), (tuy_val,'validation')):
-            processed_path = os.path.join(processed_directory, mode,f'F16-Ground-Vibration-Test_{mode}-{idx}.csv')
+            processed_path = os.path.join(processed_id_directory, mode,f'F16-Ground-Vibration-Test_{mode}-{idx}.csv')
 
             df_out = pd.DataFrame(
                 data=dataset,
