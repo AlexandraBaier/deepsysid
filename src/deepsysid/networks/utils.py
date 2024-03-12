@@ -78,19 +78,19 @@ def extract_vector_from_lower_triangular_matrix(
     return np.hstack(vector_list)
 
 def get_coupling_matrices(
-        L_x_flat:torch.Tensor,
-        L_y_flat:torch.Tensor,
-        nx:int
+        X:torch.Tensor,
+        Y:torch.Tensor
+        # nx:int
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        L_x = construct_lower_triangular_matrix(
-            L_flat=L_x_flat, diag_length=nx
-        )
-        L_y = construct_lower_triangular_matrix(
-            L_flat=L_y_flat, diag_length=nx
-        )
+        # L_x = construct_lower_triangular_matrix(
+        #     L_flat=L_x_flat, diag_length=nx
+        # )
+        # L_y = construct_lower_triangular_matrix(
+        #     L_flat=L_y_flat, diag_length=nx
+        # )
 
-        X = L_x @ L_x.T
-        Y = L_y @ L_y.T
+        # X = L_x @ L_x.T
+        # Y = L_y @ L_y.T
 
         # 2. Determine non-singular U,V with V U^T = I - Y X
         U = torch.linalg.inv(Y) - X
@@ -154,6 +154,12 @@ def get_logdet(mat: torch.Tensor) -> torch.Tensor:
         logdet = (mat.logdet())
 
     return logdet
+
+def bmat(mat: List[List[NDArray[np.float64]]]) -> NDArray[np.float64]:
+    mat_list = []
+    for col in mat:
+        mat_list.append(np.hstack(col))
+    return np.vstack(mat_list)
 
 
 

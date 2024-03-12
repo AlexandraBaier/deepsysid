@@ -107,6 +107,58 @@ class RecurrentInitializerDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
 
     def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
         return {'x': self.x[idx], 'y': self.y[idx]}
+    
+class RecurrentInitializerDataset2(data.Dataset[Dict[str, NDArray[np.float64]]]):
+    def __init__(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        sequence_length: int,
+        window_size: Optional[int] = None,
+    ):
+        self.sequence_length = sequence_length
+        self.control_dim = control_seqs[0].shape[1]
+        self.state_dim = state_seqs[0].shape[1]
+        if window_size is None:
+            self.window_size = self.sequence_length
+        else:
+            self.window_size = window_size
+        self.x, self.y = self.__load_data(control_seqs, state_seqs)
+
+    def __load_data(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+        x_seq = list()
+        y_seq = list()
+        for control, state in zip(control_seqs, state_seqs):
+            n_samples = int((control.shape[0] - self.window_size) / self.window_size)
+
+            x = np.zeros(
+                (n_samples, self.window_size, self.control_dim),
+                dtype=np.float64,
+            )
+            y = np.zeros(
+                (n_samples, self.window_size, self.state_dim), dtype=np.float64
+            )
+
+            for idx in range(n_samples):
+                time = idx * self.window_size
+
+                x[idx, :, :] = control[time + 1 : time + 1 + self.window_size, :]
+                y[idx, :, :] = state[time + 1 : time + 1 + self.window_size, :]
+
+            x_seq.append(x)
+            y_seq.append(y)
+
+        return np.vstack(x_seq), np.vstack(y_seq)
+
+    def __len__(self) -> int:
+        return self.x.shape[0]
+
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
+        return {'x': self.x[idx], 'y': self.y[idx]}
 
 
 class RecurrentPredictorDataset(data.Dataset[Dict[str, NDArray[np.float64]]]):
@@ -286,7 +338,7 @@ class RecurrentPredictorInitializerInitialDataset(
                 (n_samples, self.window_size, self.initial_state_dim),
                 dtype=np.float64,
             )
-            zp_init = np.zeros((n_samples, self.state_dim), dtype=np.float64)
+            zp_init = np.zeros((n_samples, self.window_size, self.state_dim), dtype=np.float64)
             wp = np.zeros(
                 (n_samples, self.sequence_length, self.control_dim_pred),
                 dtype=np.float64,
@@ -389,6 +441,111 @@ class RecurrentPredictorInitializerInitialDataset(
             'zp': self.zp[idx],
             'x0': self.x0[idx],
         }
+
+
+class RecurrentPredictorInitializerInitialDataset2(
+    data.Dataset[Dict[str, NDArray[np.float64]]]
+):
+    def __init__(
+        self,
+        control_seqs: List[NDArray[np.float64]],
+        state_seqs: List[NDArray[np.float64]],
+        initial_state_seqs: List[NDArray[np.float64]],
+        horizon: int,
+        window: int,
+    ):
+        self.h = horizon
+        self.w = window
+        self.nd = control_seqs[0].shape[1]
+        self.ne = state_seqs[0].shape[1]
+        self.nx = initial_state_seqs[0].shape[1]
+        
+        (
+            self.d_init,
+            self.e_init,
+            self.x0_init,
+            self.d,
+            self.e,
+            self.x0,
+        ) = self.__load_data(control_seqs, state_seqs, initial_state_seqs)
+
+    def __load_data(
+        self,
+        d_seqs: List[NDArray[np.float64]],
+        e_seqs: List[NDArray[np.float64]],
+        x0_seqs: List[NDArray[np.float64]],
+    ) -> Tuple[
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+    ]:
+        d_init_seq = list()
+        e_init_seq = list()
+        x0_init_seq = list()
+        d_seq = list()
+        e_seq = list()
+        x0_seq = list()
+
+        for ds, es, x0s in zip(
+            d_seqs, e_seqs, x0_seqs
+        ):
+            n_samples = int(ds.shape[0]/(self.w+self.h+1))
+
+            d_init = np.zeros((n_samples, self.w, self.nd), dtype=np.float64)
+            e_init = np.zeros((n_samples, self.w, self.ne), dtype=np.float64)
+            x0_init = np.zeros((n_samples, self.nx), dtype=np.float64)
+
+            d = np.zeros((n_samples, self.h, self.nd), dtype=np.float64)
+            e = np.zeros((n_samples, self.h, self.ne), dtype=np.float64)
+            x0 = np.zeros((n_samples, self.nx), dtype=np.float64)
+
+            for idx in range(n_samples):
+                time = idx * self.h
+
+                # inputs
+                d_init[idx, :, :self.nd] = ds[time + 1 : time + self.w + 1, :]
+                # d_init[idx, :, self.nd:] = es[time : time + self.w, :]
+                d[idx, :, :] = ds[time + self.w + 1 : time + self.h + self.w + 1, :]
+                # initial state
+                x0_init[idx, :] = x0s[time, :]
+                x0[idx, :] = x0s[time + self.w + 1, :]
+                # outputs
+                e_init[idx, :] = es[time +1 : time + self.w +1, :]
+                e[idx, :, :] = es[time + self.w + 1 : time + self.h + self.w + 1, :]
+                
+
+            d_init_seq.append(d_init)
+            e_init_seq.append(e_init)
+            x0_init_seq.append(x0_init)
+            d_seq.append(d)
+            e_seq.append(e)
+            x0_seq.append(x0)
+
+        return (
+            np.vstack(d_init_seq),
+            np.vstack(e_init_seq),
+            np.vstack(x0_init_seq),
+            np.vstack(d_seq),
+            np.vstack(e_seq),
+            np.vstack(x0_seq),
+        )
+
+    def __len__(self) -> int:
+        return self.d_init.shape[0]
+
+    def __getitem__(self, idx: int) -> Dict[str, NDArray[np.float64]]:
+        return {
+            'd_init': self.d_init[idx],
+            'e_init': self.e_init[idx],
+            'x0_init': self.x0_init[idx],
+            'd': self.d[idx],
+            'e': self.e[idx],
+            'x0': self.x0[idx],
+        }
+
 
 
 class RecurrentInitializerPredictorDataset(data.Dataset):

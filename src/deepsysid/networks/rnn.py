@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 from numpy.typing import NDArray
 from torch import nn
+from scipy.linalg import block_diag
 
 from ..models.utils import SimAbcdParameter
 from . import utils
@@ -116,6 +117,57 @@ class BasicLSTM(HiddenStateForwardModule):
 
         return x, (h0, c0)
 
+
+class BasicLSTMDoubleLinearOutput(HiddenStateForwardModule):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: int,
+        dropout: float,
+        C: torch.Tensor,
+        bias: bool = True,
+    ):
+        super().__init__()
+
+        self.num_recurrent_layers = num_recurrent_layers
+        self.recurrent_dim = recurrent_dim
+        self.C = C
+        self.ne = self.C.shape[0]
+        self.nx = output_dim
+
+        with warnings.catch_warnings():
+            self.predictor_lstm = nn.LSTM(
+                input_size=input_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+                bias=bias,
+            )
+
+        self.out = nn.Linear(
+            in_features=recurrent_dim, out_features=output_dim, bias=bias
+        )
+        nn.init.xavier_normal_(self.out.weight)
+
+        for name, param in self.predictor_lstm.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+            
+
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        n_batch, N, _ = x_pred.shape
+        x, (h0, c0) = self.predictor_lstm(x_pred, hx)
+        x = self.out(x).reshape(n_batch,N,self.nx,1)
+        y = self.C @ x
+
+        return y.reshape(n_batch,N,self.ne), (x.reshape(n_batch,N,self.nx), h0)
 
 class BasicRnn(HiddenStateForwardModule):
     def __init__(
@@ -4335,16 +4387,22 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         else:
             raise ValueError(f'Initialization method {self.init_omega} is not supported.')
 
-        L_flat_size = utils.extract_vector_from_lower_triangular_matrix(
-            torch.zeros(size=(self.nx, self.nx))
-        ).shape[0]
-        self.L_x_flat = torch.nn.Parameter(
-                torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
-            )
-        self.L_y_flat = torch.nn.Parameter(
-            torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
-        )
+        # L_flat_size = utils.extract_vector_from_lower_triangular_matrix(
+        #     torch.zeros(size=(self.nx, self.nx))
+        # ).shape[0]
+        # self.L_x_flat = torch.nn.Parameter(
+        #         torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
+        #     )
+        # self.L_y_flat = torch.nn.Parameter(
+        #     torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
+        # )
 
+        self.X = torch.nn.Parameter(
+            torch.normal(0, 1 / self.nx, size=(self.nx,self.nx)).double().to(device)
+        )
+        self.Y = torch.nn.Parameter(
+            torch.normal(0, 1 / self.nx, size=(self.nx,self.nx)).double().to(device)
+        )
 
 
         self.S_s = torch.from_numpy(
@@ -4475,9 +4533,8 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         Omega = L @ self.Omega_tilde
 
         X,Y,U,V = utils.get_coupling_matrices(
-            self.L_x_flat,
-            self.L_y_flat,
-            self.nx
+            self.X,
+            self.Y
         )
 
         T_l,T_r,T_s = self.get_T(X,Y,U,V,Lambda)
@@ -4623,6 +4680,43 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         return (T_l, T_r, T_s)
 
 
+    def initialize_parameters(self) -> None:
+        Omega_tilde, X,Y,Lambda = self.get_initial_parameters()
+        U = np.linalg.inv(Y) - X
+        V = Y
+
+        assert(np.linalg.norm(Y @ X + V @ U.T - np.eye(self.nx))< 1e-10)
+
+        self.X.data = torch.tensor(X).double().to(self.device)
+        self.Y.data = torch.tensor(Y).double().to(self.device)
+        # self.L_x_flat.data = (
+        #     torch.tensor(
+        #         utils.extract_vector_from_lower_triangular_matrix(
+        #             np.linalg.cholesky(np.array(X))
+        #         )
+        #     )
+        #     .double()
+        #     .to(self.device)
+        # )
+        # self.L_y_flat.data = (
+        #     torch.tensor(
+        #         utils.extract_vector_from_lower_triangular_matrix(
+        #             np.linalg.cholesky(np.array(Y))
+        #         )
+        #     )
+        #     .double()
+        #     .to(self.device)
+        # )
+
+        if self.multiplier_type == 'diagonal':
+            self.lam.data = (
+                torch.tensor(np.diag(np.array(Lambda))).double().to(self.device)
+            )
+        elif self.multiplier_type == 'static_zf':
+            self.lam.data = torch.tensor(Lambda).double().to(self.device)
+        self.Omega_tilde.data = torch.tensor(Omega_tilde).double().to(self.device)
+
+
     def get_initial_parameters(
         self,
     ) -> Union[
@@ -4633,8 +4727,122 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             NDArray[np.float64],
             NDArray[np.float64],
         ],
-    ]:
-        pass
+    ]:  
+        nx = self.nx
+        nu = self.nu
+        nz = self.nz
+        ny = self.ny
+        nw = self.nw
+        ne = self.ne
+        nd = self.nd
+        nxi = nx+ nx
+        theta = np.zeros((nx+nu+nz, nx+ny+nw))
+        gen_plant = self.S_s.detach().numpy() + self.S_l.detach().numpy() @ theta @ self.S_r.detach().numpy()
+
+        A_cal = gen_plant[: nxi, : nxi]
+        B_cal = gen_plant[:nxi, nxi:nxi+nd]
+        B2_cal = gen_plant[:nxi, nxi+nd:]
+
+        C_cal = gen_plant[nxi:nxi+ne, : nxi]
+        D_cal = gen_plant[nxi:nxi+ne, nxi:nxi+nd]
+        D12_cal = gen_plant[nxi:nxi+ne, nxi+nd:]
+
+        C2_cal = gen_plant[nxi+ne:, : nxi]
+        D21_cal = gen_plant[nxi+ne:, nxi:nxi+nd]
+        D22_cal = gen_plant[nxi+ne:, nxi+nd:]
+
+        L1 = utils.bmat([
+            [np.eye(nxi), np.zeros((nxi,nd+nw))],
+            [A_cal, B_cal, B2_cal],
+        ])
+        L2 = utils.bmat([
+            [np.zeros((nd,nxi)), np.eye(nd), np.zeros((nd,nw))],
+            [C_cal, D_cal, D12_cal],
+        ])
+        L3 = utils.bmat([
+            [np.zeros((nw,nxi+nd)), np.eye(nw)],
+            [C2_cal, D21_cal, D22_cal]
+        ])
+
+        X = cp.Variable((nx,nx))
+        U = cp.Variable((nx,nx))
+        X_hat = cp.Variable((nx,nx))
+        X_cal = cp.bmat([
+            [X, U],
+            [U.T, X_hat]
+        ])
+
+        multiplier_constraints = []
+        if self.multiplier_type == 'diagonal':
+            # diagonal multiplier, elements need to be positive
+            lam = cp.Variable(shape=(nz, 1))
+            for lam_el in lam:
+                multiplier_constraints.append(lam_el >= 0)
+            Lambda = cp.diag(lam)
+
+        elif self.multiplier_type == 'static_zf':
+            # static zames falb multiplier, Lambda must be double hyperdominant
+            Lambda = cp.Variable(shape=(nz, nw))
+            multiplier_constraints.extend(
+                [
+                    np.ones(shape=(nw, 1)).T @ Lambda >= 0,
+                    Lambda @ np.ones(shape=(nw, 1)) >= 0,
+                ]
+            )
+            for col_idx in range(nw):
+                for row_idx in range(nw):
+                    if not (col_idx == row_idx):
+                        multiplier_constraints.append(Lambda[col_idx, row_idx] <= 0)
+        ga = self.gamma * 1.0
+
+        M_theta = L1.T @ cp.bmat([[-X_cal, np.zeros((nxi,nxi))], [np.zeros((nxi,nxi)), X_cal]]) @ L1  \
+        + L2.T @ cp.bmat([[-ga**2 * np.eye(nd), np.zeros((nd,ne))], [np.zeros((ne,nd)), np.eye(ne)]])@L2 \
+        + L3.T @ cp.bmat([[-(Lambda + Lambda.T), self.beta*Lambda], [self.beta*Lambda.T, np.zeros((nw,nz))]]) @ L3
+
+        eps = 1e-3
+        nM = M_theta.shape[0]
+        constraints = [
+            M_theta << -eps*np.eye(nM), 
+            X_cal >> eps*np.eye(nxi),
+            *multiplier_constraints
+        ]
+        problem = cp.Problem(
+            cp.Minimize([None]),
+            constraints
+        )
+        problem.solve(solver=self.optimizer, verbose = False)
+        if not problem.status == 'optimal':
+            raise ValueError(f'Optimizer did not find a solution: {problem.status}')
+
+        logger.info(
+            f'Optimizing for |theta| = 0, status: {problem.status} \n'
+            f'Max real eig (M_theta): {max(np.real(np.linalg.eig(M_theta.value)[0]))}'
+        )
+        
+        # extract coupling matrices from optimization result and transform to Omega_tilde parameters
+        X = X.value
+        # U = U.value
+        Lambda = Lambda.value
+        Y = np.linalg.inv(X_cal.value)[:nx, :nx]
+        U = np.linalg.inv(Y) - X
+        V = Y
+
+        T_l, T_r, T_s = [T.detach().numpy() for T in self.get_T(
+            torch.tensor(X),
+            torch.tensor(Y),
+            torch.tensor(U),
+            torch.tensor(V),
+            torch.tensor(Lambda)
+        )]
+
+        Omega = T_l @ theta @ T_r + T_s
+        Omega_tilde = block_diag(np.eye(nx), np.eye(nu), Lambda) @ Omega
+
+        logger.info(
+            f'Constraints satisfied? {self.check_constraints()}'
+        )
+
+        return Omega_tilde, X, Y, Lambda
 
     def forward(
         self,
@@ -4661,15 +4869,17 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         )
 
     def get_barriers(self, t: torch.Tensor) -> torch.Tensor:
-        L_x = utils.construct_lower_triangular_matrix(
-            L_flat=self.L_x_flat, diag_length=self.nx
-        ).to(self.device)
-        L_y = utils.construct_lower_triangular_matrix(
-            L_flat=self.L_y_flat, diag_length=self.nx
-        ).to(self.device)
+        # L_x = utils.construct_lower_triangular_matrix(
+        #     L_flat=self.L_x_flat, diag_length=self.nx
+        # ).to(self.device)
+        # L_y = utils.construct_lower_triangular_matrix(
+        #     L_flat=self.L_y_flat, diag_length=self.nx
+        # ).to(self.device)
 
-        X = L_x @ L_x.T
-        Y = L_y @ L_y.T
+        # X = L_x @ L_x.T
+        # Y = L_y @ L_y.T
+        X = self.X
+        Y = self.Y
 
         multiplier_constraints = []
         if self.multiplier_type == 'diagonal':
@@ -4715,16 +4925,18 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         return barrier
 
     def get_constraints(self) -> torch.Tensor:
-        L_x = utils.construct_lower_triangular_matrix(
-            L_flat=self.L_x_flat, diag_length=self.nx
-        ).to(self.device)
-        L_y = utils.construct_lower_triangular_matrix(
-            L_flat=self.L_y_flat, diag_length=self.nx
-        ).to(self.device)
-        X = L_x @ L_x.T
-        Y = L_y @ L_y.T
-        # U = torch.linalg.inv(Y) - X
-        # V = Y
+        # L_x = utils.construct_lower_triangular_matrix(
+        #     L_flat=self.L_x_flat, diag_length=self.nx
+        # ).to(self.device)
+        # L_y = utils.construct_lower_triangular_matrix(
+        #     L_flat=self.L_y_flat, diag_length=self.nx
+        # ).to(self.device)
+        # X = L_x @ L_x.T
+        # Y = L_y @ L_y.T
+        X = self.X
+        Y = self.Y
+        U = torch.linalg.inv(Y) - X
+        V = Y
         A_lin = self.A_lin
         B_lin = self.B_lin
         C_lin = self.C_lin
@@ -4807,6 +5019,15 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
                 torch.concat([Y, torch.eye(self.nx)], dim=1),
                 torch.concat([torch.eye(self.nx), X], dim=1),
         ], dim=0)
+        # Y_cal = torch.concat([
+        #     torch.concat([Y, torch.eye(self.nx)], dim=1),
+        #     torch.concat([V.T, torch.zeros((self.nx, self.nx))], dim=1)
+        # ], dim=0)
+        # X_cal = torch.concat([
+        #     torch.concat([X, U], dim=1),
+        #     torch.concat([U.T, - U.T @ Y @ torch.linalg.inv(V).T], dim=1)
+        # ], dim=0)
+        # X_bf = Y_cal.T @ X_cal @ X_cal
 
         M_11 = torch.concat(
             [
@@ -4860,13 +5081,15 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             logger.info('No projection necessary, constraints are satisfied.')
             return np.float64(0.0)
         X = cp.Variable(shape=(self.nx, self.nx), symmetric=True)
-        Y = cp.Variable(shape=(self.nx_rnn, self.nx_rnn), symmetric=True)
+        Y = cp.Variable(shape=(self.nx_rnn, self.nx_rnn), symmetric=True)       
 
         multiplier_constraints = []
         logger.info(f'Multiplier type: {self.multiplier_type}')
         if self.multiplier_type == 'diagonal':
             # diagonal multiplier, elements need to be positive
             lam = cp.Variable(shape=(self.nz, 1))
+            for lam_el in lam:
+                multiplier_constraints.append(lam_el >= 0)
             Lambda = cp.diag(lam)
 
         elif self.multiplier_type == 'static_zf':
@@ -5035,22 +5258,43 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         ]
 
         d = cp.Variable(shape=(1,))
+        X_0 = self.X.detach().numpy()
+        Y_0 = self.Y.detach().numpy()
+        lam_0 = self.lam.detach().numpy()
+        if self.multiplier_type == 'diagonal':
+            Lambda_0 = np.diag(lam_0)
+        elif self.multiplier_type=='static_zf':
+            Lambda_0 = lam_0
+        Omega_tilde_0 = self.Omega_tilde.detach().numpy()
+
+        # distance_constraint = [cp.norm(X-X_0) <= d]
+        # distance_constraint.append(cp.norm(Y-Y_0) <= d)
+        # distance_constraint.append(cp.norm(Lambda-Lambda_0) <= d)
+        # distance_constraint.append(cp.norm(Omega_tilde-Omega_tilde_0) <= d)
+
+        # problem = cp.Problem(
+        #     cp.Minimize(d),
+        #     feasibility_constraint + distance_constraint
+        # )
+
         problem = cp.Problem(
             cp.Minimize(d),
             feasibility_constraint + utils.get_distance_constraints(Omega_tilde_0, Omega_tilde, d)
         )
-        # problem = cp.Problem(
-        #     cp.Minimize(None),
-        #     feasibility_constraint
-        # )
-        problem.solve(solver=self.optimizer, verbose=False)
+        # # problem = cp.Problem(
+        # #     cp.Minimize(None),
+        # #     feasibility_constraint
+        # # )
+        problem.solve(solver=self.optimizer, verbose=False, accept_unknown=True)
 
         logger.info(
             f'1. run: projection. '
             f'problem status {problem.status},'
             f'||Omega - Omega_0|| = {d.value}'
         )
-        d_fixed = np.float64(d.value + 1000)
+        increase_percentage = 1.2
+        d_fixed = np.float64(d.value * increase_percentage)
+        # d_fixed = np.float64(500)
 
         alpha = cp.Variable(shape=(1,))
         problem = cp.Problem(
@@ -5059,14 +5303,21 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             + utils.get_distance_constraints(Omega_tilde_0, Omega_tilde, d_fixed)
             + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha),
         )
-        problem.solve(solver=self.optimizer)
+        problem.solve(solver=self.optimizer, verbose = False, accept_unknown=True)
         logger.info(
             f'2. run: parameter bounds. '
             f'problem status {problem.status},'
             f'alpha_star = {alpha.value}'
+            f'||Omega - Omega_0|| = {np.linalg.norm(Omega_tilde.value- Omega_tilde_0)}'
         )
 
-        alpha_fixed = np.float64(alpha.value + 10)
+        increase_percentage = 1.2
+        alpha_fixed = np.float64(alpha.value * increase_percentage)
+        # logger.info(
+        #     'Size of coupling matrices: '
+        #     f'|X| = {np.linalg.norm(X.value)}'
+        #     f'|Y| = {np.linalg.norm(Y.value)}'
+        # )
 
         beta = cp.Variable(shape=(1,))
         problem = cp.Problem(
@@ -5076,7 +5327,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             + utils.get_distance_constraints(Omega_tilde_0, Omega_tilde, d_fixed)
             + utils.get_bounding_inequalities(X, Y, Omega_tilde, alpha_fixed),
         )
-        problem.solve(solver=self.optimizer)
+        problem.solve(solver=self.optimizer, accept_unknown=True)
         logger.info(
             f'3. run: coupling conditions. '
             f'problem status {problem.status},'
@@ -5088,24 +5339,26 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             return np.float64(d)
 
         logger.info('Write back projected parameters.')
-        self.L_x_flat.data = (
-            torch.tensor(
-                utils.extract_vector_from_lower_triangular_matrix(
-                    np.linalg.cholesky(np.array(X.value))
-                )
-            )
-            .double()
-            .to(device)
-        )
-        self.L_y_flat.data = (
-            torch.tensor(
-                utils.extract_vector_from_lower_triangular_matrix(
-                    np.linalg.cholesky(np.array(Y.value))
-                )
-            )
-            .double()
-            .to(device)
-        )
+        # self.L_x_flat.data = (
+        #     torch.tensor(
+        #         utils.extract_vector_from_lower_triangular_matrix(
+        #             np.linalg.cholesky(np.array(X.value))
+        #         )
+        #     )
+        #     .double()
+        #     .to(device)
+        # )
+        # self.L_y_flat.data = (
+        #     torch.tensor(
+        #         utils.extract_vector_from_lower_triangular_matrix(
+        #             np.linalg.cholesky(np.array(Y.value))
+        #         )
+        #     )
+        #     .double()
+        #     .to(device)
+        # )
+        self.X.data = torch.tensor(X.value)
+        self.Y.data = torch.tensor(Y.value)
 
         if self.multiplier_type == 'diagonal':
             self.lam.data = (
@@ -5115,7 +5368,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             self.lam.data = torch.tensor(Lambda.value).double().to(device)
         self.Omega_tilde.data = torch.tensor(Omega_tilde.value).double().to(device)
 
-        return np.float64(d.value)
+        return np.float64(np.linalg.norm(Omega_tilde.value))
     
     def write_parameters(self, params: List[torch.Tensor]) -> None:
         for old_par, new_par in zip(params, self.parameters()):
@@ -5127,3 +5380,243 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             P = self.get_constraints()
             _, info = torch.linalg.cholesky_ex(-P)
         return True if info == 0 else False
+    
+class InputLinearizationRnnNoConstraint(ConstrainedForwardModule):
+    def __init__(        
+        self,
+        A_lin: NDArray[np.float64],
+        B_lin: NDArray[np.float64],
+        C_lin: NDArray[np.float64],
+        D_lin: NDArray[np.float64],
+        B_lin_2: NDArray[np.float64],
+        D_lin_2: NDArray[np.float64],
+        alpha: float,
+        beta: float,
+        nwu: int,
+        nonlinearity: Callable[[torch.Tensor], torch.Tensor],
+        device: torch.device = torch.device('cpu'),
+        init_omega: Optional[str]='zero',
+    ) -> None:
+        super().__init__()
+        self.nx = A_lin.shape[0]  # state size
+        self.nx_rnn = self.nx # controller has same state size
+        self.nd = B_lin.shape[1]  # input size of performance channel
+        self.ny = self.nx + self.nd  # output size of linearization
+        self.ne = C_lin.shape[0]  # output size of performance channel
+        self.nu = B_lin_2.shape[1] # output size of controller
+        self.nw = nwu  # input size of uncertainty channel
+        self.nz = self.nw # output size of uncertainty channel
+        
+        self.init_omega = init_omega
+
+        self.alpha = alpha
+        self.beta = beta
+
+        self.device = device
+
+        self.A_lin = torch.tensor(A_lin, dtype=torch.float64).to(device)
+        self.B_lin = torch.tensor(B_lin, dtype=torch.float64).to(device)
+        self.C_lin = torch.tensor(C_lin, dtype=torch.float64).to(device)
+        self.D_lin = torch.tensor(D_lin, dtype=torch.float64).to(device)
+        self.B_lin_2 = torch.tensor(B_lin_2, dtype=torch.float64).to(device)
+        self.D_lin_2 = torch.tensor(D_lin_2, dtype=torch.float64).to(device)
+
+        self.nl = nonlinearity
+            
+        if self.init_omega == 'zero':
+            self.theta = torch.nn.Parameter(
+                torch.zeros(
+                    size=(
+                        self.nx + self.nu + self.nz,
+                        self.nx + self.ny + self.nw,
+                    )
+                )
+            ).to(device)
+        elif self.init_omega == 'rand':
+            self.theta = torch.nn.Parameter(
+                torch.normal(0,1/self.nx, size=(
+                    self.nx + self.nu + self.nz,
+                    self.nx + self.ny + self.nw,
+                )).double().to(device)
+            )
+        else:
+            raise ValueError(f'Initialization method {self.init_omega} is not supported.')
+
+
+        self.S_s = torch.from_numpy(
+            np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            A_lin,
+                            np.zeros(shape=(self.nx, self.nx_rnn)),
+                            B_lin,
+                            np.zeros(shape=(self.nx, self.nw)),
+                        ],
+                        axis=1,
+                    ),
+                    np.zeros(
+                        shape=(self.nx_rnn, self.nx + self.nx_rnn + self.nd + self.nw)
+                    ),
+                    np.concatenate(
+                        [
+                            C_lin,
+                            np.zeros(shape=(self.ne, self.nx_rnn)),
+                            D_lin,
+                            np.zeros(shape=(self.ne, self.nw)),
+                        ],
+                        axis=1,
+                    ),
+                    np.zeros(
+                        shape=(self.nz, self.nx + self.nx_rnn + self.nd + self.nw)
+                    ),
+                ],
+                axis=0,
+                dtype=np.float64,
+            )
+        ).to(device)
+        self.S_l = torch.from_numpy(
+            np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.nx, self.nx_rnn)),
+                            B_lin_2,
+                            np.zeros(shape=(self.nx,self.nz))
+                        ], axis=1
+                    ),
+                    np.concatenate(
+                        [
+                            np.eye(self.nx_rnn),
+                            np.zeros(shape=(self.nx_rnn, self.nu + self.nz)),
+                        ], axis=1
+                    ),
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.ne, self.nx_rnn)),
+                            D_lin_2,
+                            np.zeros(shape=(self.ne, self.nz))
+
+                        ], axis=1
+                    ),
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.nz,self.nx_rnn + self.nu)),
+                            np.eye(self.nz)
+                        ], axis=1
+                    )
+                ], axis=0
+            )
+        ).double().to(device)
+        self.S_r = torch.from_numpy(
+            np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.nx_rnn, self.nx)),
+                            np.eye(self.nx_rnn),
+                            np.zeros(shape=(self.nx, self.nd+self.nw))
+                        ], axis=1
+                    ),
+                    np.concatenate(
+                        [
+                            np.vstack((np.eye(self.nx), np.zeros((self.nd,self.nx)))),
+                            np.zeros(shape=(self.ny, self.nx_rnn)),
+                            np.vstack((np.zeros((self.nx,self.nd)), np.eye(self.nd))),
+                            np.zeros(shape=(self.ny, self.nw))
+                        ], axis=1
+                    ),
+                    np.concatenate(
+                        [
+                            np.zeros(shape=(self.nw, self.nx+self.nx_rnn+self.nd)),
+                            np.eye(self.nw),
+                        ], axis=1
+                    ),
+                ],axis=0
+            )
+        ).double().to(device)
+
+    def set_lure_system(self) -> NDArray[np.float64]:
+        device = self.device
+
+        theta = self.theta
+
+        generalized_plant = self.S_s + self.S_l @ theta @ self.S_r
+
+        (
+            A_cal,
+            B1_cal,
+            B2_cal,
+            C1_cal,
+            D11_cal,
+            D12_cal,
+            C2_cal,
+            D21_cal,
+            D22_cal,
+        ) = utils.get_cal_matrices(
+            generalized_plant,
+            self.nx+self.nx_rnn,
+            self.nd,
+            self.ne,
+            self.nz
+        )
+
+        self.lure = LureSystem(
+            A=A_cal,
+            B1=B1_cal,
+            B2=B2_cal,
+            C1=C1_cal,
+            D11=D11_cal,
+            D12=D12_cal,
+            C2=C2_cal,
+            D21=D21_cal,
+            Delta=self.nl,
+            device=self.device,
+        ).to(device)
+
+        return generalized_plant.cpu().detach().numpy()
+
+
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        n_batch, N, nu = x_pred.shape
+        assert self.lure._nu == nu
+        # assert hx is not None
+        if hx is None:
+            x0_lin = torch.zeros(size=(n_batch,self.nx)).to(self.device)
+            x0_rnn = torch.zeros(size=(n_batch,self.nx)).to(self.device)
+        else:
+            x0_lin, x0_rnn = hx
+        x0 = torch.concat((x0_lin, x0_rnn), dim=1).reshape(
+            shape=(n_batch, self.nx * 2, 1)
+        )
+        us = x_pred.reshape(shape=(n_batch, N, nu, 1))
+        y, x = self.lure.forward(x0=x0, us=us, return_states=True)
+
+        return y.reshape(n_batch, N, self.lure._ny), (
+            x[:, : self.nx].reshape(n_batch, self.nx),
+            x[:, self.nx :].reshape(n_batch, self.nx),
+        )
+
+    def get_initial_parameters(
+        self,
+    ) -> Union[
+        NDArray[np.float64],
+        Tuple[
+            NDArray[np.float64],
+            NDArray[np.float64],
+            NDArray[np.float64],
+            NDArray[np.float64],
+        ],
+    ]:
+        pass
+
+    def get_constraints(self) -> torch.Tensor:
+        pass
+
+    def check_constraints(self) -> bool:
+        pass
+    

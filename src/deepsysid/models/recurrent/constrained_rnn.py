@@ -20,8 +20,10 @@ from deepsysid.models.base import (
 )
 from deepsysid.models.datasets import (
     RecurrentInitializerDataset,
+    RecurrentInitializerDataset2,
     RecurrentPredictorDataset,
     RecurrentPredictorInitializerInitialDataset,
+    RecurrentPredictorInitializerInitialDataset2
 )
 
 from ...cli.interface import DATASET_DIR_ENV_VAR, MODELS_DIR_ENV_VAR
@@ -2808,6 +2810,7 @@ class InputConstrainedRnnConfig2(DynamicIdentificationModelConfig):
     extend_state: bool
     nonlinearity: str
     decay_rate_lr: Optional[int] = 4
+    epochs_initializer: Optional[int] = 600
     epochs_with_const_decay: Optional[int] = 10
     initial_window_size: Optional[int] = 100
     normalization: Optional[bool] = False
@@ -2840,6 +2843,8 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         self.init_omega = config.init_omega
         self.multiplier_type = config.multiplier_type
         self.normalization = config.normalization
+
+        self.epochs_initializer = config.epochs_initializer
         
         self.nwu = config.nwu
         self.nzu = self.nwu
@@ -2977,28 +2982,60 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             multiplier_type=self.multiplier_type,
         ).to(self.device)
 
-        if self.constraint_type == 'non-convex':
-            self._predictor.project_parameters()
-            init_sim_parameter, _ = self._predictor.set_lure_system()
-            self._predictor = rnn.InputLinearizationNonConvexRnn(
-                A_lin=A_lin,
-                B_lin=B_lin,
-                C_lin=C_lin,
-                nd = self.nd,
-                alpha=config.alpha,
-                beta=config.beta,
-                nwu=self.nwu,
-                nzu=self.nzu,
-                gamma=config.gamma,
-                nonlinearity=self.nl,
-                device=self.device,
-                multiplier_type=self.multiplier_type,
-                init_pars=init_sim_parameter
-            )
-            assert self._predictor.check_constraints()
+        # self._predictor = rnn.InputLinearizationNonConvexRnn2(
+        #     A_lin=A_lin,
+        #     B_lin=B_lin,
+        #     C_lin=C_lin,
+        #     D_lin = D_lin,
+        #     B_lin_2 = B_lin_2,
+        #     D_lin_2 = D_lin_2,
+        #     alpha=config.alpha,
+        #     beta=config.beta,
+        #     nwu=self.nwu,
+        #     gamma=config.gamma,
+        #     nonlinearity=self.nl,
+        #     device=self.device,
+        #     optimizer=self.optimizer,
+        #     multiplier_type=self.multiplier_type,
+        # ).to(self.device)
+
+        # self._initializer = rnn.InputLinearizationRnnNoConstraint(
+        #     A_lin=A_lin,
+        #     B_lin=B_lin,
+        #     C_lin=C_lin,
+        #     D_lin = D_lin,
+        #     B_lin_2 = B_lin_2,
+        #     D_lin_2 = D_lin_2,
+        #     alpha=config.alpha,
+        #     beta=config.beta,
+        #     nwu=self.nwu,
+        #     nonlinearity=self.nl,
+        #     device=self.device,
+        # ).to(self.device)
+        # self._initializer.set_lure_system()
+
+        self._initializer = rnn.BasicLSTMDoubleLinearOutput(
+            input_dim=self.nd + self.ne,
+            recurrent_dim=128,
+            num_recurrent_layers=2,
+            output_dim = self.nx,
+            dropout=0.25,
+            C=torch.tensor(C_lin)
+        )
+
+        self._linear = rnn.Linear(
+            A=torch.tensor(A_lin),
+            B=torch.tensor(B_lin),
+            C=torch.tensor(C_lin),
+            D = torch.tensor(D_lin)
+        ).to(self.device)
 
         self.optimizer_pred = optim.Adam(
             self._predictor.parameters(), lr=self.learning_rate
+        )
+
+        self.optimizer_init = optim.Adam(
+            self._initializer.parameters(), lr = self.learning_rate
         )
 
     def train(
@@ -3013,25 +3050,25 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             initial_seqs = [np.zeros((N,self.nx-self.e))]
 
         self._predictor.train()
+        self._initializer.train()
         self._predictor.to(self.device)
         step = 0
 
-        if self.normalization:
-            self._control_mean, self._control_std = utils.mean_stddev(control_seqs)
-            self._state_mean, self._state_std = utils.mean_stddev(state_seqs)
+        self._control_mean, self._control_std = utils.mean_stddev(control_seqs)
+        self._state_mean, self._state_std = utils.mean_stddev(state_seqs)
 
-            us = [
-                utils.normalize(control, self._control_mean, self._control_std)
-                for control in control_seqs
-            ]
-            ys = [
-                utils.normalize(state, self._state_mean, self._state_std)
-                for state in state_seqs
-            ]
-            # initial_seqs = [
-            #     utils.normalize(x0, self._state_mean, self._state_std)
-            #     for x0 in initial_seqs
-            # ]
+        us_norm = [
+            utils.normalize(control, self._control_mean, self._control_std)
+            for control in control_seqs
+        ]
+        ys_norm = [
+            utils.normalize(state, self._state_mean, self._state_std)
+            for state in state_seqs
+        ]
+
+        if self.normalization:
+            us = us_norm
+            ys = ys_norm
         else:
             us = control_seqs
             ys = state_seqs
@@ -3043,8 +3080,35 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         track_model_parameters(self, tracker)
 
+        initializer_dataset = RecurrentInitializerDataset(
+            us, ys, self.sequence_length, self.initial_window_size
+        )
+
+        # time_start_init = time.time()
+        # for i in range(self.epochs_initializer):
+        #     data_loader = data.DataLoader(
+        #         initializer_dataset, self.batch_size, shuffle=True, drop_last=True
+        #     )
+        #     total_loss = 0.0
+        #     for batch_idx, batch in enumerate(data_loader):
+        #         self._initializer.zero_grad()
+        #         y, _ = self._initializer.forward(batch['x'].double().to(self.device))
+        #         batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
+        #         total_loss += batch_loss.item()
+        #         batch_loss.backward()
+        #         self.optimizer_init.step()
+        #         # self._initializer.set_lure_system()
+
+        #     logger.info(
+        #         f'Epoch {i + 1}/{self.epochs_initializer} '
+        #         f'- Epoch Loss (Initializer): {total_loss}'
+        #     )
+
+        # time_end_init = time.time()
+
         # if self.enforce_constraints_method is not None:
         if self.constraint_type == 'convex':
+            # self._predictor.initialize_parameters()
             self._predictor.project_parameters()
         self._predictor.set_lure_system()
         
@@ -3056,13 +3120,11 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         no_decrease_count: int = 0
         old_validation_loss = np.float64(0.0)
-        predictor_dataset = RecurrentPredictorInitializerInitialDataset(
+        predictor_dataset = RecurrentPredictorInitializerInitialDataset2(
             us,
             ys,
             x0s,
             self.sequence_length,
-            self._state_mean,
-            self._control_mean,
             self.initial_window_size,
         )
         data_loader = data.DataLoader(
@@ -3076,7 +3138,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             for batch_idx, batch in enumerate(data_loader):
 
                 def closure():
-                    self._predictor.zero_grad(set_to_none=True)
+                    self._predictor.zero_grad()
                     if self.extend_state:
                         x0 = torch.concat(
                             [
@@ -3087,33 +3149,42 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                         ).to(self.device)
                         x0_init = torch.concat(
                             [
-                                batch['x0_init'][:, 0, :].double(),
+                                batch['x0_init'].double(),
                                 torch.zeros(size=(self.batch_size, self.e)),
                             ],
                             dim=1,
                         ).to(self.device)
                     else:
-                        x0_init = batch['x0_init'][:, 0, :].double().to(self.device)
+                        x0_init = batch['x0_init'].double().to(self.device)
                         x0 = batch['x0'].double().to(self.device)
 
                     # warmstart
-                    _, (_, x_rnns) = self._predictor.forward(
-                        x_pred=batch['wp_init'].double().to(self.device),
-                        hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
+                    e_init_hat, x_init = self._linear.forward(
+                        x0_init.unsqueeze(-1), 
+                        batch['d_init'].unsqueeze(-1),
+                        return_state=True
                     )
-                    zp_hat, _ = self._predictor.forward(
-                        x_pred=batch['wp'].double().to(self.device),
+                    # _, (x_init, _) = self._initializer.forward(
+                    #     x_pred = batch['d_init'].double().to(self.device)
+                    # )
+                    # _, (x_init, x_rnns) = self._predictor.forward(
+                    #     x_pred=batch['d_init'].double().to(self.device),
+                    #     hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
+                    # )
+                    e_hat, _ = self._predictor.forward(
+                        x_pred=batch['d'].double().to(self.device),
                         hx=(
-                            x0,
-                            x_rnns,
+                            x_init[:,-1,:,0],
+                            torch.zeros_like(x0),
+                            # x_rnns,
                             # torch.zeros_like(x0),
                             # torch.zeros_like(x0)
                         ),
                     )
 
-                    zp_hat = zp_hat.to(self.device)
+                    e_hat = e_hat.to(self.device)
                     batch_loss = self.loss.forward(
-                        zp_hat, batch['zp'].double().to(self.device)
+                        e_hat, batch['e'].double().to(self.device)
                     )
 
                     barrier = self._predictor.get_barriers(
@@ -3153,7 +3224,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                         )
                     )
 
-                    return batch_loss, barrier, zp_hat
+                    return batch_loss, barrier, e_hat
 
                 # save old parameter set
                 old_pars = [
@@ -3163,7 +3234,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                 (
                     batch_loss,
                     barrier,
-                    zp_hat,
+                    e_hat,
                 ) = self.optimizer_pred.step(closure)
 
                 # early stopping if prediction is NaN
@@ -3231,10 +3302,10 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             # This should be improved in the future.
             if "PYTEST_CURRENT_TEST" not in os.environ:
                 validation_loss = self.validate(
-                    self.sequence_length,
+                    self.sequence_length
                 )
                 e = old_validation_loss - validation_loss
-                if e < -1e-5 and i > 0:
+                if e < 0 and i > 0:
                     no_decrease_count += 1
 
                 # update old validation loss
@@ -3301,9 +3372,12 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             ):
                 with torch.no_grad():
                     result = utils.TrainingPrediction(
-                        u=batch['wp'][0, :, : self._predictor.nd],
-                        zp=batch['zp'][0, :, :],
-                        zp_hat=zp_hat[0, :, :].cpu().detach().numpy(),
+                        u=batch['d'][0, :, : self._predictor.nd],
+                        zp=batch['e'][0, :, :],
+                        zp_hat=e_hat[0, :, :].cpu().detach().numpy(),
+                        # y_lin=self._linear.forward(
+                        #     batch['x0'].unsqueeze(-1), batch['d'].unsqueeze(-1)
+                        # )[0,:,:,0]
                         # y_lin=y_lin[:, :, 0],
                     )
                     tracker(
@@ -3316,11 +3390,11 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
-                f'Total Loss (Predictor): {total_loss:1f} \t'
-                f'Validation Loss: {validation_loss:1f} \t'
+                f'Total Loss (Predictor): {total_loss:3g} \t'
+                f'Validation Loss: {validation_loss:3g} \t'
                 f'Barrier: {barrier:1f}\t'
-                f'Backtracking Line Search iteration: {max(backtracking_iter)}\t'
-                f'Max accumulated gradient norm: {np.max(max_grad):1f}'
+                f'BLS iter: {max(backtracking_iter)}\t'
+                f'Max acc. grad. norm: {np.max(max_grad):1f}'
             )
             predictor_loss.append(np.float64(total_loss))
             barrier_value.append(barrier.cpu().detach().numpy())
@@ -3381,7 +3455,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         if self.normalization:
             initial_control = utils.normalize(initial_control, self._control_mean, self._control_std)
             u = utils.normalize(control, self._control_mean, self._control_std)
-            x0 = utils.normalize(x0, self._state_mean, self._state_std)
+            # x0 = utils.normalize(x0, self._state_mean, self._state_std)
         else:
             u = control
 
@@ -3415,19 +3489,19 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                 )
 
             # warmstart
-            _, (_, x_rnns) = self._predictor.forward(
-                u_init_torch,
-                hx=(
-                    initial_x0_torch, 
-                    torch.zeros_like(initial_x0_torch).to(self.device)
-                ),
+            e_init_hat, x_init = self._linear.forward(
+                initial_x0_torch.unsqueeze(-1), 
+                u_init_torch.unsqueeze(-1),
+                return_state=True
             )
 
             y, _ = self._predictor.forward(
                 pred_x, 
                 hx=(
-                    x0_torch, 
-                    x_rnns
+                    x_init[:,-1,:,0], 
+                    torch.zeros_like(x_init[:,-1,:,0])
+                    # torch.zeros_like(x0_torch),
+                    # torch.zeros_like(x_rnns)
                 )
             )
             y_np: NDArray[np.float64] = (
@@ -3570,18 +3644,23 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         with torch.no_grad():
 
-            _, (_, x_rnns) = self._predictor.forward(
-                us_init_torch,
-                hx=(
-                    x0_init_torch, 
-                    torch.zeros_like(x0_init_torch).to(self.device)
-                ),
+            e_init_hat, x_init = self._linear.forward(
+                x0_init_torch.unsqueeze(-1), 
+                us_init_torch.unsqueeze(-1),
+                return_state=True
             )
+            # _, (_, x_rnns) = self._predictor.forward(
+            #     us_init_torch,
+            #     hx=(
+            #         x0_init_torch, 
+            #         torch.zeros_like(x0_init_torch).to(self.device)
+            #     ),
+            # )
             ys_hat_torch, _ = self.predictor(
                 us_torch,
                 hx=(
-                    x0_torch,
-                    x_rnns,
+                    x_init[:,-1,:,0],
+                    torch.zeros_like(x_init[:,-1,:,0]),
                 ),
             )
         # return validation error normalized over all states
