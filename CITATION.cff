@@ -1,0 +1,36 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: deepsysid
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Alexandra
+    family-names: Baier
+    affiliation: University of Stuttgart
+    orcid: 'https://orcid.org/0000-0001-5609-3400'
+    email: Alexandra.Baier@ki.uni-stuttgart.de
+  - given-names: Daniel
+    family-names: Frank
+    email: Daniel.Frank@ki.uni-stuttgart.de
+    affiliation: University of Stuttgart
+    orcid: 'https://orcid.org/0000-0002-6730-2252'
+identifiers:
+  - type: doi
+    value: 10.18419/darus-3455
+    description: The DaRUS link of the software.
+repository-code: 'https://github.com/AlexandraBaier/deepsysid'
+repository: >-
+  https://darus.uni-stuttgart.de/dataset.xhtml?persistentId=doi:10.18419/darus-3455
+abstract: >-
+  A system identification toolkit for multistep prediction
+  using deep learning and hybrid methods.
+keywords:
+  - system identification
+  - deep learning
+license: MIT
+doi: 10.18419/darus-3455
+date-released: 2023
