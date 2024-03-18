@@ -4327,6 +4327,8 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         optimizer: str = cp.SCS,
         multiplier_type: Optional[str] = 'diag',
         init_omega: Optional[str]='zero',
+        coupling_flat: Optional[bool] = True,
+        increase_constraints: Optional[float] = 1.2
     ) -> None:
         super().__init__()
         self.nx = A_lin.shape[0]  # state size
@@ -4341,6 +4343,8 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         self.optimizer = optimizer
         self.multiplier_type = multiplier_type
         self.init_omega = init_omega
+        self.coupling_flat = coupling_flat
+        self.increase_constraints = increase_constraints
 
         self.alpha = alpha
         self.beta = beta
@@ -4387,22 +4391,23 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         else:
             raise ValueError(f'Initialization method {self.init_omega} is not supported.')
 
-        # L_flat_size = utils.extract_vector_from_lower_triangular_matrix(
-        #     torch.zeros(size=(self.nx, self.nx))
-        # ).shape[0]
-        # self.L_x_flat = torch.nn.Parameter(
-        #         torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
-        #     )
-        # self.L_y_flat = torch.nn.Parameter(
-        #     torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
-        # )
-
-        self.X = torch.nn.Parameter(
-            torch.normal(0, 1 / self.nx, size=(self.nx,self.nx)).double().to(device)
-        )
-        self.Y = torch.nn.Parameter(
-            torch.normal(0, 1 / self.nx, size=(self.nx,self.nx)).double().to(device)
-        )
+        if self.coupling_flat:
+            L_flat_size = utils.extract_vector_from_lower_triangular_matrix(
+                torch.zeros(size=(self.nx, self.nx))
+            ).shape[0]
+            self.L_x_flat = torch.nn.Parameter(
+                    torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
+                )
+            self.L_y_flat = torch.nn.Parameter(
+                torch.normal(0, 1 / self.nx, size=(L_flat_size,)).double().to(device)
+            )
+        else:
+            self.X = torch.nn.Parameter(
+                torch.normal(0, 1 / self.nx, size=(self.nx,self.nx)).double().to(device)
+            )
+            self.Y = torch.nn.Parameter(
+                torch.normal(0, 1 / self.nx, size=(self.nx,self.nx)).double().to(device)
+            )
 
 
         self.S_s = torch.from_numpy(
@@ -4532,10 +4537,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         # transform from Omega_tilde (optimization parameters) to Omega
         Omega = L @ self.Omega_tilde
 
-        X,Y,U,V = utils.get_coupling_matrices(
-            self.X,
-            self.Y
-        )
+        X,Y,U,V = self.get_coupling_matrices()
 
         T_l,T_r,T_s = self.get_T(X,Y,U,V,Lambda)
 
@@ -4593,6 +4595,30 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
 
         return (sim_parameter, generalized_plant.cpu().detach().numpy())
 
+
+    def get_coupling_matrices(
+            self,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+            if self.coupling_flat:
+                L_x = utils.construct_lower_triangular_matrix(
+                    L_flat=self.L_x_flat, diag_length=self.nx
+                )
+                L_y = utils.construct_lower_triangular_matrix(
+                    L_flat=self.L_y_flat, diag_length=self.nx
+                )
+
+                X = L_x @ L_x.T
+                Y = L_y @ L_y.T
+
+            else:
+                X = self.X
+                Y = self.Y
+
+            # 2. Determine non-singular U,V with V U^T = I - Y X
+            U = torch.linalg.inv(Y) - X
+            V = Y
+
+            return (X, Y, U, V)
 
     def get_T(
         self,
@@ -4687,26 +4713,30 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
 
         assert(np.linalg.norm(Y @ X + V @ U.T - np.eye(self.nx))< 1e-10)
 
-        self.X.data = torch.tensor(X).double().to(self.device)
-        self.Y.data = torch.tensor(Y).double().to(self.device)
-        # self.L_x_flat.data = (
-        #     torch.tensor(
-        #         utils.extract_vector_from_lower_triangular_matrix(
-        #             np.linalg.cholesky(np.array(X))
-        #         )
-        #     )
-        #     .double()
-        #     .to(self.device)
-        # )
-        # self.L_y_flat.data = (
-        #     torch.tensor(
-        #         utils.extract_vector_from_lower_triangular_matrix(
-        #             np.linalg.cholesky(np.array(Y))
-        #         )
-        #     )
-        #     .double()
-        #     .to(self.device)
-        # )
+        if self.coupling_flat:
+            self.L_x_flat.data = (
+                torch.tensor(
+                    utils.extract_vector_from_lower_triangular_matrix(
+                        np.linalg.cholesky(np.array(X))
+                    )
+                )
+                .double()
+                .to(self.device)
+            )
+            self.L_y_flat.data = (
+                torch.tensor(
+                    utils.extract_vector_from_lower_triangular_matrix(
+                        np.linalg.cholesky(np.array(Y))
+                    )
+                )
+                .double()
+                .to(self.device)
+            )
+
+        else:
+            self.X.data = torch.tensor(X).double().to(self.device)
+            self.Y.data = torch.tensor(Y).double().to(self.device)
+
 
         if self.multiplier_type == 'diagonal':
             self.lam.data = (
@@ -4869,17 +4899,19 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         )
 
     def get_barriers(self, t: torch.Tensor) -> torch.Tensor:
-        # L_x = utils.construct_lower_triangular_matrix(
-        #     L_flat=self.L_x_flat, diag_length=self.nx
-        # ).to(self.device)
-        # L_y = utils.construct_lower_triangular_matrix(
-        #     L_flat=self.L_y_flat, diag_length=self.nx
-        # ).to(self.device)
+        if self.coupling_flat:
+            L_x = utils.construct_lower_triangular_matrix(
+                L_flat=self.L_x_flat, diag_length=self.nx
+            ).to(self.device)
+            L_y = utils.construct_lower_triangular_matrix(
+                L_flat=self.L_y_flat, diag_length=self.nx
+            ).to(self.device)
 
-        # X = L_x @ L_x.T
-        # Y = L_y @ L_y.T
-        X = self.X
-        Y = self.Y
+            X = L_x @ L_x.T
+            Y = L_y @ L_y.T
+        else:
+            X = self.X
+            Y = self.Y
 
         multiplier_constraints = []
         if self.multiplier_type == 'diagonal':
@@ -4925,16 +4957,18 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         return barrier
 
     def get_constraints(self) -> torch.Tensor:
-        # L_x = utils.construct_lower_triangular_matrix(
-        #     L_flat=self.L_x_flat, diag_length=self.nx
-        # ).to(self.device)
-        # L_y = utils.construct_lower_triangular_matrix(
-        #     L_flat=self.L_y_flat, diag_length=self.nx
-        # ).to(self.device)
-        # X = L_x @ L_x.T
-        # Y = L_y @ L_y.T
-        X = self.X
-        Y = self.Y
+        if self.coupling_flat:
+            L_x = utils.construct_lower_triangular_matrix(
+                L_flat=self.L_x_flat, diag_length=self.nx
+            ).to(self.device)
+            L_y = utils.construct_lower_triangular_matrix(
+                L_flat=self.L_y_flat, diag_length=self.nx
+            ).to(self.device)
+            X = L_x @ L_x.T
+            Y = L_y @ L_y.T
+        else:
+            X = self.X
+            Y = self.Y
         U = torch.linalg.inv(Y) - X
         V = Y
         A_lin = self.A_lin
@@ -5258,8 +5292,6 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         ]
 
         d = cp.Variable(shape=(1,))
-        X_0 = self.X.detach().numpy()
-        Y_0 = self.Y.detach().numpy()
         lam_0 = self.lam.detach().numpy()
         if self.multiplier_type == 'diagonal':
             Lambda_0 = np.diag(lam_0)
@@ -5292,8 +5324,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             f'problem status {problem.status},'
             f'||Omega - Omega_0|| = {d.value}'
         )
-        increase_percentage = 1.2
-        d_fixed = np.float64(d.value * increase_percentage)
+        d_fixed = np.float64(d.value * self.increase_constraints)
         # d_fixed = np.float64(500)
 
         alpha = cp.Variable(shape=(1,))
@@ -5311,8 +5342,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             f'||Omega - Omega_0|| = {np.linalg.norm(Omega_tilde.value- Omega_tilde_0)}'
         )
 
-        increase_percentage = 1.2
-        alpha_fixed = np.float64(alpha.value * increase_percentage)
+        alpha_fixed = np.float64(alpha.value * self.increase_constraints)
         # logger.info(
         #     'Size of coupling matrices: '
         #     f'|X| = {np.linalg.norm(X.value)}'
@@ -5339,26 +5369,28 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             return np.float64(d)
 
         logger.info('Write back projected parameters.')
-        # self.L_x_flat.data = (
-        #     torch.tensor(
-        #         utils.extract_vector_from_lower_triangular_matrix(
-        #             np.linalg.cholesky(np.array(X.value))
-        #         )
-        #     )
-        #     .double()
-        #     .to(device)
-        # )
-        # self.L_y_flat.data = (
-        #     torch.tensor(
-        #         utils.extract_vector_from_lower_triangular_matrix(
-        #             np.linalg.cholesky(np.array(Y.value))
-        #         )
-        #     )
-        #     .double()
-        #     .to(device)
-        # )
-        self.X.data = torch.tensor(X.value)
-        self.Y.data = torch.tensor(Y.value)
+        if self.coupling_flat:
+            self.L_x_flat.data = (
+                torch.tensor(
+                    utils.extract_vector_from_lower_triangular_matrix(
+                        np.linalg.cholesky(np.array(X.value))
+                    )
+                )
+                .double()
+                .to(device)
+            )
+            self.L_y_flat.data = (
+                torch.tensor(
+                    utils.extract_vector_from_lower_triangular_matrix(
+                        np.linalg.cholesky(np.array(Y.value))
+                    )
+                )
+                .double()
+                .to(device)
+            )
+        else:
+            self.X.data = torch.tensor(X.value)
+            self.Y.data = torch.tensor(Y.value)
 
         if self.multiplier_type == 'diagonal':
             self.lam.data = (

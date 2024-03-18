@@ -2818,6 +2818,8 @@ class InputConstrainedRnnConfig2(DynamicIdentificationModelConfig):
     init_omega: Literal['zero','rand'] = 'zero'
     constraint_type: Literal['convex', 'non-convex'] = 'convex'
     multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
+    coupling_flat: Optional[bool] = True,
+    increase_constraints: Optional[float] = 1.2
 
 
 class InputConstrainedRnn2(base.DynamicIdentificationModel):
@@ -2843,6 +2845,8 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         self.init_omega = config.init_omega
         self.multiplier_type = config.multiplier_type
         self.normalization = config.normalization
+        self.coupling_flat = config.coupling_flat
+        self.increase_constraints = config.increase_constraints
 
         self.epochs_initializer = config.epochs_initializer
         
@@ -2980,6 +2984,8 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             device=self.device,
             optimizer=self.optimizer,
             multiplier_type=self.multiplier_type,
+            coupling_flat=self.coupling_flat,
+            increase_constraints=self.increase_constraints
         ).to(self.device)
 
         # self._predictor = rnn.InputLinearizationNonConvexRnn2(
@@ -3159,23 +3165,25 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                         x0 = batch['x0'].double().to(self.device)
 
                     # warmstart
-                    e_init_hat, x_init = self._linear.forward(
-                        x0_init.unsqueeze(-1), 
-                        batch['d_init'].unsqueeze(-1),
-                        return_state=True
-                    )
+                    # e_init_hat, x_init = self._linear.forward(
+                    #     x0_init.unsqueeze(-1), 
+                    #     batch['d_init'].unsqueeze(-1),
+                    #     return_state=True
+                    # )
                     # _, (x_init, _) = self._initializer.forward(
                     #     x_pred = batch['d_init'].double().to(self.device)
                     # )
-                    # _, (x_init, x_rnns) = self._predictor.forward(
-                    #     x_pred=batch['d_init'].double().to(self.device),
-                    #     hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
-                    # )
+                    _, (x_init, x_rnns) = self._predictor.forward(
+                        x_pred=batch['d_init'].double().to(self.device),
+                        hx=(x0_init, torch.zeros_like(x0_init).to(self.device)),
+                    )
                     e_hat, _ = self._predictor.forward(
                         x_pred=batch['d'].double().to(self.device),
                         hx=(
-                            x_init[:,-1,:,0],
-                            torch.zeros_like(x0),
+                            x_init,
+                            x_rnns
+                            # x_init[:,-1,:],
+                            # x_rnns[:,-1,:],
                             # x_rnns,
                             # torch.zeros_like(x0),
                             # torch.zeros_like(x0)
@@ -3489,17 +3497,26 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                 )
 
             # warmstart
-            e_init_hat, x_init = self._linear.forward(
-                initial_x0_torch.unsqueeze(-1), 
-                u_init_torch.unsqueeze(-1),
-                return_state=True
+            # e_init_hat, x_init = self._linear.forward(
+            #     initial_x0_torch.unsqueeze(-1), 
+            #     u_init_torch.unsqueeze(-1),
+            #     return_state=True
+            # )
+            _, (x_init, x_rnn) = self._predictor.forward(
+                x_pred=u_init_torch,
+                hx = (
+                    initial_x0_torch,
+                    torch.zeros_like(initial_x0_torch)
+                )
             )
 
             y, _ = self._predictor.forward(
                 pred_x, 
                 hx=(
-                    x_init[:,-1,:,0], 
-                    torch.zeros_like(x_init[:,-1,:,0])
+                    x_init,
+                    x_rnn
+                    # x_init[:,-1,:,0], 
+                    # torch.zeros_like(x_init[:,-1,:,0])
                     # torch.zeros_like(x0_torch),
                     # torch.zeros_like(x_rnns)
                 )
@@ -3644,23 +3661,23 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         with torch.no_grad():
 
-            e_init_hat, x_init = self._linear.forward(
-                x0_init_torch.unsqueeze(-1), 
-                us_init_torch.unsqueeze(-1),
-                return_state=True
-            )
-            # _, (_, x_rnns) = self._predictor.forward(
-            #     us_init_torch,
-            #     hx=(
-            #         x0_init_torch, 
-            #         torch.zeros_like(x0_init_torch).to(self.device)
-            #     ),
+            # e_init_hat, x_init = self._linear.forward(
+            #     x0_init_torch.unsqueeze(-1), 
+            #     us_init_torch.unsqueeze(-1),
+            #     return_state=True
             # )
+            _, (x_init, x_rnns) = self._predictor.forward(
+                us_init_torch,
+                hx=(
+                    x0_init_torch, 
+                    torch.zeros_like(x0_init_torch).to(self.device)
+                ),
+            )
             ys_hat_torch, _ = self.predictor(
                 us_torch,
                 hx=(
-                    x_init[:,-1,:,0],
-                    torch.zeros_like(x_init[:,-1,:,0]),
+                    x_init,
+                    x_rnns,
                 ),
             )
         # return validation error normalized over all states
