@@ -9,10 +9,11 @@ Brisbane, QLD, Australia, 2018, pp. 2454-2459, doi: 10.1109/ICRA.2018.8460840.
 Input Model -> Physics Model -> Output Model -> + ->
             |----------------->
 """
+
 import abc
 import json
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
@@ -420,7 +421,7 @@ class SerialParallelHybridModelConfig(DynamicIdentificationModelConfig):
 
 
 class SerialParallelHybridModel(DynamicIdentificationModel, metaclass=abc.ABCMeta):
-    CONFIG = SerialParallelHybridModelConfig
+    CONFIG: Type[SerialParallelHybridModelConfig] = SerialParallelHybridModelConfig
 
     def __init__(
         self,

@@ -8,6 +8,7 @@ Switching mechanisms
   - least-squares based training
 
 """
+
 import abc
 import dataclasses
 from typing import Optional, Tuple
@@ -30,24 +31,24 @@ class SwitchingLSTMOutput:
         if not (len(self.outputs.shape) == 3):
             raise ValueError(
                 f'outputs should be a 3-dimensional tensor (batch, time, output), '
-                f'but is not: {self.outputs.shape = }.'
+                f'but is not: {self.outputs.shape=}.'
             )
         if not (len(self.states.shape) == 3):
             raise ValueError(
                 f'states should be a 3-dimensional tensor (batch, time, state), '
-                f'but is not: {self.states.shape = }.'
+                f'but is not: {self.states.shape=}.'
             )
         if not (len(self.system_matrices.shape) == 4):
             raise ValueError(
                 f'system_matrices should be a 4-dimensional tensor '
                 f'(batch, time, state, state) but is not: '
-                f'{self.system_matrices.shape = }.'
+                f'{self.system_matrices.shape=}.'
             )
         if not (len(self.control_matrices.shape) == 4):
             raise ValueError(
                 f'control_matrices should be a 4-dimensional tensor '
                 f'(batch, time, state, control) but is not: '
-                f'{self.control_matrices.shape = }.'
+                f'{self.control_matrices.shape=}.'
             )
         if not (
             self.outputs.shape[0]
@@ -58,10 +59,10 @@ class SwitchingLSTMOutput:
             raise ValueError(
                 f'Batch dimension (dimension 0) of outputs, states, system_matrices '
                 f'and control_matrices needs to match, but does not match: '
-                f'{self.outputs.shape = }, '
-                f'{self.states.shape = }, '
-                f'{self.system_matrices.shape = }, '
-                f'{self.control_matrices.shape = }.'
+                f'{self.outputs.shape=}, '
+                f'{self.states.shape=}, '
+                f'{self.system_matrices.shape=}, '
+                f'{self.control_matrices.shape=}.'
             )
 
         if not (
@@ -73,10 +74,10 @@ class SwitchingLSTMOutput:
             raise ValueError(
                 f'Time dimension (dimension 1) of outputs, states, system_matrices '
                 f'and control_matrices needs to match, but does not match: '
-                f'{self.outputs.shape = }, '
-                f'{self.states.shape = }, '
-                f'{self.system_matrices.shape = }, '
-                f'{self.control_matrices.shape = }.'
+                f'{self.outputs.shape=}, '
+                f'{self.states.shape=}, '
+                f'{self.system_matrices.shape=}, '
+                f'{self.control_matrices.shape=}.'
             )
 
         if not (
@@ -87,8 +88,8 @@ class SwitchingLSTMOutput:
             raise ValueError(
                 f'State dimension (dimension 2) of states, system_matrices '
                 f'and control_matrices needs to match, but does not match: '
-                f'{self.states.shape = }, {self.system_matrices.shape = }, '
-                f'{self.control_matrices.shape = }.'
+                f'{self.states.shape=}, {self.system_matrices.shape=}, '
+                f'{self.control_matrices.shape=}.'
             )
 
 
@@ -153,7 +154,7 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
         if not (state_dim >= output_dim):
             raise ValueError(
                 'state_dim must be larger or equal to output_dim, '
-                f'but {state_dim = } < {output_dim }.'
+                f'but {state_dim=} < {output_dim}.'
             )
 
         self.control_dim = control_dim
@@ -187,7 +188,7 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
         batch_size = control.shape[0]
         sequence_length = control.shape[1]
 
-        x, (h0, c0) = self.lstm.forward(control, hx=hx)
+        x, (h0, c0) = self.lstm.forward(control, hx=hx)  # type: ignore
         x = torch.reshape(x, (batch_size * sequence_length, self.recurrent_dim))
 
         A = torch.reshape(
@@ -283,7 +284,7 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         if not (state_dim >= output_dim):
             raise ValueError(
                 'state_dim must be larger or equal to output_dim, '
-                f'but {state_dim = } < {output_dim }.'
+                f'but {state_dim=} < {output_dim}.'
             )
 
         self.control_dim = control_dim
@@ -322,7 +323,7 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         batch_size = control.shape[0]
         sequence_length = control.shape[1]
 
-        x, (h0, c0) = self.lstm.forward(control, hx=hx)
+        x, (h0, c0) = self.lstm.forward(control, hx=hx)  # type: ignore
         x = torch.reshape(x, (batch_size * sequence_length, self.recurrent_dim))
 
         A = (

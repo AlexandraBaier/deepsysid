@@ -3,7 +3,7 @@ import pathlib
 import numpy as np
 
 from deepsysid.pipeline.data_io import load_simulation_data
-from deepsysid.pipeline.testing.base import TestSimulation
+from deepsysid.pipeline.testing.base import TestSimulation as SimulationResult
 from deepsysid.pipeline.testing.io import split_simulations
 
 from ..smoke_tests import pipeline
@@ -33,7 +33,7 @@ def test_split_simulation(tmp_path: pathlib.Path) -> None:
     )
 
     simulations = [
-        TestSimulation(control, state, initial_state, file_name)
+        SimulationResult(control, state, initial_state, file_name)
         for control, state, initial_state, file_name in zip(
             controls, states, initial_states, file_names
         )

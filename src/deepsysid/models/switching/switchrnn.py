@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class SwitchingLSTMBaseModelConfig(SeparateInitializerRecurrentNetworkModelConfig):
-    switched_system_state_dim: Optional[int]
+    switched_system_state_dim: Optional[int] = None
 
 
 class SwitchingLSTMBaseModel(base.DynamicIdentificationModel):

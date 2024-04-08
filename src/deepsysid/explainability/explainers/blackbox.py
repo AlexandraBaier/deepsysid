@@ -207,7 +207,7 @@ class LIMEExplainerConfig(AdditiveFeatureAttributionExplainerConfig):
 
 
 class LIMEExplainer(BlackboxExplainer):
-    CONFIG = LIMEExplainerConfig
+    CONFIG: Type[LIMEExplainerConfig] = LIMEExplainerConfig
 
     def __init__(self, config: LIMEExplainerConfig) -> None:
         super().__init__(

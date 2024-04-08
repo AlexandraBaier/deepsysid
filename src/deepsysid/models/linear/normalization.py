@@ -2,7 +2,7 @@ import dataclasses
 from typing import List
 
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 
 from deepsysid.models import utils
 

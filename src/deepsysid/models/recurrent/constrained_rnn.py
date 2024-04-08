@@ -1144,13 +1144,13 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     learning_rate: float
     batch_size: int
     epochs_predictor: int
-    clip_gradient_norm: Optional[float]
+    clip_gradient_norm: Optional[float] = None
     epochs_without_projection: int
     initial_decay_parameter: float
     extend_state: bool
     nonlinearity: str
     enforce_constraints_method: Optional[Literal['barrier', 'projection']] = None
-    epochs_with_const_decay: Optional[int]
+    epochs_with_const_decay: Optional[int] = None
     initial_window_size: Optional[int] = None
 
 

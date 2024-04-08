@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepsysid"
-version = "0.1.23"
+version = "0.1.24"
 description = "A system identification toolkit for multistep prediction using deep learning and hybrid methods."
 authors = ["Alexandra Baier <alx.baier@gmail.com>", "Daniel Frank <daniel@familiefrank.eu>"]
 readme = "README.md"
@@ -10,34 +10,34 @@ repository = "https://github.com/AlexandraBaier/deepsysid"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-numpy = "1.23.5"
-pydantic = "^1.9.1"
+numpy = "^1.23.5"
+pydantic = "^2.6.0"
 scikit-learn = "^1.1.1"
 h5py = "^3.7.0"
-pandas = "^1.4.2"
-torch = { version = "1.11.0", optional = true }
+pandas = "^2.2.0"
+torch = { version = "^2.2.0", optional = true }
 cvxpy = "^1.2.1"
 pyDataverse = "^0.3.1"
 requests = "^2.28.1"
 types-requests = "^2.28.10"
 rarfile = { version = "^4.0" }
-scipy = { version = "^1.9.3" }
+scipy = { version = "^1.13.0" }
 mlflow = { version = "^2.3.0", optional = true }
 matplotlib = { version = "^3.7.1", optional = true }
-interpret = "^0.4.2"
+interpret = "^0.6.0"
 
 [tool.poetry.extras]
 torch-cpu = ["torch"]
 mlflow-logging = ["mlflow", "matplotlib"]
 
 [tool.poetry.dev-dependencies]
-black = "^22.6.0"
-mypy = "^0.982"
+black = "^24.3.0"
+mypy = "^1.9.0"
 isort = "^5.10.1"
-flake8 = "^5.0.4"
-pytest = "^7.1.2"
-pre-commit = "^2.20.0"
-coverage = "^6.4.3"
+flake8 = "^7.0.0"
+pytest = "^8.1.0"
+pre-commit = "^3.7.0"
+coverage = "^7.4.0"
 
 [tool.poetry.scripts]
 deepsysid="deepsysid.cli.interface:run_deepsysid_cli"
@@ -59,7 +59,7 @@ disallow_incomplete_defs = true
 warn_unused_ignores = true
 warn_return_any = true
 warn_unreachable = true
-plugins = "numpy.typing.mypy_plugin"
+plugins = [ "numpy.typing.mypy_plugin" ]
 
 [tool.pytest.ini_options]
 testpaths = "tests"

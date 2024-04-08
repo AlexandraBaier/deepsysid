@@ -147,9 +147,9 @@ class KernelRegression(BaseEstimator):
                 input_idx * self.input_window_size,
                 (input_idx + 1) * self.input_window_size,
             )
-            full_kernel_matrix[
-                partial_kernel_slice, partial_kernel_slice
-            ] = partial_kernel_matrix
+            full_kernel_matrix[partial_kernel_slice, partial_kernel_slice] = (
+                partial_kernel_matrix
+            )
 
         offset = self.input_dimension * self.input_window_size
         for output_idx, kernel in enumerate(self.output_kernels):
@@ -158,9 +158,9 @@ class KernelRegression(BaseEstimator):
                 offset + output_idx * self.output_window_size,
                 offset + (output_idx + 1) * self.output_window_size,
             )
-            full_kernel_matrix[
-                partial_kernel_slice, partial_kernel_slice
-            ] = partial_kernel_matrix
+            full_kernel_matrix[partial_kernel_slice, partial_kernel_slice] = (
+                partial_kernel_matrix
+            )
 
         # We leave the bias regularization at 0, which is found
         # in the last column and row of full_kernel_matrix.

@@ -1,6 +1,6 @@
 import os
 import pathlib
-from typing import Optional
+from typing import Optional, Type
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -29,11 +29,11 @@ FIGURE_DIRECTORY_NAME = 'figures'
 
 
 class MlflowConfig(BaseEventTrackerConfig):
-    tracking_uri: Optional[str]
+    tracking_uri: Optional[str] = None
 
 
 class MlFlowTracker(BaseEventTracker):
-    CONFIG = MlflowConfig
+    CONFIG: Type[BaseEventTrackerConfig] = MlflowConfig
 
     def __init__(self, config: MlflowConfig) -> None:
         super().__init__(config)

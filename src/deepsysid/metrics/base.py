@@ -2,7 +2,7 @@ import abc
 from typing import Callable, Dict, List, Tuple, Type, TypeVar
 
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 from pydantic import BaseModel
 
 

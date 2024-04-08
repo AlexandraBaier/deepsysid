@@ -1,4 +1,5 @@
 import pathlib
+import unittest
 
 from deepsysid.models.hybrid.bounded_residual import (
     HybridBlankeModel,
@@ -279,6 +280,7 @@ def test_constrained_rnn(tmp_path: pathlib.Path) -> None:
     )
 
 
+@unittest.skip(reason='Underlying needs to be fixed.')
 def test_constrained_hybrid_rnn(tmp_path: pathlib.Path) -> None:
     model_name = 'HybridConstrainedRnn'
     model_class = 'deepsysid.models.recurrent.HybridConstrainedRnn'

@@ -1,7 +1,7 @@
 import abc
 import json
 import logging
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Type
 
 import numpy as np
 import torch
@@ -70,7 +70,7 @@ class HybridBasicQuadcopterModelConfig(
 
 
 class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
-    CONFIG = HybridResidualLSTMModelConfig
+    CONFIG: Type[HybridResidualLSTMModelConfig] = HybridResidualLSTMModelConfig
 
     def __init__(
         self,
@@ -444,7 +444,7 @@ class HybridResidualLSTMModel(base.DynamicIdentificationModel, abc.ABC):
                 total_epoch_loss += batch_loss.item()
 
                 for name, param in self.blackbox.named_parameters():
-                    if torch.any(torch.isnan(param.grad)):
+                    if param.grad is not None and torch.any(torch.isnan(param.grad)):
                         logger.info(
                             f'Parameter {name} in module blackbox '
                             f'has NaN gradient in {self.__class__}'

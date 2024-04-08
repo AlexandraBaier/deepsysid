@@ -152,10 +152,10 @@ class BasicRnn(HiddenStateForwardModule):
         else:
             h = None
 
-        x, h = self.predictor_rnn.forward(x_pred, h)
+        x, h_new = self.predictor_rnn.forward(x_pred, h)  # type: ignore
         x = self.out.forward(x)
 
-        return x, (h, h)
+        return x, (h_new, h_new)
 
 
 class BasicGRU(HiddenStateForwardModule):
@@ -193,10 +193,10 @@ class BasicGRU(HiddenStateForwardModule):
         else:
             h = None
 
-        x, h = self.gru.forward(x_pred, h)
+        x, h_new = self.gru.forward(x_pred, h)  # type: ignore
         x = self.out.forward(x)
 
-        return x, (h, h)
+        return x, (h_new, h_new)
 
 
 class FixedDepthRnnFlexibleNonlinearity(HiddenStateForwardModule):
@@ -288,7 +288,7 @@ class LinearOutputLSTM(HiddenStateForwardModule):
         x_pred: torch.Tensor,
         hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        x, (h0, c0) = self.predictor_lstm.forward(x_pred, hx)
+        x, (h0, c0) = self.predictor_lstm.forward(x_pred, hx)  # type: ignore
         x = self.out.forward(x)
 
         return x, (h0, c0)
@@ -1314,9 +1314,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
 
         return (omega_0.cpu().detach().numpy(), sys_block_matrix.cpu().detach().numpy())
 
-    def get_controller_matrices(
-        self, omega: torch.Tensor
-    ) -> Tuple[
+    def get_controller_matrices(self, omega: torch.Tensor) -> Tuple[
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
@@ -1424,9 +1422,7 @@ class HybridLinearizationRnn(ConstrainedForwardModule):
             dim=0,
         )
 
-    def get_matrices(
-        self, block_matrix: NDArray[np.float64]
-    ) -> Tuple[
+    def get_matrices(self, block_matrix: NDArray[np.float64]) -> Tuple[
         NDArray[np.float64],
         NDArray[np.float64],
         NDArray[np.float64],
@@ -2504,8 +2500,12 @@ class InitializerPredictorLSTM(nn.Module):
         predictor_input: torch.Tensor,
         initializer_input: torch.Tensor,
     ) -> torch.Tensor:
-        _, (h0_init, c0_init) = self.init_lstm.forward(initializer_input)
-        h, (_, _) = self.predictor_lstm.forward(predictor_input, (h0_init, c0_init))
+        _, (h0_init, c0_init) = self.init_lstm.forward(  # type: ignore
+            initializer_input
+        )
+        h, (_, _) = self.predictor_lstm.forward(  # type: ignore
+            predictor_input, (h0_init, c0_init)
+        )
         y = self.output_layer.forward(h)
 
         return y

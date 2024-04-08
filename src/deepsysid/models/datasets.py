@@ -219,12 +219,12 @@ class RecurrentPredictorInitializerInitialDataset(
         sequence_length: int,
         x_mean: NDArray[np.float64],
         wp_mean: NDArray[np.float64],
-        window_size: int = None,
+        window_size: int | None = None,
     ):
         self.sequence_length = sequence_length
         self.control_dim = control_seqs[0].shape[1]
         if window_size is None:
-            self.window_size = sequence_length
+            self.window_size: int = sequence_length
         else:
             self.window_size = window_size
         self.control_dim_pred = (

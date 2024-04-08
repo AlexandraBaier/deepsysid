@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class BaseEventTrackerConfig(BaseModel):
-    id: Optional[str]
+    id: Optional[str] = None
 
 
 class ExperimentTrackingConfiguration(BaseModel):

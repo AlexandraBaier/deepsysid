@@ -1,7 +1,7 @@
 import itertools
 from typing import Any, Dict, List, Optional, Type
 
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, model_validator
 
 from ..explainability.base import (
     AdditiveFeatureAttributionExplainerConfig,
@@ -68,8 +68,8 @@ class GridSearchTestConfiguration(BaseModel):
 
 class SessionConfiguration(BaseModel):
     total_runs_for_best_models: int
-    training_trajectory: Optional[List[str]]
-    training_scalar: Optional[List[str]]
+    training_trajectory: Optional[List[str]] = None
+    training_scalar: Optional[List[str]] = None
 
 
 class ExperimentGridSearchSettings(BaseModel):
@@ -82,9 +82,11 @@ class ExperimentGridSearchSettings(BaseModel):
     additional_tests: Dict[str, GridSearchTestConfiguration]
     target_metric: str
     metrics: Dict[str, GridSearchMetricConfiguration]
-    explanation_metrics: Optional[Dict[str, GridSearchExplanationMetricConfiguration]]
-    session: Optional[SessionConfiguration]
-    tracker: Optional[Dict[str, GridSearchTrackingConfiguration]]
+    explanation_metrics: Optional[
+        Dict[str, GridSearchExplanationMetricConfiguration]
+    ] = None
+    session: Optional[SessionConfiguration] = None
+    tracker: Optional[Dict[str, GridSearchTrackingConfiguration]] = None
 
 
 class ModelGridSearchTemplate(BaseModel):
@@ -102,7 +104,7 @@ class GridSearchExplainerConfiguration(BaseModel):
 class ExperimentGridSearchTemplate(BaseModel):
     settings: ExperimentGridSearchSettings
     models: List[ModelGridSearchTemplate]
-    explainers: Optional[Dict[str, GridSearchExplainerConfiguration]]
+    explainers: Optional[Dict[str, GridSearchExplainerConfiguration]] = None
 
 
 class ExperimentConfiguration(BaseModel):
@@ -117,17 +119,19 @@ class ExperimentConfiguration(BaseModel):
     target_metric: str
     additional_tests: Dict[str, ExperimentTestConfiguration]
     models: Dict[str, ExperimentModelConfiguration]
-    explainers: Optional[Dict[str, ExperimentExplainerConfiguration]]
-    session: Optional[SessionConfiguration]
-    tracker: Optional[Dict[str, ExperimentTrackingConfiguration]]
+    explainers: Optional[Dict[str, ExperimentExplainerConfiguration]] = None
+    session: Optional[SessionConfiguration] = None
+    tracker: Optional[Dict[str, ExperimentTrackingConfiguration]] = None
 
-    @root_validator
-    def check_target_metric_in_metrics(cls, values):
-        target_metric = values.get('target_metric')
-        metrics = values.get('metrics')
-        if target_metric not in metrics:
-            raise ValueError('target_metric should be a metric in metrics.')
-        return values
+    @model_validator(mode='after')
+    @classmethod
+    def check_target_metric_in_metrics(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            target_metric = data.get('target_metric')
+            metrics = data.get('metrics')
+            if isinstance(metrics, dict) and target_metric not in metrics:
+                raise ValueError('target_metric should be a metric in metrics.')
+        return data
 
     @classmethod
     def from_grid_search_template(

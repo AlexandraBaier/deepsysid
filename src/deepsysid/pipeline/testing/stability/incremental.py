@@ -148,9 +148,7 @@ class IncrementalStabilityTest(BaseStabilityTest):
         )
 
         # optimizer
-        opt = torch.optim.Adam(  # type: ignore
-            [delta], lr=self.optimization_lr, maximize=True
-        )
+        opt = torch.optim.Adam([delta], lr=self.optimization_lr, maximize=True)
 
         gamma_2: Optional[np.float64] = None
         for step_idx in range(self.optimization_steps):
