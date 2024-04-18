@@ -143,4 +143,10 @@ def bmat(mat: List[List[NDArray[np.float64]]]) -> NDArray[np.float64]:
     return np.vstack(mat_list)
 
 
+def torch_bmat(mat: List[List[torch.Tensor]]) -> torch.Tensor:
+    mat_list = []
+    for col in mat:
+        mat_list.append(torch.hstack(col))
+    return torch.vstack(mat_list)
+
 

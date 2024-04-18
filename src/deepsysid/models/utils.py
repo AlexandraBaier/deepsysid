@@ -9,6 +9,13 @@ TensorType = TypeVar('TensorType', torch.Tensor, NDArray[np.float64])
 
 
 @dataclasses.dataclass
+class StateSpaceModel:
+    A:NDArray[np.float64]
+    B:NDArray[np.float64]
+    C:NDArray[np.float64]
+    D:NDArray[np.float64]
+
+@dataclasses.dataclass
 class TrainingPrediction:
     zp: NDArray[np.float64]
     zp_hat: NDArray[np.float64]
@@ -43,6 +50,13 @@ def denormalize(x: TensorType, mean: TensorType, stddev: TensorType) -> TensorTy
 
 def normalize(x: TensorType, mean: TensorType, stddev: TensorType) -> TensorType:
     return (x - mean) / stddev
+
+def descale(x: TensorType, stddev: TensorType) -> TensorType:
+    return x * stddev
+
+
+def scale(x: TensorType, stddev: TensorType) -> TensorType:
+    return x / stddev
 
 
 def sequence_norm(x: torch.Tensor) -> torch.Tensor:

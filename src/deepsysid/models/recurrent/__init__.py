@@ -1,14 +1,14 @@
 from .constrained_rnn import (
     ConstrainedRnn,
     ConstrainedRnnConfig,
-    HybridConstrainedRnn,
-    HybridConstrainedRnnConfig,
     LtiRnnInit,
     LtiRnnInitConfig,
     InputConstrainedRnnConfig2,
     InputConstrainedRnn2,
     RnnInitFlexibleNonlinearity,
     RnnInitFlexibleNonlinearityConfig,
+    HybridConstrainedRnn,
+    HybridConstrainedRnnConfig,
 )
 from .joint_initialization import (
     JointInitializerGRUModel,
