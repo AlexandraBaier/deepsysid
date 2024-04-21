@@ -1975,11 +1975,11 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         )
 
         alpha_fixed = np.float64(alpha.value * self.increase_constraints)
-        # logger.info(
-        #     'Size of coupling matrices: '
-        #     f'|X| = {np.linalg.norm(X.value)}'
-        #     f'|Y| = {np.linalg.norm(Y.value)}'
-        # )
+        logger.info(
+            'Size of coupling matrices: '
+            f'|X| = {np.linalg.norm(X.value)}'
+            f'|Y| = {np.linalg.norm(Y.value)}'
+        )
 
         beta = cp.Variable(shape=(1,))
         problem = cp.Problem(
