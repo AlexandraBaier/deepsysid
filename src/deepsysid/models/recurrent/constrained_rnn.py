@@ -1184,11 +1184,15 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     normalization: Optional[bool] = False
     optimizer: Literal['SCS', 'MOSEK'] = 'SCS'
     init_omega: Literal['zero','rand'] = 'zero'
-    constraint_type: Literal['convex', 'non-convex'] = 'convex'
+    constraint_type: Literal['convex', 'non-convex','direct'] = 'convex'
     multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
     coupling_flat: Optional[bool] = True
     increase_constraints: Optional[np.float64] = 1.2
     clip_gradient_norm: Optional[float] = None
+    gamma: Optional[float] = None
+    weight_decay: Optional[float] = 0.0
+    learning_optimizer: Literal['adam', 'lbfgs', 'adamw'] = 'adam'
+    bias: Optional[bool] = False
     
     
 class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
@@ -1208,6 +1212,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.initial_state_names = config.initial_state_names
         self.nd = len(self.input_names)
         self.ne = len(self.output_names)
+        self.gamma = config.gamma
 
         self.sequence_length = config.sequence_length
         self.learning_rate = config.learning_rate
@@ -1228,6 +1233,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.constraint_type = config.constraint_type
         self.clip_gradient_norm = config.clip_gradient_norm
         self.initial_decay_parameter = config.initial_decay_parameter
+        self.bias = config.bias
 
         if config.loss == 'mse':
             self.loss: nn.Module = nn.MSELoss().to(self.device)
@@ -1240,28 +1246,78 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         self.B_lin_2 = np.hstack((np.eye(self.nx), np.eye(self.nx), np.zeros((self.nx, self.nNh))))
         self.D_lin_2 = np.hstack((np.zeros((self.ne, self.nx)), np.zeros((self.ne, self.nNf)), np.eye(self.ne))) 
 
-        self._predictor = rnn.InputLinearizationRnn2(
-            nx=self.nx,
-            nd=len(self.input_names),
-            ne=len(self.output_names),
-            alpha=config.alpha,
-            beta=config.beta,
-            nw=self.nw,
-            nonlinearity=self.nl,
-            device=self.device,
-            optimizer=self.optimizer,
-            multiplier_type=self.multiplier_type,
-            coupling_flat=self.coupling_flat,
-            increase_constraints=self.increase_constraints
-        ).to(self.device)
 
-        self.optimizer_pred = optim.Adam(
-            self._predictor.parameters(), lr=self.learning_rate
-        )
+        if self.constraint_type == 'convex':
+            self._predictor = rnn.InputLinearizationRnn2(
+                nx=self.nx,
+                nd=len(self.input_names),
+                ne=len(self.output_names),
+                alpha=config.alpha,
+                beta=config.beta,
+                nw=self.nw,
+                nonlinearity=self.nl,
+                device=self.device,
+                optimizer=self.optimizer,
+                multiplier_type=self.multiplier_type,
+                coupling_flat=self.coupling_flat,
+                increase_constraints=self.increase_constraints,
+                bias = self.bias
+            ).to(self.device)
+        elif self.constraint_type == 'non-convex':
+            self._predictor = rnn.InputLinearizationRnnNonConvex(
+                nx=self.nx,
+                nd=len(self.input_names),
+                ne=len(self.output_names),
+                alpha=config.alpha,
+                beta=config.beta,
+                nw=self.nw,
+                nonlinearity=self.nl,
+                device=self.device,
+                optimizer=self.optimizer,
+                multiplier_type=self.multiplier_type,
+                increase_constraints=self.increase_constraints
+            )
+        elif self.constraint_type == 'direct':
+            self._predictor = rnn.InputLinearizationRnn3(
+                nx=self.nx,
+                nd=len(self.input_names),
+                ne=len(self.output_names),
+                alpha=config.alpha,
+                beta=config.beta,
+                nw=self.nw,
+                nonlinearity=self.nl,
+                device=self.device,
+                optimizer=self.optimizer,
+                multiplier_type=self.multiplier_type,
+                coupling_flat=self.coupling_flat,
+                increase_constraints=self.increase_constraints,
+                bias = self.bias
+            ).to(self.device)
+        else:
+            raise ValueError('Constraint type can only be "convex" or "non-convex"')
+        
+        self.learning_opt = config.learning_optimizer
+        if self.learning_opt == 'adam':
+            self.weight_decay = config.weight_decay
+            self.optimizer_pred = optim.Adam(
+                self._predictor.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay
+            )
+        elif self.learning_opt == 'lbfgs':
+            self.optimizer_pred = optim.LBFGS(
+                self._predictor.parameters(),
+                lr=self.learning_rate
+            )
+        elif self.learning_opt == 'adamw':
+            self.weight_decay = config.weight_decay
+            self.optimizer_pred = optim.AdamW(
+                self._predictor.parameters(),
+                lr=self.learning_rate,
+                weight_decay=self.weight_decay
+            )
 
     @property
     def predictor(self) -> HiddenStateForwardModule:
-        # this should only return a copy of the model,
+        # this should only return a copy of the,
         # however deepcopy does not support non leaf nodes,
         # which the parameters of the lure system are.
         return self._predictor
@@ -1310,7 +1366,13 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             D=lin_sys.D,
         )
 
-        self.ga = self.hinfnorm(self.lin_sys)
+        if self.gamma is None:
+            self.ga = self.hinfnorm(self.lin_sys)
+        else:
+            self.ga = self.gamma
+        logger.info(
+            f'predefined gamma: {self.ga}'
+        )
         self._predictor.set_lft_transformation_matrices(
             A_lin=self.lin_sys.A,
             B_lin=self.lin_sys.B,
@@ -1323,8 +1385,15 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
 
         track_model_parameters(self, tracker)
 
+        # self._predictor.initialize_parameters()
         if self.constraint_type == 'convex':
             self._predictor.project_parameters()
+            # ga = self._predictor.project_zero_theta()
+            # self._predictor.initialize_parameters()
+            self._predictor.check_constraints()
+        elif self.constraint_type == 'non-convex':
+            self._predictor.initialize_parameters()
+            self._predictor.check_constraints()
         self._predictor.set_lure_system()
 
         predictor_dataset = RecurrentPredictorInitializerInitialDataset2(
@@ -1340,8 +1409,8 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             total_loss: torch.Tensor = torch.tensor(0.0).to(self.device)
             max_grad: List[np.float64] = list()
             backtracking_iter: List[int] = list()
-            for _, batch in enumerate(data_loader):
-
+            for step, batch in enumerate(data_loader):
+                logger.info(f'epoch/step: {i}/{step}')
                 def closure():
                     self._predictor.zero_grad()
 
@@ -1367,13 +1436,13 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                         e_hat, batch['e'].double().to(self.device)
                     )
 
-                    barrier = self._predictor.get_barriers(
-                            torch.tensor(t, device=self.device)
-                        )
-                    if self.constraint_type == 'convex':
-                        (batch_loss + barrier).backward()
+                    if self.constraint_type == 'direct':
+                        barrier = torch.tensor(0.0).double().to(self.device)
                     else:
-                        batch_loss.backward()
+                        barrier = self._predictor.get_barriers(
+                                torch.tensor(t, device=self.device)
+                            )
+                    (batch_loss + barrier).backward()
 
                     if self.clip_gradient_norm is not None:
                         torch.nn.utils.clip_grad_norm_(
@@ -1418,6 +1487,9 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                     barrier,
                     e_hat,
                 ) = self.optimizer_pred.step(closure)
+                
+                # batch_loss = self.optimizer_pred.step(closure)
+
 
                 total_loss += batch_loss
 
@@ -1434,34 +1506,51 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 max_iter = 100
                 alpha = 0.5
 
-                while not self._predictor.check_constraints() and self.constraint_type=='convex':
-                    new_pars = [
-                        alpha * old_par.clone() + (1 - alpha) * new_par
-                        for old_par, new_par in zip(old_pars, new_pars)
-                    ]
+                
+                if self.constraint_type == 'direct':
+                    # \State $\Xc, \Lambda \gets$ \Call{SDPSolver}{$t$, $\eqref{eq:robust_performance_condition}\prec t I$}
+                    if not self._predictor.find_Xcal_lambda():
+                        theta_p = self._predictor.theta.cpu().detach().numpy()
+                        # \State $\tilde \Omega^\prime \gets$ \Call{$T$}{$\theta,\Xc, \Lambda$}
+                        Omega_tilde_p = self._predictor.bijective_transformation()
+                        # \State $\tilde \Omega, X, Y, \Lambda \gets$ \Call{SDPSolver}{$\|\tilde \Omega - \tilde \Omega^\prime\|, \Mb \prec 0$}
+                        self._predictor.project_omega_parameters(Omega_tilde_p)
+                        # \State $U,V \gets$ \Call{NonSingular}{$X,Y$} such that $VU^\T = I - Y X$
+                        # \State $\Xc \gets \mat{cc}{Y & V \\ I & 0}^{-1} \mat{cc}{I & 0 \\ X & U}$
+                        # \State $\theta \gets $ \Call{SDPSolver}{$\|\theta - \theta^\prime\|, \eqref{eq:robust_performance_condition}$}
+                        self._predictor.project_theta_parameters(theta_p)
 
-                    self._predictor.write_parameters(new_pars)
+                else:
+                    while not self._predictor.check_constraints():
+                        new_pars = [
+                            alpha * old_par.clone() + (1 - alpha) * new_par
+                            for old_par, new_par in zip(old_pars, new_pars)
+                        ]
 
-                    self._predictor.set_lure_system()
+                        self._predictor.write_parameters(new_pars)
 
-                    # no feasible parameter set
-                    if bls_iter > max_iter - 1:
-                        logger.info(
-                            f'BLS did not find feasible parameter set'
-                            f'after {bls_iter} iterations.'
-                            f'Training is stopped.'
-                        )
-                        time_end_pred = time.time()
-                        time_total_pred = time_end_pred - time_start_pred
-                        return dict(
-                            index=np.asarray(i),
-                            epoch_loss_predictor=np.asarray(predictor_loss),
-                            barrier_value=np.asarray(barrier_value),
-                            gradient_norm=np.asarray(gradient_norm),
-                            training_time_predictor=np.asarray(time_total_pred),
-                        )
-                    bls_iter += 1
-                backtracking_iter.append(bls_iter)
+                        self._predictor.set_lure_system()
+
+                        # no feasible parameter set
+                        if bls_iter > max_iter - 1:
+                            logger.info(
+                                f'BLS did not find feasible parameter set'
+                                f'after {bls_iter} iterations.'
+                                f'Training is stopped.'
+                            )
+                            time_end_pred = time.time()
+                            time_total_pred = time_end_pred - time_start_pred
+                            return dict(
+                                index=np.asarray(i),
+                                epoch_loss_predictor=np.asarray(predictor_loss),
+                                barrier_value=np.asarray(barrier_value),
+                                gradient_norm=np.asarray(gradient_norm),
+                                training_time_predictor=np.asarray(time_total_pred),
+                            )
+                        bls_iter += 1
+                    backtracking_iter.append(bls_iter)
+
+                # logger.info(f'Step: {step}, batch loss: {batch_loss}, bls: {bls_iter}')
             
             if "PYTEST_CURRENT_TEST" not in os.environ:
                 validation_loss = self.validate(
@@ -1517,7 +1606,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 TrackMetrics(
                     'track total loss, validation loss and barrier',
                     {
-                        'epoch barrier predictor': float(barrier),
+                        # 'epoch barrier predictor': float(barrier),
                         'epoch loss predictor': float(
                             total_loss / len(data_loader)
                         ),
@@ -1528,26 +1617,29 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             )
 
             # plot training trajectories
-            if (
-                step == 0
-                or step == int(self.epochs_predictor / 2)
-                or step == self.epochs_predictor - 1
-            ):
-                with torch.no_grad():
-                    result = utils.TrainingPrediction(
-                        u=batch['d'][0, :, : self._predictor.nd],
-                        zp=batch['e'][0, :, :],
-                        zp_hat=e_hat[0, :, :].cpu().detach().numpy(),
-                        # y_lin=self._linear.forward(
-                        #     batch['x0'].unsqueeze(-1), batch['d'].unsqueeze(-1)
-                        # )[0,:,:,0]
-                        # y_lin=y_lin[:, :, 0],
-                    )
-                    tracker(
+            # if (
+            #     i == 0
+            #     or i == int(self.epochs_predictor / 2)
+            #     or i == self.epochs_predictor - 1
+            # ):
+            with torch.no_grad():
+                lin = rnn.Linear(torch.tensor(self.lin_sys.A), torch.tensor(self.lin_sys.B), torch.tensor(self.lin_sys.C), torch.tensor(self.lin_sys.D))
+                e_hat_lin = lin.forward(torch.zeros((1,self.nx,1)),batch['d'][0,:,:].reshape((1,-1,1,1)))[0,:,:, 0]
+                result = utils.TrainingPrediction(
+                    u=batch['d'][0, :, : self._predictor.nd],
+                    zp=batch['e'][0, :, :],
+                    zp_hat=e_hat[0, :, :].cpu().detach().numpy(),
+                    y_lin = e_hat_lin
+                    # y_lin=self._linear.forward(
+                    #     batch['x0'].unsqueeze(-1), batch['d'].unsqueeze(-1)
+                    # )[0,:,:,0]
+                    # y_lin=y_lin[:, :, 0],
+                )
+                tracker(
                         TrackFigures(
-                            f'Save output plot at step: {step}',
+                            f'Save output plot at step: {i}',
                             result,
-                            f'training_trajectory_{step}.png',
+                            f'training_trajectory_{i}.png',
                         )
                     )
 
@@ -1555,12 +1647,12 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                 f'Epoch {i + 1}/{self.epochs_predictor}\t'
                 f'Total Loss (Predictor): {total_loss:3g} \t'
                 f'Validation Loss: {validation_loss:3g} \t'
-                f'Barrier: {barrier:1f}\t'
-                f'BLS iter: {max(backtracking_iter)}\t'
+                # f'Barrier: {barrier:1f}\t'
+                # f'BLS iter: {max(backtracking_iter)}\t'
                 f'Max acc. grad. norm: {np.max(max_grad):1f}'
             )
             predictor_loss.append(np.float64(total_loss))
-            barrier_value.append(barrier.cpu().detach().numpy())
+            # barrier_value.append(barrier.cpu().detach().numpy())
             gradient_norm.append(np.float64(np.mean(max_grad)))
 
             
@@ -1590,7 +1682,7 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         return dict(
             index=np.asarray(i),
             epoch_loss_predictor=np.asarray(predictor_loss),
-            barrier_value=np.asarray(barrier_value),
+            # barrier_value=np.asarray(barrier_value),
             gradient_norm=np.asarray(gradient_norm),
             training_time_predictor=np.asarray(time_total_pred),
         )
@@ -1702,10 +1794,16 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
         ])
 
         constr = []
-        constr.append(
-            L1.T @ cp.bmat([[-X, np.zeros((self.nx,self.nx))], [np.zeros((self.nx,self.nx)), X]]) @ L1 + \
-            L2.T @ cp.bmat([[-ga * np.eye(self.nd), np.zeros((self.nd,self.ne))], [np.zeros((self.ne,self.nd)), np.eye(self.ne)]]) @ L2 << 0 
-        )
+        if self.nd == 1:
+            constr.append(
+                L1.T @ cp.bmat([[-X, np.zeros((self.nx,self.nx))], [np.zeros((self.nx,self.nx)), X]]) @ L1 + \
+                L2.T @ cp.bmat([[-ga, np.zeros((self.nd,self.ne))], [np.zeros((self.ne,self.nd)), np.eye(self.ne)]]) @ L2 << 0 
+            )
+        else:
+            constr.append(
+                L1.T @ cp.bmat([[-X, np.zeros((self.nx,self.nx))], [np.zeros((self.nx,self.nx)), X]]) @ L1 + \
+                L2.T @ cp.bmat([[-ga @ np.eye(self.nd), np.zeros((self.nd,self.ne))], [np.zeros((self.ne,self.nd)), np.eye(self.ne)]]) @ L2 << 0 
+            )
 
         prob = cp.Problem(cp.Minimize(ga),constr)
         prob.solve(solver=cp.MOSEK,verbose=False)
@@ -1829,21 +1927,14 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
                     'C_lin': self.lin_sys.C.tolist(),
                     'D_lin': self.lin_sys.D.tolist(),
                     'ts': self.ts,
-                    'gamma': self.ga
+                    'gamma': self.ga,
+                    'bx': self._predictor.lure.bx.detach().numpy().tolist(),
+                    'be': self._predictor.lure.by.detach().numpy().tolist(),
+                    'bz': self._predictor.lure.bz.detach().numpy().tolist(),
                 },f
             )
 
     def load(self, file_path: Tuple[str, ...]) -> None:
-        self._predictor.load_state_dict(
-            torch.load(file_path[1], map_location=self.device_name)
-        )
-        with open(file_path[2], mode='r') as f:
-            norm = json.load(f)
-        self._state_mean = np.array(norm['state_mean'], dtype=np.float64)
-        self._state_std = np.array(norm['state_std'], dtype=np.float64)
-        self._control_mean = np.array(norm['control_mean'], dtype=np.float64)
-        self._control_std = np.array(norm['control_std'], dtype=np.float64)
-
         with open(file_path[4], mode='r') as f:
             lin_sys = json.load(f)
         self._predictor.set_lft_transformation_matrices(
@@ -1855,6 +1946,18 @@ class HybridConstrainedRnn(base.NormalizedHiddenStatePredictorModel):
             D_lin_2=self.D_lin_2,
             gamma=np.float64(lin_sys['gamma'])
         )
+        self._predictor.set_lure_system()
+        self._predictor.load_state_dict(
+            torch.load(file_path[1], map_location=self.device_name)
+        )
+        with open(file_path[2], mode='r') as f:
+            norm = json.load(f)
+        self._state_mean = np.array(norm['state_mean'], dtype=np.float64)
+        self._state_std = np.array(norm['state_std'], dtype=np.float64)
+        self._control_mean = np.array(norm['control_mean'], dtype=np.float64)
+        self._control_std = np.array(norm['control_std'], dtype=np.float64)
+
+
 
     def get_file_extension(self) -> Tuple[str, ...]:
         return (
@@ -1905,8 +2008,10 @@ class InputConstrainedRnnConfig2(DynamicIdentificationModelConfig):
     init_omega: Literal['zero','rand'] = 'zero'
     constraint_type: Literal['convex', 'non-convex'] = 'convex'
     multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
-    coupling_flat: Optional[bool] = True,
+    coupling_flat: Optional[bool] = True
     increase_constraints: Optional[float] = 1.2
+    nu: Optional[int] = 0
+    bias: Optional[bool] = False
 
 
 class InputConstrainedRnn2(base.DynamicIdentificationModel):
@@ -1942,6 +2047,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         self.nNf = len(config.B_tilde_lin_3[0])
         self.nNh = len(config.D_tilde_lin_3[0])
+        print(f'nNf {self.nNf}, nNh {self.nNh}')
 
         nx = len(config.A_lin)
         self.extend_state = nx < self.nwu and config.extend_state
@@ -2047,6 +2153,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         self.epochs_predictor = config.epochs_predictor
         self.gamma = config.gamma
         self.decay_rate_lr = config.decay_rate_lr
+        self.bias = config.bias
 
         self.nl = retrieve_nonlinearity_class(config.nonlinearity)
         self.nonlinearity = config.nonlinearity
@@ -2059,13 +2166,18 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         self._predictor = rnn.InputLinearizationRnn2(
             alpha=config.alpha,
             beta=config.beta,
-            nwu=self.nwu,
+            nw=self.nwu,
+            nx = self.nx,
+            nd=self.nd,
+            ne=self.ne,
             nonlinearity=self.nl,
             device=self.device,
             optimizer=self.optimizer,
             multiplier_type=self.multiplier_type,
             coupling_flat=self.coupling_flat,
-            increase_constraints=self.increase_constraints
+            increase_constraints=self.increase_constraints,
+            nu = config.nu,
+            bias = config.bias
         ).to(self.device)
 
         self._predictor.set_lft_transformation_matrices(
@@ -2252,8 +2364,10 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                             dim=1,
                         ).to(self.device)
                     else:
-                        x0_init = batch['x0_init'].double().to(self.device)
-                        x0 = batch['x0'].double().to(self.device)
+                        # x0_init = batch['x0_init'].double().to(self.device)
+                        # x0 = batch['x0'].double().to(self.device)
+                        x0 = torch.zeros_like(batch['x0']).double().to(self.device)
+                        x0_init = torch.zeros_like(batch['x0_init']).double().to(self.device)
 
                     # warmstart
                     # e_init_hat, x_init = self._linear.forward(
@@ -2271,8 +2385,8 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
                     e_hat, _ = self._predictor.forward(
                         x_pred=batch['d'].double().to(self.device),
                         hx=(
-                            x0,
-                            # x_init,
+                            # x0,
+                            x_init,
                             x_rnns
                             # x_init[:,-1,:,0],
                             # x_rnns[:,-1,:],
