@@ -57,6 +57,13 @@ F16_BENCHMARK_DOWNLOAD_URL = (
 F16_INPUTS = ['Force']
 F16_OUTPUTS = ['Acceleration1', 'Acceleration2', 'Acceleration3']
 
+GOOGLE_DRIVE_DOWNLOAD_URL = (
+    'https://docs.google.com/uc?export=download'
+)
+CASCADED_TANK_DOWNLOAD_PARMS = {
+    'id': '1HnQf_gu0g_UlggoBqy2s34l9YJiFdN01'
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -440,3 +447,42 @@ def download_dataset_f16_aircraft(target_directory: str, validation_fraction:flo
             )
             df_out.to_csv(processed_path, index=False)
     logger.info('Finished F16 Ground Vibration Test dataset download and preparation.')
+
+def download_dataset_cascaded_tank(target_directory: str, validation_fraction:float) -> None:
+    if validation_fraction < 0.0:
+        raise ValueError('Validation fraction cannot be smaller than 0.')
+    if validation_fraction > 1.0:
+        raise ValueError('Validation fraction cannot be larger than 1.')
+
+    logger.info(
+        f'Downloading Cascaded Tank dataset from google drive. '
+        'This will take some time.'
+    )
+
+    target_directory = os.path.expanduser(target_directory)
+    raw_directory = os.path.join(target_directory, 'raw')
+    routine_directory = os.path.join(target_directory, 'tank-routine')
+    processed_id_directory = os.path.join(routine_directory, 'processed')
+    os.makedirs(raw_directory, exist_ok=True)
+    os.makedirs(processed_id_directory, exist_ok=True)
+    os.makedirs(os.path.join(processed_id_directory, 'train'), exist_ok=True)
+    os.makedirs(os.path.join(processed_id_directory, 'validation'), exist_ok=True)
+    os.makedirs(os.path.join(processed_id_directory, 'test'), exist_ok=True)
+
+    # https://stackoverflow.com/a/53101953
+    zip_path = os.path.join(raw_directory, 'Cascaded_Tank.zip')
+    response = requests.get(GOOGLE_DRIVE_DOWNLOAD_URL, params=CASCADED_TANK_DOWNLOAD_PARMS, stream=True) 
+    with open(zip_path, mode='wb') as f:
+        for chunk in response.iter_content(chunk_size=1024):
+            if chunk:
+                f.write(chunk)
+
+    base_path = 'CascadedTanksFiles'
+    file_name = 'dataBenchmark.csv'
+    # Extract compressed files individually
+    with zipfile.ZipFile(zip_path) as f:
+        with f.open(os.path.join(base_path, file_name), mode='r') as csv_from_zip:
+            with open(os.path.join(raw_directory, file_name), mode='wb') as target_csv:
+                target_csv.write(csv_from_zip.read())
+
+    logger.info('Successfully finished download.')

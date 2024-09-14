@@ -2047,7 +2047,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         self.nNf = len(config.B_tilde_lin_3[0])
         self.nNh = len(config.D_tilde_lin_3[0])
-        print(f'nNf {self.nNf}, nNh {self.nNh}')
+        # print(f'nNf {self.nNf}, nNh {self.nNh}')
 
         nx = len(config.A_lin)
         self.extend_state = nx < self.nwu and config.extend_state
@@ -2665,6 +2665,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         self._predictor.eval()
         self._predictor.set_lure_system()
+
 
         N, nu = control.shape
         N_init, _ = initial_control.shape
