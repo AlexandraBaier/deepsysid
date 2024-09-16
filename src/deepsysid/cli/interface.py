@@ -24,7 +24,8 @@ from .download import (
     download_dataset_industrial_robot,
     download_dataset_pelican_quadcopter,
     download_dataset_toy,
-    download_dataset_f16_aircraft
+    download_dataset_f16_aircraft,
+    download_dataset_cascaded_tank
 )
 
 CONFIGURATION_ENV_VAR = 'CONFIGURATION'
@@ -230,6 +231,24 @@ class DeepSysIdCommandLineInterface:
         )
         self.download_f16gvt_parser.set_defaults(
             func=download_f16_aircraft
+        )
+
+        self.download_cascaded_tank_parser = self.download_subparsers.add_parser(
+            'cascaded_tank',
+            help='https://www.nonlinearbenchmark.org/benchmarks/cascaded-tanks'
+        )
+        self.download_cascaded_tank_parser.add_argument(
+            'target', help='Target directory for dataset.'
+        )
+        self.download_cascaded_tank_parser.add_argument(
+            '--validation_fraction',
+            required=True,
+            action='store',
+            type=float,
+            help='Fraction of dataset used for validation.',
+        )
+        self.download_cascaded_tank_parser.set_defaults(
+            func=download_cascaded_tank
         )
 
     def run(self) -> None:
@@ -474,6 +493,14 @@ def download_f16_aircraft(args: argparse.Namespace) -> None:
     setup_root_logger()
 
     download_dataset_f16_aircraft(directory, validation_fraction)
+
+def download_cascaded_tank(args: argparse.Namespace) -> None:
+    directory = args.target
+    validation_fraction = args.validation_fraction
+
+    setup_root_logger()
+
+    download_dataset_cascaded_tank(directory, validation_fraction)
 
 
 def add_parser_arguments(

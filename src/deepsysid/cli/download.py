@@ -451,8 +451,8 @@ def download_dataset_f16_aircraft(target_directory: str, validation_fraction:flo
 def download_dataset_cascaded_tank(target_directory: str, validation_fraction:float) -> None:
     if validation_fraction < 0.0:
         raise ValueError('Validation fraction cannot be smaller than 0.')
-    if validation_fraction > 1.0:
-        raise ValueError('Validation fraction cannot be larger than 1.')
+    if validation_fraction > 0.5:
+        raise ValueError('Validation fraction cannot be larger than .5')
 
     logger.info(
         f'Downloading Cascaded Tank dataset from google drive. '
@@ -485,4 +485,31 @@ def download_dataset_cascaded_tank(target_directory: str, validation_fraction:fl
             with open(os.path.join(raw_directory, file_name), mode='wb') as target_csv:
                 target_csv.write(csv_from_zip.read())
 
+    input_name_train = ['uEst']
+    input_name_test_val = ['uVal']
+    output_name_train = ['yEst']
+    output_name_test_val = ['yVal']
+
     logger.info('Successfully finished download.')
+
+    raw_csv_sequences = pd.read_csv(os.path.join(raw_directory, file_name))
+    train_data = raw_csv_sequences[input_name_train+output_name_train]
+    test_val_data = raw_csv_sequences[input_name_test_val+output_name_test_val]
+    N = raw_csv_sequences.shape[0]
+
+    # train
+    train_filepath = os.path.join(processed_id_directory, 'train','CascadedTank-train.csv')
+    train_data.to_csv(train_filepath, index=False)
+
+    # validation
+    N_val = int(2*N*validation_fraction)
+    val_data = test_val_data[:N_val]
+    val_filepath = os.path.join(processed_id_directory, 'validation','CascadedTank-val.csv')
+    val_data.to_csv(val_filepath, index=False)
+
+    # test
+    test_data = test_val_data[N_val:]
+    test_filepath = os.path.join(processed_id_directory, 'test','CascadedTank-test.csv')
+    test_data.to_csv(test_filepath, index=False)
+
+
