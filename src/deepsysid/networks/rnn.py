@@ -1139,7 +1139,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
         else:
             self.gamma = gamma * self.increase_constraints
 
-        self.u = B_lin_2.shape[1]
+        self.nu = B_lin_2.shape[1]
 
         self.A_lin = torch.tensor(A_lin, dtype=torch.float64).to(self.device)
         self.B_lin = torch.tensor(B_lin, dtype=torch.float64).to(self.device)
@@ -1157,7 +1157,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             ])
         ).to(self.device)
 
-
+        # print(f'nx {self.nx}, nx_rnn {self.nx_rnn}, nz {self.nz}, nu {self.nu}')
         self.S_l = torch.from_numpy(
             utils.bmat([
                 [np.zeros((self.nx, self.nx_rnn)), B_lin_2, np.zeros((self.nx,self.nz))],
@@ -1664,7 +1664,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
             ])
         )
         # P_21_4 = self.S_r
-
+        # print(f'omega tilde {self.Omega_tilde.shape} P21 1 {P_21_1.shape}, p21 4 {P_21_4.shape}')
         P_21 = P_21_1 + P_21_2 @ self.Omega_tilde @ P_21_4
 
         # internal state size

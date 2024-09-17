@@ -493,8 +493,10 @@ def download_dataset_cascaded_tank(target_directory: str, validation_fraction:fl
     logger.info('Successfully finished download.')
 
     raw_csv_sequences = pd.read_csv(os.path.join(raw_directory, file_name))
-    train_data = raw_csv_sequences[input_name_train+output_name_train]
-    test_val_data = raw_csv_sequences[input_name_test_val+output_name_test_val]
+    train_data = raw_csv_sequences[input_name_train+output_name_train].copy()
+    train_data.rename(columns={input_name_train[0]:'u', output_name_train[0]:'y'}, inplace=True)
+    test_val_data = raw_csv_sequences[input_name_test_val+output_name_test_val].copy()
+    test_val_data.rename(columns={input_name_test_val[0]:'u', output_name_test_val[0]:'y'}, inplace=True)
     N = raw_csv_sequences.shape[0]
 
     # train

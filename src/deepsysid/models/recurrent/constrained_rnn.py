@@ -2137,10 +2137,13 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         self.ny = self.nx + self.nd # signals to the controller
         # self.ny = C_lin_tilde.shape[0]
+        # print(f'nx_rnn {self.nx_rnn}, nNf {self.nNf}, nNh {self.nNh}')
         self.nu = self.nx_rnn + self.nNf + self.nNh # signals from the controller
 
         B_lin_2 = np.hstack((B_tilde_lin_2, B_tilde_lin_3, np.zeros((self.nx, self.nNh))))
         D_lin_2 = np.hstack((D_tilde_lin_2, np.zeros((self.ne, self.nNf)), D_tilde_lin_3)) 
+        # print(f'B_tilde_lin_2 {B_tilde_lin_2.shape}, B_tilde_lin_3 {B_tilde_lin_3.shape}')
+        # print(f'D_tilde_lin_2 {D_tilde_lin_2.shape}, D_tilde_lin_3 {D_tilde_lin_3.shape}')
 
         self.initial_decay_parameter = config.initial_decay_parameter
         self.decay_rate = config.decay_rate
@@ -2176,7 +2179,8 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             multiplier_type=self.multiplier_type,
             coupling_flat=self.coupling_flat,
             increase_constraints=self.increase_constraints,
-            nu = config.nu,
+            # nu = config.nu,
+            nu=self.nu,
             bias = config.bias
         ).to(self.device)
 
@@ -2519,6 +2523,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             # This should be improved in the future.
             if "PYTEST_CURRENT_TEST" not in os.environ:
                 validation_loss = self.validate(
+                    self.sequence_length,
                     self.sequence_length
                 )
                 e = old_validation_loss - validation_loss
