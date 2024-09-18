@@ -2258,8 +2258,10 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         tracker: BaseEventTracker = BaseEventTracker(),
     ) -> Dict[str, NDArray[np.float64]]:
         N, nx0 = initial_seqs[0].shape
+        K = len(initial_seqs)
+        # print(f'N {N}, nx0 {nx0}, len init seq {len(initial_seqs)}')
         if not nx0 == self.nx:
-            initial_seqs = [np.zeros((N,self.nx-self.e))]
+            initial_seqs = [np.zeros((N,self.nx-self.e)) for k in range(K)]
 
         self._predictor.train()
         self._initializer.train()
@@ -2333,6 +2335,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
 
         no_decrease_count: int = 0
         old_validation_loss = np.float64(0.0)
+        # print(f'us {len(us)} ys {len(ys)} sl {self.sequence_length} w {self.initial_window_size}')
         predictor_dataset = RecurrentPredictorInitializerInitialDataset2(
             us,
             ys,
@@ -2343,12 +2346,14 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
         data_loader = data.DataLoader(
             predictor_dataset, self.batch_size, shuffle=True, drop_last=True
         )
+        # print(len(data_loader))
         for i in range(self.epochs_predictor):
 
             total_loss: torch.Tensor = torch.tensor(0.0).to(self.device)
             max_grad: List[np.float64] = list()
             backtracking_iter: List[int] = list()
             for batch_idx, batch in enumerate(data_loader):
+                # print(batch)
 
                 def closure():
                     self._predictor.zero_grad()
