@@ -883,7 +883,7 @@ class ConstrainedRnn(base.NormalizedHiddenStateInitializerPredictorModel):
             # since it loads validation data from file system.
             # This should be improved in the future.
             if "PYTEST_CURRENT_TEST" not in os.environ:
-                validation_loss = self.validate()
+                validation_loss = self.validate(self.sequence_length)
                 old_lr = {p_group['lr'] for p_group in self.optimizer_pred.param_groups}
                 self.scheduler.step(validation_loss)
                 # if learning rate changed by scheduler also reduce decay parameter
