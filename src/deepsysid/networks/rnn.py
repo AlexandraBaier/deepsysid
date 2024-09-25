@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from numpy.typing import NDArray
 from torch import nn
 from scipy.linalg import block_diag
+import importlib
 
 from ..models.utils import SimAbcdParameter
 from . import utils
@@ -117,6 +118,31 @@ class BasicLSTM(HiddenStateForwardModule):
 
         return x, (h0, c0)
 
+
+class BasicMamba(HiddenStateForwardModule):
+    def __init__(
+        self,
+        d_model: int,
+        recurrent_dim: int,
+        d_conv:int,
+        expand:int,
+    ):
+        super().__init__()
+        Mamba = getattr(importlib.import_module('mamba_ssm'), 'Mamba')
+        self.perdictor_mamba = Mamba(
+            d_model=d_model, # Model dimension d_model
+            d_state=recurrent_dim,  # SSM state expansion factor
+            d_conv=d_conv,    # Local convolution width
+            expand=2,    # Block expansion factor
+        )
+
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        y = self.predictor_mamba(x_pred)
+        return y, (torch.zeros_like(y), torch.zeros_like(y))
 
 class BasicLSTMDoubleLinearOutput(HiddenStateForwardModule):
     def __init__(

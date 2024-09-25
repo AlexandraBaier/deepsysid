@@ -119,7 +119,7 @@ class SeparateInitializerRecurrentNetworkModel(
         ]
 
         initializer_dataset = RecurrentInitializerDataset(
-            control_seqs, state_seqs, self.sequence_length, 100
+            control_seqs, state_seqs, self.sequence_length, 40
         )
 
         time_start_init = time.time()
@@ -144,7 +144,7 @@ class SeparateInitializerRecurrentNetworkModel(
 
         time_end_init = time.time()
         predictor_dataset = RecurrentPredictorDataset(
-            control_seqs, state_seqs, self.sequence_length, 100
+            control_seqs, state_seqs, self.sequence_length, 40
         )
 
         time_start_pred = time.time()
@@ -399,6 +399,31 @@ class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
             output_dim=[output_dim],
             dropout=config.dropout,
             bias=config.bias,
+        )
+
+        super().__init__(config, initializer_rnn=initializer, predictor_rnn=predictor)
+
+
+class MambaInitModel(SeparateInitializerRecurrentNetworkModel):
+    def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
+        torch.set_default_dtype(torch.float64)
+        input_dim = len(config.control_names)
+        output_dim = len(config.state_names)
+
+        assert input_dim == output_dim
+
+        predictor = rnn.BasicMamba(
+            d_model=input_dim,
+            recurrent_dim=config.recurrent_dim,
+            d_conv=4,
+            expand=2
+        )
+
+        initializer = rnn.BasicMamba(
+            d_model=input_dim,
+            recurrent_dim=config.recurrent_dim,
+            d_conv=4,
+            expand=2
         )
 
         super().__init__(config, initializer_rnn=initializer, predictor_rnn=predictor)
