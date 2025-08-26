@@ -218,6 +218,143 @@ class ConstrainedLSTM(ConstrainedForwardModule):
 
         return all(satisfieds)
 
+    def project_parameters(self, write_parameter: bool = True) -> float:
+        """
+        Project LSTM parameters to satisfy ISS condition for each layer.
+        
+        The ISS condition for LSTM is:
+        s_f + s_z * s_i * |U_c|_1 < 1
+        
+        Where:
+        - s_f = sigmoid(||[W_f, U_f]||_∞)
+        - s_z = sigmoid(||[W_o, U_o]||_∞) 
+        - s_i = sigmoid(||[W_i, U_i]||_∞)
+        - |U_c|_1 is the 1-norm of U_c
+        
+        Uses binary search to find optimal scaling factor in 60 iterations.
+        
+        Args:
+            write_parameter: If True, update the model parameters in-place
+            
+        Returns:
+            Distance measure of the parameter change
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if self.check_constraints():
+            logger.info('No projection necessary, ISS constraints are satisfied.')
+            return 0.0
+            
+        total_distance = 0.0
+        max_iterations = 60
+        min_scaling = 0.001
+        max_scaling = 1.0
+        
+        with torch.no_grad():
+            for l_i in range(self.num_recurrent_layers):
+                # Get current parameters
+                weight_ih = getattr(self.predictor_lstm, f"weight_ih_l{l_i}")
+                weight_hh = getattr(self.predictor_lstm, f"weight_hh_l{l_i}")
+                bias_ih = getattr(self.predictor_lstm, f"bias_ih_l{l_i}")
+                bias_hh = getattr(self.predictor_lstm, f"bias_hh_l{l_i}")
+                
+                # Store original parameters for distance calculation
+                orig_weight_ih = weight_ih.clone()
+                orig_weight_hh = weight_hh.clone()
+                orig_bias_ih = bias_ih.clone()
+                orig_bias_hh = bias_hh.clone()
+                
+                # Get ISS parameters
+                (W_fs, W_is, W_cs, W_os) = utils.get_iss_parameter_layer_lstm(
+                    weight_ih, weight_hh, bias_ih, bias_hh, self.recurrent_dim
+                )
+                
+                # Check if this layer violates ISS condition
+                iss_cond, satisfied = utils.check_iss_lstm(W_fs, W_is, W_cs, W_os)
+                
+                if not satisfied:
+                    logger.info(f'Layer {l_i} violates ISS condition: {iss_cond.item():.6f}')
+                    
+                    # Binary search for optimal scaling factor
+                    best_scaling = max_scaling
+                    low_scaling = min_scaling
+                    high_scaling = max_scaling
+                    
+                    # Store original recurrent weights for scaling
+                    h = self.recurrent_dim
+                    W_hi_orig, W_hf_orig, W_hg_orig, W_ho_orig = torch.split(weight_hh, h, dim=0)
+                    
+                    for iteration in range(max_iterations):
+                        # Current scaling factor (binary search)
+                        current_scaling = (low_scaling + high_scaling) / 2.0
+                        
+                        # Apply scaling to recurrent gate weights (U_c corresponds to W_hg)
+                        W_hg_scaled = W_hg_orig * current_scaling
+                        
+                        # Create temporary weight matrix with scaled recurrent weights
+                        weight_hh_temp = torch.cat([W_hi_orig, W_hf_orig, W_hg_scaled, W_ho_orig], dim=0)
+                        
+                        # Test ISS condition with scaled weights
+                        (W_fs_test, W_is_test, W_cs_test, W_os_test) = utils.get_iss_parameter_layer_lstm(
+                            weight_ih, weight_hh_temp, bias_ih, bias_hh, self.recurrent_dim
+                        )
+                        
+                        iss_cond_test, satisfied_test = utils.check_iss_lstm(W_fs_test, W_is_test, W_cs_test, W_os_test)
+                        
+                        if satisfied_test:
+                            # Constraint satisfied, try larger scaling (move up)
+                            best_scaling = current_scaling
+                            low_scaling = current_scaling
+                            logger.debug(f'Layer {l_i}, iter {iteration+1}: scaling {current_scaling:.6f} satisfies constraint (iss_cond: {iss_cond_test.item():.6f})')
+                        else:
+                            # Constraint violated, try smaller scaling (move down)
+                            high_scaling = current_scaling
+                            logger.debug(f'Layer {l_i}, iter {iteration+1}: scaling {current_scaling:.6f} violates constraint (iss_cond: {iss_cond_test.item():.6f})')
+                        
+                        # Check convergence
+                        if abs(high_scaling - low_scaling) < 1e-6:
+                            logger.debug(f'Layer {l_i}: Converged after {iteration+1} iterations')
+                            break
+                    
+                    # Apply the best scaling factor found
+                    if write_parameter:
+                        W_hg_final = W_hg_orig * best_scaling
+                        weight_hh_final = torch.cat([W_hi_orig, W_hf_orig, W_hg_final, W_ho_orig], dim=0)
+                        weight_hh.data = weight_hh_final
+                        
+                        logger.info(f'Layer {l_i}: Applied scaling factor {best_scaling:.6f}')
+                        
+                        # Verify final constraint satisfaction
+                        (W_fs_final, W_is_final, W_cs_final, W_os_final) = utils.get_iss_parameter_layer_lstm(
+                            weight_ih, weight_hh, bias_ih, bias_hh, self.recurrent_dim
+                        )
+                        iss_cond_final, satisfied_final = utils.check_iss_lstm(W_fs_final, W_is_final, W_cs_final, W_os_final)
+                        logger.info(f'Layer {l_i}: Final ISS condition: {iss_cond_final.item():.6f}, satisfied: {satisfied_final}')
+                    
+                    # Calculate parameter change distance
+                    new_weight_ih = getattr(self.predictor_lstm, f"weight_ih_l{l_i}")
+                    new_weight_hh = getattr(self.predictor_lstm, f"weight_hh_l{l_i}")
+                    new_bias_ih = getattr(self.predictor_lstm, f"bias_ih_l{l_i}")
+                    new_bias_hh = getattr(self.predictor_lstm, f"bias_hh_l{l_i}")
+                    
+                    layer_distance = (
+                        torch.norm(new_weight_ih - orig_weight_ih).item() +
+                        torch.norm(new_weight_hh - orig_weight_hh).item() +
+                        torch.norm(new_bias_ih - orig_bias_ih).item() +
+                        torch.norm(new_bias_hh - orig_bias_hh).item()
+                    )
+                    total_distance += layer_distance
+        
+        if write_parameter:
+            # Final verification
+            if self.check_constraints():
+                logger.info(f'All layers now satisfy ISS constraints. Total parameter distance: {total_distance:.6f}')
+            else:
+                logger.warning('Some layers still violate ISS constraints after projection.')
+        
+        return total_distance
+
 
 class BasicMamba(HiddenStateForwardModule):
     def __init__(
@@ -2252,7 +2389,7 @@ class InputLinearizationRnn2(ConstrainedForwardModule):
 
         if not write_parameter:
             logger.info('Return distance.')
-            return np.float64(d)
+            return np.float64(0.0)  # Fixed: return 0.0 when d is not calculated
 
         logger.info('Write back projected parameters.')
         if self.coupling_flat:

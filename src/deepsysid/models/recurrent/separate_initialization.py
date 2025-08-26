@@ -189,6 +189,25 @@ class SeparateInitializerRecurrentNetworkModel(
             epoch_losses_predictor.append([i, total_loss])
 
         time_end_pred = time.time()
+        
+        # Post-training parameter scaling for ConstrainedForwardModule to ensure ISS condition
+        if isinstance(self._predictor, ConstrainedForwardModule):
+            logger.info("Checking ISS constraints after training...")
+            if not self._predictor.check_constraints():
+                logger.info("ISS constraints not satisfied. Projecting parameters...")
+                try:
+                    projection_distance = self._predictor.project_parameters(write_parameter=True)
+                    logger.info(f"Parameters projected with distance: {projection_distance}")
+                    
+                    # Verify constraints are now satisfied
+                    if self._predictor.check_constraints():
+                        logger.info("ISS constraints now satisfied after parameter projection.")
+                    else:
+                        logger.warning("ISS constraints still not satisfied after parameter projection.")
+                except Exception as e:
+                    logger.warning(f"Parameter projection failed: {e}")
+            else:
+                logger.info("ISS constraints already satisfied after training.")
         time_total_init = time_end_init - time_start_init
         time_total_pred = time_end_pred - time_start_pred
 
