@@ -177,11 +177,12 @@ class SeparateInitializerRecurrentNetworkModel(
                 )
                 self.optimizer_pred.step()
 
-            print(f'iss constraints: {self.predictor.get_constraints()}')
+            tracker(TrackMetrics(f'Track iss condition step {i}', {'constraints': float(con)}))
             tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)}))
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor} '
                 f'- Epoch Loss (Predictor): {total_loss}'
+                f'- Regularization (Predictor): {reg}'
             )
             epoch_losses_predictor.append([i, total_loss])
 
