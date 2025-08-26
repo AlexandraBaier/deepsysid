@@ -164,7 +164,7 @@ class SeparateInitializerRecurrentNetworkModel(
 
                 if isinstance(self.predictor, ConstrainedForwardModule):
                     con = self.predictor.get_constraints()
-                    reg = 1e-4 * torch.sum(torch.tensor(con))
+                    reg = torch.maximum(1e-4 * con, torch.tensor(0.0, device=con.device))
                 else:
                     reg = torch.tensor(0.0)
 
@@ -181,7 +181,7 @@ class SeparateInitializerRecurrentNetworkModel(
             tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)}))
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor} '
-                f'- Epoch Loss (Predictor): {total_loss}'
+                f'- Epoch Loss (Predictor): {total_loss} '
                 f'- Regularization (Predictor): {reg}'
             )
             epoch_losses_predictor.append([i, total_loss])

@@ -189,7 +189,7 @@ class ConstrainedLSTM(ConstrainedForwardModule):
 
     def get_constraints(self) -> torch.Tensor:
         l = self.num_recurrent_layers
-        constraints = []
+        constraints = torch.tensor(0.0)
         for l_i in range(l):
             (W_fs, W_is, W_cs, W_os) = utils.get_iss_parameter_layer_lstm(
                 getattr(self.predictor_lstm, f"weight_ih_l{l_i}"),
@@ -199,7 +199,7 @@ class ConstrainedLSTM(ConstrainedForwardModule):
                 self.recurrent_dim
             )
             constraint, _ = utils.check_iss_lstm(W_fs, W_is, W_cs, W_os)
-            constraints.append(constraint)
+            constraints += constraint
 
         return constraints
 
