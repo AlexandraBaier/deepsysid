@@ -35,6 +35,7 @@ class SeparateInitializerRecurrentNetworkModelConfig(DynamicIdentificationModelC
     epochs_predictor: int
     clip_gradient_norm: Optional[float] = None
     loss: Literal['mse', 'msge']
+    regularization_scaling: Optional[float] = 1e-4
 
 
 class SeparateInitializerRecurrentNetworkModel(
@@ -54,6 +55,7 @@ class SeparateInitializerRecurrentNetworkModel(
         self.device = torch.device(self.device_name)
 
         self.state_dim = len(config.state_names)
+        self.regularization_scaling = config.regularization_scaling
 
         self.sequence_length = config.sequence_length
         self.learning_rate = config.learning_rate
@@ -164,7 +166,7 @@ class SeparateInitializerRecurrentNetworkModel(
 
                 if isinstance(self.predictor, ConstrainedForwardModule):
                     con = self.predictor.get_constraints(torch.tensor(0.0, device=self.device))
-                    reg = torch.maximum(1e-4 * con, torch.tensor(0.0, device=self.device))
+                    reg = torch.maximum(self.regularization_scaling * con, torch.tensor(0.0, device=self.device))
                 else:
                     reg = torch.tensor(0.0)
 
@@ -177,8 +179,8 @@ class SeparateInitializerRecurrentNetworkModel(
                 )
                 self.optimizer_pred.step()
 
-            tracker(TrackMetrics(f'Track iss condition step {i}', {'constraints': float(con)}))
-            tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)}))
+            tracker(TrackMetrics(f'Track iss condition step {i}', {'constraints': float(con)},i))
+            tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)},i))
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor} '
                 f'- Epoch Loss (Predictor): {total_loss} '
