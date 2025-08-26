@@ -119,6 +119,107 @@ class BasicLSTM(HiddenStateForwardModule):
         return x, (h0, c0)
 
 
+class ConstrainedLSTM(ConstrainedForwardModule):
+    def __init__(
+        self,
+        input_dim: int,
+        recurrent_dim: int,
+        num_recurrent_layers: int,
+        output_dim: Union[List[int], int],
+        dropout: float,
+        bias: bool = True,
+    ):
+        super().__init__()
+
+        self.num_recurrent_layers = num_recurrent_layers
+        self.recurrent_dim = recurrent_dim
+
+        with warnings.catch_warnings():
+            self.predictor_lstm = nn.LSTM(
+                input_size=input_dim,
+                hidden_size=recurrent_dim,
+                num_layers=num_recurrent_layers,
+                dropout=dropout,
+                batch_first=True,
+                bias=bias,
+            )
+
+        if isinstance(output_dim, int):
+            self.out = nn.ModuleList(
+                [
+                    nn.Linear(
+                        in_features=recurrent_dim, out_features=output_dim, bias=bias
+                    )
+                ]
+            )
+        else:
+            layer_dim = [recurrent_dim] + output_dim
+            self.out = nn.ModuleList(
+                [
+                    nn.Linear(
+                        in_features=layer_dim[i - 1],
+                        out_features=layer_dim[i],
+                        bias=bias,
+                    )
+                    for i in range(1, len(layer_dim))
+                ]
+            )
+
+        for name, param in self.predictor_lstm.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+        for layer in self.out:
+            nn.init.xavier_normal_(layer.weight)
+
+    def forward(
+        self,
+        x_pred: torch.Tensor,
+        hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        x, (h0, c0) = self.predictor_lstm(x_pred, hx)
+        for layer in self.out[:-1]:
+            x = F.relu(layer(x))
+        x = self.out[-1](x)
+
+        return x, (h0, c0)
+
+    def get_initial_parameters(self):
+        return super().get_initial_parameters()
+
+    def get_constraints(self) -> torch.Tensor:
+        l = self.num_recurrent_layers
+        constraints = []
+        for l_i in range(l):
+            (W_fs, W_is, W_cs, W_os) = utils.get_iss_parameter_layer_lstm(
+                getattr(self.predictor_lstm, f"weight_ih_l{l_i}"),
+                getattr(self.predictor_lstm, f"weight_hh_l{l_i}"),
+                getattr(self.predictor_lstm, f"bias_ih_l{l_i}"),
+                getattr(self.predictor_lstm, f"bias_hh_l{l_i}"),
+                self.recurrent_dim
+            )
+            constraint, _ = utils.check_iss_lstm(W_fs, W_is, W_cs, W_os)
+            constraints.append(constraint)
+
+        return constraints
+
+    def check_constraints(self):
+        l = self.num_recurrent_layers
+        satisfieds = []
+        for l_i in range(l):
+            (W_fs, W_is, W_cs, W_os) = utils.get_iss_parameter_layer_lstm(
+                getattr(self.predictor_lstm, f"weight_ih_l{l_i}"),
+                getattr(self.predictor_lstm, f"weight_hh_l{l_i}"),
+                getattr(self.predictor_lstm, f"bias_ih_l{l_i}"),
+                getattr(self.predictor_lstm, f"bias_hh_l{l_i}"),
+                self.recurrent_dim
+            )
+            _, satisfied = utils.check_iss_lstm(W_fs, W_is, W_cs, W_os)
+            satisfieds.append(satisfied)
+
+        return all(satisfieds)
+
+
 class BasicMamba(HiddenStateForwardModule):
     def __init__(
         self,
@@ -129,7 +230,7 @@ class BasicMamba(HiddenStateForwardModule):
     ):
         super().__init__()
         Mamba = getattr(importlib.import_module('mamba_ssm'), 'Mamba')
-        self.perdictor_mamba = Mamba(
+        self.predictor_mamba = Mamba(
             d_model=d_model, # Model dimension d_model
             d_state=recurrent_dim,  # SSM state expansion factor
             d_conv=d_conv,    # Local convolution width

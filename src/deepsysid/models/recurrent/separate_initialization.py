@@ -13,7 +13,7 @@ from torch import optim as optim
 from torch.utils import data as data
 
 from ...networks import loss, rnn
-from ...networks.rnn import HiddenStateForwardModule
+from ...networks.rnn import HiddenStateForwardModule, ConstrainedForwardModule
 from ...tracker.base import BaseEventTracker
 from ...tracker.event_data import TrackMetrics, TrackParameters
 from .. import base, utils
@@ -161,13 +161,23 @@ class SeparateInitializerRecurrentNetworkModel(
                 y, _ = self._predictor.forward(
                     batch['x'].double().to(self.device), hx=hx
                 )
-                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device))
+
+                if isinstance(self.predictor, ConstrainedForwardModule):
+                    con = self.predictor.get_constraints()
+                    reg = 1e-4 * torch.sum(torch.tensor(con))
+                else:
+                    reg = torch.tensor(0.0)
+
+                batch_loss = self.loss.forward(y, batch['y'].double().to(self.device)) + reg
+                
                 total_loss += batch_loss.item()
                 batch_loss.backward()
                 torch.nn.utils.clip_grad_norm_(
                     self._predictor.parameters(), self.clip_gradient_norm
                 )
                 self.optimizer_pred.step()
+
+            print(f'iss constraints: {self.predictor.get_constraints()}')
             tracker(TrackMetrics(f'Track loss step {i}', {'loss': float(total_loss)}))
             logger.info(
                 f'Epoch {i + 1}/{self.epochs_predictor} '
@@ -384,6 +394,33 @@ class LSTMInitModel(SeparateInitializerRecurrentNetworkModel):
         output_dim = len(config.state_names)
 
         predictor = rnn.BasicLSTM(
+            input_dim=input_dim,
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            output_dim=[output_dim],
+            dropout=config.dropout,
+            bias=config.bias,
+        )
+
+        initializer = rnn.BasicLSTM(
+            input_dim=input_dim + output_dim,
+            recurrent_dim=config.recurrent_dim,
+            num_recurrent_layers=config.num_recurrent_layers,
+            output_dim=[output_dim],
+            dropout=config.dropout,
+            bias=config.bias,
+        )
+
+        super().__init__(config, initializer_rnn=initializer, predictor_rnn=predictor)
+
+class ConstrainedLSTMInitModel(SeparateInitializerRecurrentNetworkModel):
+    def __init__(self, config: SeparateInitializerRecurrentNetworkModelConfig):
+
+        torch.set_default_dtype(torch.float64)
+        input_dim = len(config.control_names)
+        output_dim = len(config.state_names)
+
+        predictor = rnn.ConstrainedLSTM(
             input_dim=input_dim,
             recurrent_dim=config.recurrent_dim,
             num_recurrent_layers=config.num_recurrent_layers,

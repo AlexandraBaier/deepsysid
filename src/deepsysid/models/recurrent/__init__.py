@@ -17,8 +17,10 @@ from .joint_initialization import (
     JointInitializerRNNModel,
 )
 from .separate_initialization import (
+    MambaInitModel,
     GRUInitModel,
     LSTMInitModel,
+    ConstrainedLSTMInitModel,
     RnnInit,
     SeparateInitializerRecurrentNetworkModelConfig,
 )
@@ -41,9 +43,11 @@ __all__ = [
     'HybridConstrainedRnnConfig',
     'HybridConstrainedRnn',
     'SeparateInitializerRecurrentNetworkModelConfig',
+    'MambaInitModel',
     'RnnInit',
     'GRUInitModel',
     'LSTMInitModel',
+    'ConstrainedLSTMInitModel',
     'WashoutInitializerRNNModel',
     'WashoutInitializerGRUModel',
     'WashoutInitializerLSTMModel',

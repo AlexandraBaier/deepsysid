@@ -2529,7 +2529,6 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             if "PYTEST_CURRENT_TEST" not in os.environ:
                 validation_loss = self.validate(
                     self.sequence_length,
-                    self.sequence_length
                 )
                 e = old_validation_loss - validation_loss
                 if e < 0 and i > 0:
@@ -2850,6 +2849,7 @@ class InputConstrainedRnn2(base.DynamicIdentificationModel):
             self.initial_window_size,
             horizon_size,
         )
+        print(f'shape y[0] {y_list[0].shape}')
 
         if self.normalization:
             us = utils.normalize(np.stack(u_list), self._control_mean, self._control_std)
