@@ -197,8 +197,8 @@ class ConstrainedLSTM(ConstrainedForwardModule):
                 getattr(self.predictor_lstm, f"bias_hh_l{l_i}"),
                 self.recurrent_dim
             )
-            constraint, _ = utils.check_iss_lstm(W_fs, W_is, W_cs, W_os)
-            constraints += constraint
+            constraint, _ = utils.check_iss_lstm(W_fs, W_is, W_cs, W_os) 
+            constraints += constraint + 1e-3 
 
         return constraints
 
