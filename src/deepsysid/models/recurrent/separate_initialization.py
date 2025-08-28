@@ -167,6 +167,7 @@ class SeparateInitializerRecurrentNetworkModel(
                 if isinstance(self._predictor, ConstrainedForwardModule):
                     con = self._predictor.get_constraints(torch.tensor(0.0, device=self.device))
                     reg = torch.maximum(self.regularization_scaling * con, torch.tensor(0.0, device=self.device))
+                    reg += torch.linalg.norm(self._predictor.out[0].weight, ord=2)
                 else:
                     reg = torch.tensor(0.0)
 

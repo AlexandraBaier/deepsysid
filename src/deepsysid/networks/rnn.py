@@ -172,7 +172,7 @@ class ConstrainedLSTM(ConstrainedForwardModule):
         for layer in self.out:
             nn.init.xavier_normal_(layer.weight)
 
-        self.project_parameters(write_parameter=True)
+        # self.project_parameters(write_parameter=True)
 
     def forward(
         self,
