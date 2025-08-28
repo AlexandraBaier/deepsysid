@@ -172,6 +172,8 @@ class ConstrainedLSTM(ConstrainedForwardModule):
         for layer in self.out:
             nn.init.xavier_normal_(layer.weight)
 
+        self.project_parameters(write_parameter=True)
+
     def forward(
         self,
         x_pred: torch.Tensor,
@@ -232,6 +234,8 @@ class ConstrainedLSTM(ConstrainedForwardModule):
         - |U_c|_1 is the 1-norm of U_c
         
         Uses binary search to find optimal scaling factor in 60 iterations.
+        All LSTM parameters (input-to-hidden weights, hidden-to-hidden weights,
+        and biases for all gates: input, forget, cell, output) are scaled uniformly.
         
         Args:
             write_parameter: If True, update the model parameters in-place
@@ -281,23 +285,49 @@ class ConstrainedLSTM(ConstrainedForwardModule):
                     low_scaling = min_scaling
                     high_scaling = max_scaling
                     
-                    # Store original recurrent weights for scaling
+                    # Store original weights for scaling
                     h = self.recurrent_dim
+                    W_ii_orig, W_if_orig, W_ig_orig, W_io_orig = torch.split(weight_ih, h, dim=0)
                     W_hi_orig, W_hf_orig, W_hg_orig, W_ho_orig = torch.split(weight_hh, h, dim=0)
+                    b_ii_orig, b_if_orig, b_ig_orig, b_io_orig = torch.split(bias_ih, h, dim=0)
+                    b_hi_orig, b_hf_orig, b_hg_orig, b_ho_orig = torch.split(bias_hh, h, dim=0)
                     
                     for iteration in range(max_iterations):
                         # Current scaling factor (binary search)
                         current_scaling = (low_scaling + high_scaling) / 2.0
                         
-                        # Apply scaling to recurrent gate weights (U_c corresponds to W_hg)
-                        W_hg_scaled = W_hg_orig * current_scaling
+                        # Apply scaling to all LSTM gate weights and biases
+                        # Scale input-to-hidden weights
+                        W_ii_scaled = W_ii_orig * current_scaling
+                        W_if_scaled = W_if_orig * current_scaling
+                        W_ig_scaled = W_ig_orig * current_scaling
+                        W_io_scaled = W_io_orig * current_scaling
                         
-                        # Create temporary weight matrix with scaled recurrent weights
-                        weight_hh_temp = torch.cat([W_hi_orig, W_hf_orig, W_hg_scaled, W_ho_orig], dim=0)
+                        # Scale hidden-to-hidden (recurrent) weights
+                        W_hi_scaled = W_hi_orig * current_scaling
+                        W_hf_scaled = W_hf_orig * current_scaling
+                        W_hg_scaled = W_hg_orig * current_scaling
+                        W_ho_scaled = W_ho_orig * current_scaling
+                        
+                        # Scale biases
+                        b_ii_scaled = b_ii_orig * current_scaling
+                        b_if_scaled = b_if_orig * current_scaling
+                        b_ig_scaled = b_ig_orig * current_scaling
+                        b_io_scaled = b_io_orig * current_scaling
+                        b_hi_scaled = b_hi_orig * current_scaling
+                        b_hf_scaled = b_hf_orig * current_scaling
+                        b_hg_scaled = b_hg_orig * current_scaling
+                        b_ho_scaled = b_ho_orig * current_scaling
+                        
+                        # Create temporary weight matrices with scaled weights
+                        weight_ih_temp = torch.cat([W_ii_scaled, W_if_scaled, W_ig_scaled, W_io_scaled], dim=0)
+                        weight_hh_temp = torch.cat([W_hi_scaled, W_hf_scaled, W_hg_scaled, W_ho_scaled], dim=0)
+                        bias_ih_temp = torch.cat([b_ii_scaled, b_if_scaled, b_ig_scaled, b_io_scaled], dim=0)
+                        bias_hh_temp = torch.cat([b_hi_scaled, b_hf_scaled, b_hg_scaled, b_ho_scaled], dim=0)
                         
                         # Test ISS condition with scaled weights
                         (W_fs_test, W_is_test, W_cs_test, W_os_test) = utils.get_iss_parameter_layer_lstm(
-                            weight_ih, weight_hh_temp, bias_ih, bias_hh, self.recurrent_dim
+                            weight_ih_temp, weight_hh_temp, bias_ih_temp, bias_hh_temp, self.recurrent_dim
                         )
                         
                         iss_cond_test, satisfied_test = utils.check_iss_lstm(W_fs_test, W_is_test, W_cs_test, W_os_test)
@@ -319,11 +349,36 @@ class ConstrainedLSTM(ConstrainedForwardModule):
                     
                     # Apply the best scaling factor found
                     if write_parameter:
+                        # Apply scaling to all LSTM parameters
+                        W_ii_final = W_ii_orig * best_scaling
+                        W_if_final = W_if_orig * best_scaling
+                        W_ig_final = W_ig_orig * best_scaling
+                        W_io_final = W_io_orig * best_scaling
+                        W_hi_final = W_hi_orig * best_scaling
+                        W_hf_final = W_hf_orig * best_scaling
                         W_hg_final = W_hg_orig * best_scaling
-                        weight_hh_final = torch.cat([W_hi_orig, W_hf_orig, W_hg_final, W_ho_orig], dim=0)
-                        weight_hh.data = weight_hh_final
+                        W_ho_final = W_ho_orig * best_scaling
+                        b_ii_final = b_ii_orig * best_scaling
+                        b_if_final = b_if_orig * best_scaling
+                        b_ig_final = b_ig_orig * best_scaling
+                        b_io_final = b_io_orig * best_scaling
+                        b_hi_final = b_hi_orig * best_scaling
+                        b_hf_final = b_hf_orig * best_scaling
+                        b_hg_final = b_hg_orig * best_scaling
+                        b_ho_final = b_ho_orig * best_scaling
                         
-                        logger.info(f'Layer {l_i}: Applied scaling factor {best_scaling:.6f}')
+                        # Update the actual parameters
+                        weight_ih_final = torch.cat([W_ii_final, W_if_final, W_ig_final, W_io_final], dim=0)
+                        weight_hh_final = torch.cat([W_hi_final, W_hf_final, W_hg_final, W_ho_final], dim=0)
+                        bias_ih_final = torch.cat([b_ii_final, b_if_final, b_ig_final, b_io_final], dim=0)
+                        bias_hh_final = torch.cat([b_hi_final, b_hf_final, b_hg_final, b_ho_final], dim=0)
+                        
+                        weight_ih.data = weight_ih_final
+                        weight_hh.data = weight_hh_final
+                        bias_ih.data = bias_ih_final
+                        bias_hh.data = bias_hh_final
+                        
+                        logger.info(f'Layer {l_i}: Applied scaling factor {best_scaling:.6f} to all LSTM parameters')
                         
                         # Verify final constraint satisfaction
                         (W_fs_final, W_is_final, W_cs_final, W_os_final) = utils.get_iss_parameter_layer_lstm(
