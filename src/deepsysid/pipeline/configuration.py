@@ -1,7 +1,7 @@
 import itertools
 from typing import Any, Dict, List, Optional, Type
 
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, model_validator
 
 from ..explainability.base import (
     AdditiveFeatureAttributionExplainerConfig,
@@ -121,7 +121,7 @@ class ExperimentConfiguration(BaseModel):
     session: Optional[SessionConfiguration]
     tracker: Optional[Dict[str, ExperimentTrackingConfiguration]]
 
-    @root_validator
+    @model_validator(mode="before")
     def check_target_metric_in_metrics(cls, values):
         target_metric = values.get('target_metric')
         metrics = values.get('metrics')

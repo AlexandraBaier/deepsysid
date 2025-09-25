@@ -10,7 +10,7 @@ repository = "https://github.com/AlexandraBaier/deepsysid"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-numpy = "1.23.5"
+numpy = "^1.23.5"
 pydantic = "^1.9.1"
 scikit-learn = "^1.1.1"
 h5py = "^3.7.0"

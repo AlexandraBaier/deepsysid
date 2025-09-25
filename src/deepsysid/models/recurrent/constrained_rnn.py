@@ -15,7 +15,7 @@ from torch import optim as optim
 from torch.utils import data as data
 from nfoursid.nfoursid import NFourSID
 import pandas as pd
-from sippy import system_identification
+# from sippy import system_identification
 
 from deepsysid.models import base, utils
 from deepsysid.models.utils import StateSpaceModel
@@ -1187,7 +1187,7 @@ class HybridConstrainedRnnConfig(DynamicIdentificationModelConfig):
     constraint_type: Literal['convex', 'non-convex','direct'] = 'convex'
     multiplier_type: Optional[Literal['diagonal', 'static_zf']] = 'diagonal'
     coupling_flat: Optional[bool] = True
-    increase_constraints: Optional[np.float64] = 1.2
+    increase_constraints: Optional[float] = 1.2
     clip_gradient_norm: Optional[float] = None
     gamma: Optional[float] = None
     weight_decay: Optional[float] = 0.0

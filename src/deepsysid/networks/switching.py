@@ -201,11 +201,11 @@ class UnconstrainedSwitchingLSTM(SwitchingBaseLSTM):
 
         states = torch.zeros(
             size=(batch_size, sequence_length, self.state_dim), device=control.device
-        ).float()
+        )
         if previous_state is None:
             state = torch.zeros(
                 size=(batch_size, self.state_dim), device=control.device
-            ).float()
+            )
             state[:, : self.output_dim] = previous_output
         else:
             state = previous_state
@@ -300,7 +300,7 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
         )
 
         self.T = nn.Parameter(
-            torch.from_numpy(np.random.normal(0, 1, (state_dim, state_dim))).float(),
+            torch.from_numpy(np.random.normal(0, 1, (state_dim, state_dim))),
             requires_grad=True,
         )
 
@@ -340,11 +340,11 @@ class StableSwitchingLSTM(SwitchingBaseLSTM):
 
         states = torch.zeros(
             size=(batch_size, sequence_length, self.state_dim), device=control.device
-        ).float()
+        )
         if previous_state is None:
             state = torch.zeros(
                 size=(batch_size, self.state_dim), device=control.device
-            ).float()
+            )
             state[:, : self.output_dim] = previous_output
         else:
             state = previous_state
